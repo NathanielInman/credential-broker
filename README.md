@@ -33,3 +33,6 @@ A credential broker service stores all sensitive information and has a client wh
 
 ### Simple Example
 ![Success & Failure Example](/artwork/example1.svg)
+
+### Authentication Sequence Diagram
+![Authentication Sequence Diagram](/artwork/example2.svg)
