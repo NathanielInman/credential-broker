@@ -30,3 +30,6 @@ broker get $scopeName
   
 ## Introduction
 A credential broker service stores all sensitive information and has a client which can act as a streaming pre-hook to initialize environment variables upon an application at runtime that does not store anything to disk. The broker server itself stores everything in encrypted format with the broker client having a key to unlock the data. The server requires a username, private PGP key & application name for it’s initial request. Upon the initial request if the user exists, matches the public key given, has access to the scope requested and has validated a time-based two-factor authentication within the last 24 hours it will return the encrypted data. After retrieval the client decrypts the data and sets the environment variables. If the two-factor authentication hasn’t occurred within the last 24 hours the server challenges the user first. All communications are over SSL.
+
+### Simple Example
+![Success & Failure Example](/artwork/example1.svg)
