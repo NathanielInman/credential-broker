@@ -1,10 +1,10 @@
 # Credential Broker
-A secure and easy way to manage adding, deleting and retrieving sensitive information
+A secure and easy way to manage adding, deleting and retrieving sensitive information for users and applications.
 
 ## Example Usage
 
 ```bash
-# Asks for secret value, hiding the input & then establishes secret on the specified scope
+# Asks for secret value, hiding the input & then establishes the secret on the specified scope
 broker add $scopeName $secretName
 
 # Deletes a secret from specified scope
@@ -20,17 +20,19 @@ An extensive list of commands are found [here](#commands).
 
 ## Benefits & Reasoning
   - Devops shouldn't implicitly have access to the information 
-    - Just because an employee has access to the infrastructure doesn't mean they have a need-to-know.
+    - Just because an employee has access to the infrastructure doesn't mean they have a need-to-know
   - Just because a user has access to one application doesn't mean they have access to all it's data
-    - Data can be scoped to a need-to-know.
-  - No knowledge of a language or configuration structure is required, just 4 command.
+    - Data can be scoped to a need-to-know
+  - No knowledge of a language or configuration structure is required, just 4 commands
   - Adding, removing and changing secrets should be faster than unvaulting & editing playbooks
   - The responsibility of adding and removing secrets can be managed by organizational structure
-    - Just because a developer has access to the secrets to run an application doesn't mean they have access to changing, adding or removing additional secrets.
+    - Just because a developer has access to the secrets to run an application doesn't mean they have access to changing, adding or removing additional secrets
   - The system can be used to store non-sensitive information
   
 ## Introduction
-A credential broker service stores all sensitive information and has a client which can act as a streaming pre-hook to initialize environment variables upon an application at runtime that does not store anything to disk. The broker server itself stores everything in encrypted format with the broker client having a key to unlock the data. The server requires a username, private PGP key & application name for it’s initial request. Upon the initial request if the user exists, matches the public key given, has access to the scope requested and has validated a time-based two-factor authentication within the last 24 hours it will return the encrypted data. After retrieval the client decrypts the data and sets the environment variables. If the two-factor authentication hasn’t occurred within the last 24 hours the server challenges the user first. All communications are over SSL.
+A credential broker service stores all sensitive information and has a command-line client which can act as a streaming pre-hook to initialize environment variables upon an application at runtime that does not store anything to disk. The broker service itself stores everything in encrypted format with the broker client having a key to unlock the data. The server requires a username, private PGP key & application name for it’s initial request. Upon the initial request if the user exists, matches the public key given, has access to the scope requested and has validated a time-based two-factor authentication within the last 24 hours it will return the encrypted data. After retrieval the client decrypts the data and sets the environment variables. If the two-factor authentication hasn’t occurred within the last 24 hours the server challenges the user first. All communications are over SSL.
+
+Users can also be applications. A broker scope itself can be tied to an application such that an app server would use their private PGP key to match with the broker services stored public key to access all the variables stored under that applications scope while starting. Applications don't require two-factor authentication as they're trusted.
 
 ### Simple Example
 ![Success & Failure Example](/artwork/example1.svg)
@@ -62,6 +64,16 @@ There are four different scenarios or edge-cases that must be handled when it co
 4. There is only one user in broker and they leave a company without deleting their own account first, or there are many users on the broker but restoration strategies for maintaining a user with edit access has been disabled.
   - Somebody can run the `broker wipe` command to remove all users from the instance. All users with access to the broker will receive an email giving them 24hours to cancel the operation. This will allow somebody to create the first user and acquire access to all scopes unless `first account gets all access` strategy has been disabled. The ability to allow other users 24hours to cancel a wipe can be disabled and it's strategy is called `any user can cancel a wipe`.
 5. Either situation 1 through 4 happened and their restoration behaviors were disabled, any user with access to the machine can output the scopes and sensitive item names but values will forever be encrypted so maybe it's time to rotate those keys or generate new ones. Acquiring the names still allows you to keep a map of the data lost, but by disabling the strategies above you run the risk of not being able to access the data should these situations occur.
+
+## Types of Access
+1. View access of other users
+2. Edit access of other users
+3. View access of all scope names
+4. Create access of new scopes
+5. ~View access of all scopes~ By Design: This is a violation of need-to-know
+6. ~Edit access of all scopes~ By Design: This is a violation of need-to-know
+7. View access of a specific scope
+8. Edit access of a specific scope
 
 ## Commands
 Below are a list of all the commands and descriptions of how they operate under various conditions.
@@ -98,6 +110,7 @@ broker init
 # If the user already exists it asks if operator wants to overwrite existing user.
 # If the user doesn't exist it asks for the users public PGP key
 # It then asks if user should have access to view or edit other users
+# It then asks if user should have access to viewing all scope names
 # It then asks if user should have access to create scopes
 # It provides a list of scopes existing to allow user to access
 # For every space the operator grants access, it asks whether access is view or edit
@@ -112,13 +125,21 @@ broker user del $userName
 # It then asks if operator wants to change userName and if yes asks for an updated userName
 # It then asks if operator wants to change public key and if yes asks for an updated public PGP key
 # It then asks if user should have access to view or edit other users
+# It then asks if user should have access to viewing all scope names
 # It then asks if user should have access to create scopes
 # It provides a list of scopes existing to allow user to access
 # For every space the operator grants access, it asks whether access is view or edit
 broker user mod $userName
 
+# Get a list of all usernames if operator has access to viewing all users
+broker user get
+
+# Get a specific user and their information if operator has access to viewing all users
+broker user get $userName
+
 # Create a scope if user has scope admin and scope doesn't exist
 # It validates that the user indeed intends to create an entire scope first
+# It then asks if the scope itself can be a user, and then asks for a public PGP key if it can
 broker scope add $scopeName
 
 # Delete a scope if user has scope admin and scope exists
@@ -127,7 +148,12 @@ broker scope del $scopeName
 
 # Rename a scope if user has scope admin and scope exists
 # It validates that the user indeed intends to rename an entire scope first
+# It then asks if the scope itself can be a user, and then asks for a public PGP key if it can
 broker scope mod $scopeName
+
+# Get a list of all scope names if operator has access to viewing all scope names
+broker scope get
+broker get
 
 # Add a secret to a specified scope if the scope exists and user has scope edit access
 # Asks for secret value, hiding the input
