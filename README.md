@@ -19,15 +19,17 @@ broker get $scopeName
 An extensive list of commands are found [here](#commands).
 
 ## Benefits & Reasoning
-  - Devops shouldn't implicitly have access to the information 
-    - Just because an employee has access to the infrastructure doesn't mean they have a need-to-know
+  - Devops shouldn't implicitly have access to all secrets 
+    - Just because an employee has access to the infrastructure doesn't mean they have a need-to-know. To view access types, you can jump to [the types of access section](#types-of-access)
   - Just because a user has access to one application doesn't mean they have access to all it's data
     - Data can be scoped to a need-to-know
-  - No knowledge of a language or configuration structure is required, just 4 commands
+  - No knowledge of a language or configuration structure is required, just a few intuitive commands
   - Adding, removing and changing secrets should be faster than unvaulting & editing playbooks
   - The responsibility of adding and removing secrets can be managed by organizational structure
     - Just because a developer has access to the secrets to run an application doesn't mean they have access to changing, adding or removing additional secrets
   - The system can be used to store non-sensitive information
+  - There are default strategies in place to ever prevent data loss or access issues when employees leave.
+    - For more information on the strategies you can jump to [the abandonment section.](#abandonment)
   
 ## Introduction
 A credential broker service stores all sensitive information and has a command-line client which can act as a streaming pre-hook to initialize environment variables upon an application at runtime that does not store anything to disk. The broker service itself stores everything in encrypted format with the broker client having a key to unlock the data. The server requires a username, private PGP key & application name for it’s initial request. Upon the initial request if the user exists, matches the public key given, has access to the scope requested and has validated a time-based two-factor authentication within the last 24 hours it will return the encrypted data. After retrieval the client decrypts the data and sets the environment variables. If the two-factor authentication hasn’t occurred within the last 24 hours the server challenges the user first. All communications are over SSL.
