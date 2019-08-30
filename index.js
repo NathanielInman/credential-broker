@@ -15,7 +15,8 @@ console.log('---');
 console.log(args);
 console.log('---');
 if(!args.length){ help();
-}else if(args[0]==='help'){ help();
+}else if(args[0]==='help'&&!args[1]){ help();
+}else if(args[0]==='help'&&args[1]){ help(args.slice(1).join('-'));
 }else if(args[0]==='start'){ start();
 }else if(args[0]==='init'){ init();
 }else if(args[0]==='user'&&!args[1]){ help('user')
