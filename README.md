@@ -21,14 +21,15 @@ An extensive list of commands are found [here](#commands).
 ## Benefits & Reasoning
   - Devops shouldn't implicitly have access to all secrets 
     - Just because an employee has access to the infrastructure doesn't mean they have a need-to-know. To view access types, you can jump to [the types of access section](#types-of-access)
+  - You can attach **TTL**'s to secrets if it's mission critical from them to disappear after a certain point
   - Just because a user has access to one application doesn't mean they have access to all it's data
-    - Data can be scoped to a need-to-know
-  - No knowledge of a language or configuration structure is required, just a few intuitive commands
-  - Adding, removing and changing secrets should be faster than unvaulting & editing playbooks
+    - Data can be scoped to a **need-to-know**
+  - No knowledge of a language or configuration structure is required, just a **few intuitive commands**
+  - Adding, removing and changing secrets should be **faster** than unvaulting & editing playbooks
   - The responsibility of adding and removing secrets can be managed by organizational structure
     - Just because a developer has access to the secrets to run an application doesn't mean they have access to changing, adding or removing additional secrets
   - The system can be used to store non-sensitive information
-  - There are default strategies in place to ever prevent data loss or access issues when employees leave.
+  - There are default strategies in place to ever **prevent data loss** or access issues when employees leave.
     - For more information on the strategies you can jump to [the abandonment section.](#abandonment)
   
 ## Introduction
@@ -88,6 +89,11 @@ Below are a list of all the commands and descriptions of how they operate under 
 #  before it will start. You will create the first user with the client instance and
 #  the command `broker init`
 broker start
+
+# Anyone with access to the server containing the broker service may trigger a 
+#  wipe event. By default it gives 24hour warning to all users that a wipe will occur.
+#  This warning may be disabled. See the ABANDONMENT section to learn more.
+broker wipe
 
 # Initialize the local account before using broker.
 # It starts by asking for the remote address of the broker server
@@ -158,6 +164,7 @@ broker scope get
 broker get
 
 # Add a secret to a specified scope if the scope exists and user has scope edit access
+# Asks if secret should have a TTL attached to it, if yes it asks for TTL value
 # Asks for secret value, hiding the input
 broker add $scopeName $secretName
 
@@ -167,6 +174,7 @@ broker del $scopeName $secretName
 
 # Changes a secret on a specified scope if the scope exists and user has scope edit access
 # It first validates that the user indeed intends to modify an existing secret
+# Asks if secret should have a TTL attached to it, if yes it asks for TTL value
 # It then asks for secret value, hiding the input & then changes the secret on the specified scope
 broker mod $scopeName $secretName
 
