@@ -1,4 +1,3 @@
-const fetch = require('node-fetch');
 const fs = require('fs');
 const {confirm} = require('../libraries/prompt.js');
 const chalk = require('chalk');

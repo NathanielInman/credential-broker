@@ -3,12 +3,20 @@ const fs = require('fs');
 const fetch = require('node-fetch');
 const {prompt,confirm} = require('../libraries/prompt.js');
 
+const defaultPermissions = {
+  viewUsers: false,
+  editUsers: false,
+  viewScopeNames: false,
+  createScopes: false,
+  scopes: []
+};
 module.exports = {
   User: class User{
     constructor({
-      remoteIP='http://localhost:4000',username='',email='',lastAuthentication=null,
+      remoteIP='',username='',email='',lastAuthentication=null,
       lastAction='',lastScope='',
-      pgpPrivateKeyLocation='',pgpPublicKeyLocation=''
+      pgpPrivateKeyLocation='',pgpPublicKeyLocation='',
+      permissions=defaultPermissions
     }={}){
       this.remoteIP = remoteIP;
       this.username = username;
@@ -18,6 +26,7 @@ module.exports = {
       this.lastAuthentication = lastAuthentication;
       this.lastAction = lastAction;
       this.lastScope = lastScope;
+      this.permissions = defaultPermissions
     }
     async initialize(){
       let answer;
@@ -53,11 +62,34 @@ module.exports = {
         if(!answer) console.log('No problem, let\'s try again.');
       }while(!answer)
       this.lastAction = 'initialization';
+      this.permissions.viewUsers = await confirm('Request view all users permission?');
+      this.permissions.editUsers = await confirm('Request edit all users permission?');
+      this.permissions.viewScopeNames = await confirm('Request view all scopes permission?');
+      this.permissions.createScopes = await confirm('Request create scopes permission?');
+      do{
+        answer = await prompt('Enter requested scopes to access separated by commas.');
+        const scopeNames = answer.split(',').map(n=> n.trim());
+
+        for(let i=0;i<scopeNames.length;i++){
+          answer = await confirm(`Request full access (Y) or view access to scope "${scopeNames[i]}"(n)?`);
+          this.permissions.scopes.push({name: scopeNames[i],value: answer?'edit':'view'})
+        } //end for
+        answer = await confirm(`Is this correct: "${
+          this.permissions.scopes.map(s=> `(${s.name}): ${s.value}`).join()
+        }"?`);
+        if(!answer){
+          this.permissions.scopes.length = 0;
+          console.log('No problem, let\'s try again.');
+        } //end if
+      }while(!answer)
 
       try{
         const data = await fetch(`${this.remoteIP}/initialize`,{
           method: 'POST',
-          body: JSON.stringify({key: fs.readFileSync(this.pgpPublicKeyLocation).toString()}),
+          body: JSON.stringify({
+            key: fs.readFileSync(this.pgpPublicKeyLocation).toString(),
+            ...this
+          }),
           headers: {
             'Content-Type': 'application/json',
             username: this.username,

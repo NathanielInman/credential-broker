@@ -2,6 +2,7 @@ const chalk = require('chalk');
 const fs = require('fs');
 const fetch = require('node-fetch');
 const {prompt} = require('../libraries/prompt.js');
+const storage = require('node-persist');
 
 const defaultStrategies = [
   {
@@ -39,6 +40,12 @@ module.exports = {
       this.lastAccess = lastAccess;
       this.lastUser = lastUser;
       this.strategies = strategies;
+      this.db = storage;
+      this.dbLoading = storage.init({
+        dir: './data/',
+        logging: false,
+        ttl: false
+      });
     }
     async askStrategies(){
       for await(let strategy of this.strategies){
