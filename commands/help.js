@@ -13,13 +13,17 @@ const {helpGet} = require('./helpGet.js');
 const {helpAdd} = require('./helpAdd.js');
 const {helpDelete} = require('./helpDelete.js');
 const {helpModify} = require('./helpModify.js');
+const {helpAbandonment} = require('./helpAbandonment.js');
+const {helpWipe} = require('./helpWipe.js');
 
 module.exports = {
-  help(command){
+  help(command=''){
     if(command==='start'){
       helpStart();
     }else if(command==='init'){
       helpInit();
+    }else if(command==='wipe'){
+      helpWipe();
     }else if(command.includes('user-add')){
       helpUserAdd();
     }else if(command.includes('user-delete')){
@@ -42,7 +46,9 @@ module.exports = {
       helpDelete();
     }else if(command.includes('modify')){
       helpModify();
-    }else if(command==='stats'||command==='version'){
+    }else if(command.includes('abandonment')){
+      helpAbandonment();
+    }else if(['info','stats','version'].includes(command)){
       helpHeader();
     }else{
       helpHeader();

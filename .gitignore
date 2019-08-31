@@ -4,3 +4,8 @@
 
 # node
 node_modules/
+
+# application-specific
+state.json
+user.json
+broker.json
