@@ -11,7 +11,7 @@ router.post('/',authenticate,async (req,res)=>{
     console.log(
       chalk.cyan(`[${ip}]`)+
       chalk.magenta(`<${name}>`)+
-      chalk.grey(' :')+
+      chalk.grey(': ')+
       chalk.red('[FAILURE] ')+
       chalk.green(` Add User (${req.body.name})`)
     );
@@ -21,25 +21,34 @@ router.post('/',authenticate,async (req,res)=>{
   } //end if
 
   try{
-    await req.broker.db.setItem(
-      `user:${req.body.name}`,
-      {
-        date: (new Date).toISOString(),
-        name: req.body.name,
-        email: req.body.email,
-        addedBy: name,
-        addedByIP: ip,
-        key: req.body.key,
-        permissions: {
-          viewUsers: req.body.permissions.viewUsers,
-          editUsers: req.body.permissions.editUsers,
-          viewScopeNames: req.body.permissions.viewScopeNames,
-          createScopes: req.body.permissions.createScopes,
-          scopes: req.body.permissions.scopes.map(s=> ({name: s.name,value: s.value}))
-        }
-      }
+    console.log(
+      chalk.cyan(`[${ip}]`)+
+      chalk.magenta(`<${name}>`)+
+      chalk.grey(':')+
+      chalk.green(` Add User (${req.body.name})`)
     );
-    res.status(200).json({success: 'Added user'});
+    let newUser = {
+      date: (new Date).toISOString(),
+      name: req.body.name,
+      email: req.body.email,
+      addedBy: name,
+      addedByIP: ip,
+      key: req.body.key,
+      permissions: {
+        viewUsers: req.body.permissions.viewUsers,
+        editUsers: req.body.permissions.editUsers,
+        viewScopeNames: req.body.permissions.viewScopeNames,
+        createScopes: req.body.permissions.createScopes,
+        scopes: req.body.permissions.scopes.map(s=> ({name: s.name,value: s.value}))
+      }
+    };
+
+    const users = await req.broker.db.getItem('users');
+
+    await req.broker.db.setItem(`user:${req.body.name}`,newUser);
+    users.push(newUser);
+    await req.broker.db.setItem('users',users);
+    res.status(200).json({success: `Added user ${newUser.name}`});
   }catch(err){
     res.status(500).json({error: 'Server had a problem adding new user.'});
     console.log(chalk.red(err));

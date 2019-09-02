@@ -33,19 +33,16 @@ module.exports = {
 
       do{
         this.remoteIP = await prompt('Broker service ip: ');
-
         answer = await confirm(`Is this correct: "${this.remoteIP}"?`);
         if(!answer) console.log('No problem, let\'s try again.');
       }while(!answer)
       do{
         this.name = await prompt('Please enter name: ');
-
         answer = await confirm(`Is this correct: "${this.name}"?`);
         if(!answer) console.log('No problem, let\'s try again.');
       }while(!answer)
       do{
         this.email = await prompt('Please enter email: ');
-
         answer = await confirm(`Is this correct: "${this.email}"?`);
         if(!answer) console.log('No problem, let\'s try again.');
       }while(!answer)

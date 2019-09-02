@@ -8,7 +8,7 @@ router.post('/',authenticate,async (req,res)=>{
         requestedUsername = req.body.name;
 
   // short-circuit fail-first
-  if(requestedUsername!==name||!req.user.permissions.editUsers){
+  if(requestedUsername!==name&&!req.user.permissions.editUsers){
     console.log(
       chalk.cyan(`[${ip}]`)+
       chalk.magenta(`<${name}>`)+
@@ -16,7 +16,7 @@ router.post('/',authenticate,async (req,res)=>{
       chalk.red('[FAILURE] ')+
       chalk.green(` Get User (${requestedUsername})`)
     );
-    return res.status(401).json({error: `User "${user.name}" does not have user edit permission.`});
+    return res.status(401).json({error: `User "${name}" does not have user edit permission.`});
   }else if(requestedUsername===name){
     console.log(
       chalk.cyan(`[${ip}]`)+
