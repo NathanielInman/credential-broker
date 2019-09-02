@@ -5,7 +5,7 @@ const {User} = require('../models/User.js');
 const {prompt,confirm,password} = require('../libraries/prompt.js');
 
 module.exports = {
-  secretModify(scopeName,secretName){
+  async secretModify(scopeName,secretName){
 
     //short-circuit failure
     if(!fs.existsSync('./user.json')){

@@ -16,16 +16,16 @@ module.exports = {
     let scopeName=name,scopePublicKey='',bool;
 
     do{
-      bool = await confirm(`Is this correct: "${answer}"?`);
+      bool = await confirm(chalk.green(`Is this correct, add scope: "${scopeName}"?`));
       if(!bool){
-        console.log('No problem, let\'s try again.');
-        scopeName = await prompt('Enter new scope name: ');
+        console.log(chalk.green('No problem, let\'s try again.'));
+        scopeName = await prompt(chalk.green('Enter new scope name: '));
       } //end if
     }while(!bool)
     do{
-      bool = await confirm(`Will scope "${answer}" also be a user?`);
+      bool = await confirm(chalk.green(`Will scope "${scopeName}" also be a user?`));
       if(bool){
-        scopePublicKey = await prompt('Enter public PGP key for scope: ');
+        scopePublicKey = await prompt(chalk.green('Enter public PGP key for scope: '));
       } //end if
       bool = true;
     }while(!bool)

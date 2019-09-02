@@ -11,7 +11,6 @@ const scopeGetAll = require('./scopeGetAll.js');
 const scopeModify = require('./scopeModify.js');
 const scopeDelete = require('./scopeDelete.js');
 const secretAdd = require('./secretAdd.js');
-const secretGet = require('./secretGet.js');
 const secretModify = require('./secretModify.js');
 const secretDelete = require('./secretDelete.js');
 const router = express.Router({mergeParams: true});
@@ -28,7 +27,6 @@ router.use('/scopeGetAll', scopeGetAll.router);
 router.use('/scopeModify', scopeModify.router);
 router.use('/scopeDelete', scopeDelete.router);
 router.use('/secretAdd', secretAdd.router);
-router.use('/secretGet', secretGet.router);
 router.use('/secretModify', secretModify.router);
 router.use('/secretDelete', secretDelete.router);
 

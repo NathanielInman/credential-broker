@@ -5,7 +5,7 @@ const {User} = require('../models/User.js');
 const {prompt,confirm,password} = require('../libraries/prompt.js');
 
 module.exports = {
-  secretAdd(scopeName,secretName){
+  async secretAdd(scopeName,secretName){
 
     //short-circuit failure
     if(!fs.existsSync('./user.json')){
@@ -15,6 +15,13 @@ module.exports = {
 
     let bool;
 
+    do{
+      bool = await confirm(`Is this the correct scope name: "${scopeName}"?`);
+      if(!bool){
+        console.log('No problem, let\'s try again.');
+        scopeName = prompt('Enter scope name: ');
+      } //end if
+    }while(!bool)
     do{
       bool = await confirm(`Is this the correct secret name: "${secretName}"?`);
       if(!bool){

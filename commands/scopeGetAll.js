@@ -27,8 +27,10 @@ module.exports = {
       })
         .then(res=> res.json())
         .then(res=>{
-          if(res.success){
+          if(res.success&&res.success.length){
             console.log(chalk.green(res.success));
+          }else if(res.success){
+            console.log(chalk.cyan('No scopes exist or you don\'t have access to view them.'));
           }else{
             console.log(chalk.red(res.error));
           } //end if

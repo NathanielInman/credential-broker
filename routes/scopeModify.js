@@ -50,7 +50,7 @@ router.post('/',authenticate,async (req,res)=>{
         await req.broker.db.setItem(`scope:${targetScopename}`);
         const users = await req.broker.db.getItem('users');
 
-        users.forEach(user=>{
+        users.forEach(async user=>{
 
           // alter any existing users access to the original scopename
           const scope = user.permissions.scopes.find(s=>s.name===targetScopeOriginalName);

@@ -30,7 +30,7 @@ router.post('/',authenticate,async (req,res)=>{
     await req.broker.db.setItem(`scope:${req.body.scopeName}`,{});
     let scopes = await req.broker.db.getItem('scopes');
 
-    if(scopes.find(s=>s.name===req.body.scopeName)){
+    if(scopes&&scopes.find(s=>s.name===req.body.scopeName)){
       console.log(
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<${name}>`)+
