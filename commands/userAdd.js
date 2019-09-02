@@ -8,7 +8,7 @@ module.exports = {
 
     //short-circuit failure
     if(!fs.existsSync('./user.json')){
-      console.log(chalk.red('No user exists locally, initialize first with: ')+chalk.cyan('broker init'));
+      return console.log(chalk.red('No user exists locally, initialize first with: ')+chalk.cyan('broker init'));
     } //end if
     const user = new User(JSON.parse(fs.readFileSync('./user.json')));
 

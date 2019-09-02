@@ -62,10 +62,10 @@ module.exports = {
         if(!answer) console.log('No problem, let\'s try again.');
       }while(!answer)
       this.lastAction = 'initialization';
-      this.permissions.viewUsers = await confirm('Request view all users permission?');
-      this.permissions.editUsers = await confirm('Request edit all users permission?');
-      this.permissions.viewScopeNames = await confirm('Request view all scopes permission?');
-      this.permissions.createScopes = await confirm('Request create scopes permission?');
+      this.permissions.viewUsers = await confirm('Request view all users permission? ');
+      this.permissions.editUsers = await confirm('Request edit all users permission? ');
+      this.permissions.viewScopeNames = await confirm('Request view all scopes permission? ');
+      this.permissions.createScopes = await confirm('Request create scopes permission? ');
       do{
         answer = await prompt('Enter requested scopes to access separated by commas: ');
         const scopeNames = answer.split(',').map(n=> n.trim());

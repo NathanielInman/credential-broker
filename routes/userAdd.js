@@ -11,14 +11,17 @@ router.post('/',authenticate,async (req,res)=>{
     console.log(
       chalk.cyan(`[${ip}]`)+
       chalk.magenta(`<${name}>`)+
-      chalk.grey(':')+
+      chalk.grey(' :')+
+      chalk.red('[FAILURE] ')+
       chalk.green(` Add User (${req.body.name})`)
     );
-    return res.status(401).json({error: `User "${user.name}" does not have user edit permission.`});
+    return res.status(401).json({
+      error: `User "${user.name}" does not have user edit permission.`
+    });
   } //end if
 
   try{
-    await req.broker.db.setitem(
+    await req.broker.db.setItem(
       `user:${req.body.name}`,
       {
         date: (new Date).toISOString(),
@@ -36,11 +39,11 @@ router.post('/',authenticate,async (req,res)=>{
         }
       }
     );
+    res.status(200).json({success: 'Added user'});
   }catch(err){
     res.status(500).json({error: 'Server had a problem adding new user.'});
     console.log(chalk.red(err));
   }
-  res.status(200).json({success: 'Added user'});
 });
 
 module.exports = {router};
