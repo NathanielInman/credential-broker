@@ -6,23 +6,22 @@ const {authenticate} = require('./authenticate');
 router.post('/',authenticate,async (req,res)=>{
   const {ip,name} = req,
         targetScopename = req.body.scopeName,
-        hasScopeAccess = req.user.permissions.scopes.find(s=> s.name===targetScopename),
-        hasScopeEditAccess = hasScopeAccess&&hasScopeAccess.value==='edit';
+        hasScopeViewAccess = req.user.permissions.scopes.find(s=> s.name===targetScopename),
 
   try{
     const targetScope = await req.broker.db.getItem(`scope:${targetScopename}`);
 
     // short-circuit fail-first
-    if(!hasScopeEditAccess){
+    if(!hasScopeViewAccess){
       console.log(
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
         chalk.red('[FAILURE] ')+
-        chalk.green(`Secret Add (${targetScopename})`)
+        chalk.green(`Secret Get (${targetScopename})`)
       );
       return res.status(401).json({
-        error: `User "${user.name}" does not have scope edit permission.`
+        error: `User "${req.user.name}" does not have scope view permission.`
       });
     }else if(!targetScope){
       console.log(
@@ -30,7 +29,7 @@ router.post('/',authenticate,async (req,res)=>{
         chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
         chalk.red('[FAILURE] ')+
-        chalk.green(`Secret Add (${targetScopename}-NO-SCOPE)`)
+        chalk.green(`Secret Get (${targetScopename}-NO-SCOPE)`)
       );
       return res.status(401).json({
         error: `Scope "${targetScopename}" does not exist.`
@@ -40,14 +39,12 @@ router.post('/',authenticate,async (req,res)=>{
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
-        chalk.green(`Secret Add (${targetScopename}->${targetScopename})`)
+        chalk.green(`Secret Get (${targetScopename})`)
       );
-      targetScope[req.body.secretName] = req.body.secretValue;
-      await req.broker.db.setItem(`scope:${targetScopename}`);
-      res.status(200).json({success: 'Added secret successfully.'});
+      res.status(200).json(targetScope);
     } //end if
   }catch(err){
-    res.status(500).json({error: 'Server error adding secret.'})
+    res.status(500).json({error: 'Server error modifying user.'})
     console.log(chalk.red(err));
   }
 });

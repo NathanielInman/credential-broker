@@ -19,7 +19,7 @@ router.post('/',authenticate,async (req,res)=>{
         chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
         chalk.red('[FAILURE] ')+
-        chalk.green(`Secret Add (${targetScopename})`)
+        chalk.green(`Secret Modify (${targetScopename})`)
       );
       return res.status(401).json({
         error: `User "${user.name}" does not have scope edit permission.`
@@ -30,7 +30,7 @@ router.post('/',authenticate,async (req,res)=>{
         chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
         chalk.red('[FAILURE] ')+
-        chalk.green(`Secret Add (${targetScopename}-NO-SCOPE)`)
+        chalk.green(`Secret Modify (${targetScopename}-NO-SCOPE)`)
       );
       return res.status(401).json({
         error: `Scope "${targetScopename}" does not exist.`
@@ -40,11 +40,11 @@ router.post('/',authenticate,async (req,res)=>{
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
-        chalk.green(`Secret Add (${targetScopename}->${targetScopename})`)
+        chalk.green(`Secret Modify (${targetScopename})`)
       );
       targetScope[req.body.secretName] = req.body.secretValue;
       await req.broker.db.setItem(`scope:${targetScopename}`);
-      res.status(200).json({success: 'Added secret successfully.'});
+      res.status(200).json({success: 'Modified secret successfully.'});
     } //end if
   }catch(err){
     res.status(500).json({error: 'Server error adding secret.'})

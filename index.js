@@ -11,9 +11,6 @@ const {
 // argument number 2: location of this script
 const args = process.argv.slice(2);
 
-console.log('---');
-console.log(args);
-console.log('---');
 if(!args.length){ help();
 }else if(args[0]==='help'&&!args[1]){ help();
 }else if(args[0]==='help'&&args[1]){ help(args.slice(1).join('-'));
@@ -37,13 +34,15 @@ if(!args.length){ help();
 }else if(args[0]==='scope'&&args[1]==='mod'&&args[2]){ scopeModify(args[2]);
 }else if(args[0]==='scope'&&args[1]==='get'&&!args[2]){ scopeGetAll();
 }else if(args[0]==='scope'&&args[1]==='get'&&args[2]){ scopeGet(args[2]);
-}else if(args[0]==='get'&&!args[1]){ scopeGet();
-}else if(args[0]==='get'&&args[1]&&args[2]){ secretGet(args[1],args[2]);
+}else if(args[0]==='get'&&!args[1]){ scopeGetAll();
+}else if(args[0]==='get'&&args[1]){ secretGet(args[1]);
 }else if(args[0]==='add'&&!args[1]){ help('add');
-}else if(args[0]==='add'&&args[1]){ secretAdd(args[1]);
+}else if(args[1]==='add'&&args[1]&&!args[2]){ help('add');
+}else if(args[0]==='add'&&args[1]&&args[2]){ secretAdd(args[1],args[2]);
 }else if(args[0]==='del'&&!args[1]){ help('del');
 }else if(args[0]==='del'&&args[1]){ secretDelete(args[1]);
 }else if(args[0]==='mod'&&!args[1]){ help('mod');
-}else if(args[0]==='mod'&&args[1]){ secretModify(args[1]);
+}else if(args[0]==='mod'&&!args[1]&&!args[2]){ help('mod');
+}else if(args[0]==='mod'&&args[1]&&args[2]){ secretModify(args[1],args[2]);
 }else{ help('invalid');
 } //end if
