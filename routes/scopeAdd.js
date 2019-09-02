@@ -42,9 +42,9 @@ router.post('/',authenticate,async (req,res)=>{
         error: `Scope name "${req.body.scopeName}" already exists and cannot be created.`
       });
     }else if(!scopes){
-      scopes = [{name: req.body.scopeName}];
+      scopes = [{name: req.body.scopeName,publicKey: req.body.scopePublicKey}];
     }else{
-      scopes.push({name: req.body.scopeName});
+      scopes.push({name: req.body.scopeName,publicKey: req.body.scopePublicKey});
     } //end if
     await req.broker.db.setItem('scopes',scopes);
     req.user.permissions.scopes.push({name: req.body.scopeName,value: 'edit'});

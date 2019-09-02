@@ -13,22 +13,29 @@ module.exports = {
     } //end if
     const user = new User(JSON.parse(fs.readFileSync('./user.json')));
 
-    let answer,bool;
+    let scopeName=name,scopePublicKey='',bool;
 
-    answer = name;
     do{
       bool = await confirm(`Is this correct: "${answer}"?`);
       if(!bool){
         console.log('No problem, let\'s try again.');
-        answer = await prompt('Enter new scope name: ');
+        scopeName = await prompt('Enter new scope name: ');
       } //end if
+    }while(!bool)
+    do{
+      bool = await confirm(`Will scope "${answer}" also be a user?`);
+      if(bool){
+        scopePublicKey = await prompt('Enter public PGP key for scope: ');
+      } //end if
+      bool = true;
     }while(!bool)
     try{
       await fetch(`${user.remoteIP}/scopeAdd`,{
         method: 'POST',
         body: JSON.stringify({
           key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
-          scopeName: answer
+          scopeName,
+          scopePublicKey
         }),
         headers: {
           'Content-Type': 'application/json',
