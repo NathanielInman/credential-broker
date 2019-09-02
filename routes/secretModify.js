@@ -10,7 +10,7 @@ router.post('/',authenticate,async (req,res)=>{
         hasScopeEditAccess = hasScopeAccess&&hasScopeAccess.value==='edit';
 
   try{
-    const targetScope = await req.broker.db.getItem(`scope:${targetScopename}`);
+    const keys = await req.broker.db.keys();
 
     // short-circuit fail-first
     if(!hasScopeEditAccess){
@@ -24,7 +24,7 @@ router.post('/',authenticate,async (req,res)=>{
       return res.status(401).json({
         error: `User "${user.name}" does not have scope edit permission.`
       });
-    }else if(!targetScope){
+    }else if(!keys.includes(`scope:${targetScopename}`)){
       console.log(
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<${name}>`)+
@@ -36,14 +36,21 @@ router.post('/',authenticate,async (req,res)=>{
         error: `Scope "${targetScopename}" does not exist.`
       });
     }else{
+      let targetScope = await req.broker.db.getItem(`scope:${targetScopename}`);
+
       console.log(
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
         chalk.green(`Secret Modify (${targetScopename})`)
       );
-      targetScope[req.body.secretName] = req.body.secretValue;
-      await req.broker.db.setItem(`scope:${targetScopename}`);
+      if(!targetScope){
+        targetScope = {};
+        targetScope[req.body.secretName] = req.body.secretValue;
+      }else{
+        targetScope[req.body.secretName] = req.body.secretValue;
+      } //end if
+      await req.broker.db.setItem(`scope:${targetScopename}`,targetScope);
       res.status(200).json({success: 'Modified secret successfully.'});
     } //end if
   }catch(err){
