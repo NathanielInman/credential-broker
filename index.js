@@ -38,7 +38,7 @@ if(!args.length){ help();
 }else if(args[0]==='scope'&&args[1]==='get'&&!args[2]){ scopeGetAll();
 }else if(args[0]==='scope'&&args[1]==='get'&&args[2]){ scopeGet(args[2]);
 }else if(args[0]==='get'&&!args[1]){ scopeGet();
-}else if(args[0]==='get'&&args[1]){ secretGet(args[1]);
+}else if(args[0]==='get'&&args[1]&&args[2]){ secretGet(args[1],args[2]);
 }else if(args[0]==='add'&&!args[1]){ help('add');
 }else if(args[0]==='add'&&args[1]){ secretAdd(args[1]);
 }else if(args[0]==='del'&&!args[1]){ help('del');

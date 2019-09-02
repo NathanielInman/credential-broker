@@ -10,6 +10,7 @@ const scopeGet = require('./scopeGet.js');
 const scopeGetAll = require('./scopeGetAll.js');
 const scopeModify = require('./scopeModify.js');
 const scopeDelete = require('./scopeDelete.js');
+const secretAdd = require('./secretAdd.js');
 const router = express.Router({mergeParams: true});
 
 router.use('/initialize', initialize.router);
@@ -23,5 +24,6 @@ router.use('/scopeGet', scopeGet.router);
 router.use('/scopeGetAll', scopeGetAll.router);
 router.use('/scopeModify', scopeModify.router);
 router.use('/scopeDelete', scopeDelete.router);
+router.use('/secretAdd', secretAdd.router);
 
 module.exports = {router};
