@@ -6,6 +6,7 @@ const userGetAll = require('./userGetAll.js');
 const userModify = require('./userModify.js');
 const userDelete = require('./userDelete.js');
 const scopeAdd = require('./scopeAdd.js');
+const scopeGetAll = require('./scopeGetAll.js');
 const router = express.Router({mergeParams: true});
 
 router.use('/initialize', initialize.router);
@@ -15,5 +16,6 @@ router.use('/userGetAll', userGetAll.router);
 router.use('/userModify', userModify.router);
 router.use('/userDelete', userDelete.router);
 router.use('/scopeAdd', scopeAdd.router);
+router.use('/scopeGetAll', scopeGetAll.router);
 
 module.exports = {router};
