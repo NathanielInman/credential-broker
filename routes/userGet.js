@@ -4,23 +4,23 @@ const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 
 router.post('/',authenticate,async (req,res)=>{
-  const {ip,username} = req,
-        requestedUsername = req.body.username;
+  const {ip,name} = req,
+        requestedUsername = req.body.name;
 
   // short-circuit fail-first
-  if(requestedUsername!==username||!req.user.permissions.editUsers){
+  if(requestedUsername!==name||!req.user.permissions.editUsers){
     console.log(
       chalk.cyan(`[${ip}]`)+
-      chalk.magenta(`<${username}>`)+
+      chalk.magenta(`<${name}>`)+
       chalk.grey(': ')+
       chalk.red('[FAILURE] ')+
       chalk.green(` Get User (${requestedUsername})`)
     );
-    return res.status(401).json({error: `User "${user.username}" does not have user edit permission.`});
-  }else if(requestedUsername===username){
+    return res.status(401).json({error: `User "${user.name}" does not have user edit permission.`});
+  }else if(requestedUsername===name){
     console.log(
       chalk.cyan(`[${ip}]`)+
-      chalk.magenta(`<${username}>`)+
+      chalk.magenta(`<${name}>`)+
       chalk.grey(':')+
       chalk.green(` Get User (${requestedUsername})`)
     );
@@ -30,7 +30,7 @@ router.post('/',authenticate,async (req,res)=>{
   try{
     console.log(
       chalk.cyan(`[${ip}]`)+
-      chalk.magenta(`<${username}>`)+
+      chalk.magenta(`<${name}>`)+
       chalk.grey(':')+
       chalk.green(` Get User (${requestedUsername})`)
     );

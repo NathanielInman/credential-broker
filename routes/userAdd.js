@@ -4,28 +4,27 @@ const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 
 router.post('/',authenticate,async (req,res)=>{
-  const ip = req.headers['x-forwarded-for'] ||
-          req.connection.remoteAddress,
-        username = req.headers.username;
+  const {ip,name} = req;
 
   // short-circuit fail-first
   if(!req.user.permissions.editUsers){
     console.log(
       chalk.cyan(`[${ip}]`)+
-      chalk.magenta(`<${username}>`)+
+      chalk.magenta(`<${name}>`)+
       chalk.grey(':')+
-      chalk.green(` Add User (${req.body.username})`)
+      chalk.green(` Add User (${req.body.name})`)
     );
-    return res.status(401).json({error: `User "${user.username}" does not have user edit permission.`});
+    return res.status(401).json({error: `User "${user.name}" does not have user edit permission.`});
   } //end if
 
   try{
     await req.broker.db.setitem(
-      `user:${req.body.username}`,
+      `user:${req.body.name}`,
       {
         date: (new Date).toISOString(),
-        username: req.body.username,
-        addedBy: username,
+        name: req.body.name,
+        email: req.body.email,
+        addedBy: name,
         addedByIP: ip,
         key: req.body.key,
         permissions: {

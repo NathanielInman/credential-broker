@@ -18,7 +18,7 @@ module.exports = {
         body: JSON.stringify({key: fs.readFileSync(user.pgpPrivateKeyLocation).toString()}),
         headers: {
           'Content-Type': 'application/json',
-          username: user.username,
+          name: user.name,
           email: user.email
         }
       })

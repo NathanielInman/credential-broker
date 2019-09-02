@@ -4,7 +4,7 @@ const chalk = require('chalk');
 const {User} = require('../models/User.js');
 
 module.exports = {
-  async userGet(username){
+  async userGet(name){
 
     // short-circuit failure
     if(!fs.existsSync('./user.json')){
@@ -17,20 +17,20 @@ module.exports = {
         method: 'POST',
         body: JSON.stringify({
           key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
-          username
+          name
         }),
         headers: {
           'Content-Type': 'application/json',
-          username: user.username,
+          name: user.name,
           email: user.email
         }
       })
         .then(res=> res.json())
         .then(res=>{
-          if(username===user.username){
+          if(name===user.name){
             console.log(chalk.magenta('[CLIENT]'));
             console.log(chalk.cyan('remoteIP: ')+chalk.green(user.remoteIP));
-            console.log(chalk.cyan('username: ')+chalk.green(user.username));
+            console.log(chalk.cyan('name: ')+chalk.green(user.name));
             console.log(chalk.cyan('email: ')+chalk.green(user.email));
             console.log(chalk.cyan('pgpPrivateKeyLocation: ')+chalk.green(user.pgpPrivateKeyLocation));
             console.log(chalk.cyan('pgpPublicKeyLocation: ')+chalk.green(user.pgpPublicKeyLocation));
@@ -50,7 +50,8 @@ module.exports = {
           if(res.success){
             console.log(chalk.magenta('[SERVER]'));
             console.log(chalk.cyan('date: ')+chalk.green(res.success.date));
-            console.log(chalk.cyan('username: ')+chalk.green(res.success.username));
+            console.log(chalk.cyan('name: ')+chalk.green(res.success.name));
+            console.log(chalk.cyan('email: ')+chalk.green(res.success.email));
             console.log(chalk.cyan('addedBy: ')+chalk.green(res.success.addedBy));
             console.log(chalk.cyan('addedByIP: ')+chalk.green(res.success.addedByIP));
             console.log(chalk.cyan('publicKey: ')+chalk.green(res.success.key));

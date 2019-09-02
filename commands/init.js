@@ -8,7 +8,7 @@ module.exports = {
     if(fs.existsSync('./user.json')){
       const user = new User(JSON.parse(fs.readFileSync('./user.json')));
 
-      if(await confirm(`User (${chalk.magenta(user.username)}) exists already, remove?`)){
+      if(await confirm(`User (${chalk.magenta(user.name)}) exists already, remove?`)){
         fs.unlinkSync('./user.json');
         await user.initialize();
       }else{

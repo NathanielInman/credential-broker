@@ -3,10 +3,10 @@ const chalk = require('chalk');
 
 module.exports = {
   async authenticate(req,res,next){
-    const {ip,username} = req;
+    const {ip,name} = req;
 
     // short-circuit failure
-    if(!username){
+    if(!name){
       console.log(
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<unknown>`)+
@@ -14,16 +14,16 @@ module.exports = {
         chalk.red('[FAILURE] ')+
         chalk.green(`${req.originalUrl}: Username missing`)
       );
-      return res.status(401).json({error: 'Your username is not passed in the header.'});
+      return res.status(401).json({error: 'Your name is not passed in the header.'});
     } //end if
 
-    const user = await req.broker.db.getItem(`user:${username}`);
+    const user = await req.broker.db.getItem(`user:${name}`);
 
     //short-circuit failure
     if(!user){
       console.log(
         chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${username}>`)+
+        chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
         chalk.red('[FAILURE] ')+
         chalk.green(`${req.originalUrl}: User does not exist`)
@@ -35,7 +35,7 @@ module.exports = {
     if(!user.permissions){
       console.log(
         chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${username}>`)+
+        chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
         chalk.red('[FAILURE] ')+
         chalk.green(`${req.originalUrl}: User data is corrupted`)

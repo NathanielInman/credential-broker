@@ -13,13 +13,13 @@ const defaultPermissions = {
 module.exports = {
   User: class User{
     constructor({
-      remoteIP='',username='',email='',lastAuthentication=null,
+      remoteIP='',name='',email='',lastAuthentication=null,
       lastAction='',lastScope='',
       pgpPrivateKeyLocation='',pgpPublicKeyLocation='',
       permissions=defaultPermissions
     }={}){
       this.remoteIP = remoteIP;
-      this.username = username;
+      this.name = name;
       this.email = email;
       this.pgpPrivateKeyLocation = pgpPrivateKeyLocation;
       this.pgpPublicKeyLocation = pgpPublicKeyLocation;
@@ -38,9 +38,9 @@ module.exports = {
         if(!answer) console.log('No problem, let\'s try again.');
       }while(!answer)
       do{
-        this.username = await prompt('Please enter username: ');
+        this.name = await prompt('Please enter name: ');
 
-        answer = await confirm(`Is this correct: "${this.username}"?`);
+        answer = await confirm(`Is this correct: "${this.name}"?`);
         if(!answer) console.log('No problem, let\'s try again.');
       }while(!answer)
       do{
@@ -67,7 +67,7 @@ module.exports = {
       this.permissions.viewScopeNames = await confirm('Request view all scopes permission?');
       this.permissions.createScopes = await confirm('Request create scopes permission?');
       do{
-        answer = await prompt('Enter requested scopes to access separated by commas.');
+        answer = await prompt('Enter requested scopes to access separated by commas: ');
         const scopeNames = answer.split(',').map(n=> n.trim());
 
         for(let i=0;i<scopeNames.length;i++){
@@ -92,7 +92,7 @@ module.exports = {
           }),
           headers: {
             'Content-Type': 'application/json',
-            username: this.username,
+            name: this.name,
             email: this.email
           }
         })
@@ -123,7 +123,7 @@ module.exports = {
       return chalk.green('Remote Server IP: ')+chalk.white(this.remoteIP||'Not set');
     }
     getLoggedInUsername(){
-      return chalk.green('Current User: ')+chalk.white(this.username||'Not logged in');
+      return chalk.green('Current User: ')+chalk.white(this.name||'Not logged in');
     }
     getLoggedInEmail(){
       return chalk.green('Current Email: ')+chalk.white(this.email||'Not logged in');

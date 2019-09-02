@@ -22,7 +22,7 @@ module.exports = {
     app.use(express.json());
     app.use((req,res,next)=>{
       req.ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-      req.username = req.headers.username||'';
+      req.name = req.headers.name||'';
       req.email = req.headers.email||'';
       next();
     });
