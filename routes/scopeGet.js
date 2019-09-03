@@ -5,7 +5,7 @@ const {authenticate} = require('./authenticate');
 
 router.post('/',authenticate,async (req,res)=>{
   const {ip,name} = req,
-        requestedScope = req.body.name,
+        requestedScope = req.body.scopeName,
         hasScopeAccess = req.user.permissions.scopes.find(s=> s.name===requestedScope);
 
   // short-circuit fail-first

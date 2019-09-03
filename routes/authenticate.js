@@ -3,7 +3,7 @@ const chalk = require('chalk');
 
 module.exports = {
   async authenticate(req,res,next){
-    const {ip,name} = req;
+    const {ip,name,key} = req;
 
     // short-circuit failure
     if(!name){
@@ -14,7 +14,19 @@ module.exports = {
         chalk.red('[FAILURE] ')+
         chalk.green(`${req.originalUrl}: Username missing`)
       );
-      return res.status(401).json({error: 'Your name is not passed in the header.'});
+      return res.status(401).json({error: 'Your name was not passed in the header.'});
+    } //end if
+
+    // short-circuit failure
+    if(!key){
+      console.log(
+        chalk.cyan(`[${ip}]`)+
+        chalk.magenta(`<${name}>`)+
+        chalk.grey(': ')+
+        chalk.red('[FAILURE] ')+
+        chalk.green(`${req.originalUrl}: Key missing`)
+      );
+      return res.status(401).json({error: 'Your key was not passed in the header.'});
     } //end if
 
     const user = await req.broker.db.getItem(`user:${name}`);

@@ -5,7 +5,7 @@ const {User} = require('../models/User.js');
 const {prompt,confirm} = require('../libraries/prompt.js');
 
 module.exports = {
-  async scopeDelete(name){
+  async scopeDelete(scopeName){
 
     // short-circuit failure
     if(!fs.existsSync('./user.json')){
@@ -16,13 +16,10 @@ module.exports = {
     try{
       const data = await fetch(`${user.remoteIP}/scopeDelete`,{
               method: 'POST',
-              body: JSON.stringify({
-                key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
-                name: user.name,
-                target: name
-              }),
+              body: JSON.stringify({scopeName}),
               headers: {
                 'Content-Type': 'application/json',
+                key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
                 name: user.name,
                 email: user.email
               }
@@ -30,7 +27,7 @@ module.exports = {
             .then(res=> res.json())
             .then(res=>{
               if(res.success){
-                console.log(chalk.green(`Scope "${name}" deleted successfully!`));
+                console.log(chalk.green(`Scope "${scopeName}" deleted successfully!`));
               }else{
                 console.log(chalk.red(res.error));
               } //end if

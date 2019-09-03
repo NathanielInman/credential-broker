@@ -16,12 +16,10 @@ module.exports = {
     try{
       const data = await fetch(`${user.remoteIP}/scopeGet`,{
               method: 'POST',
-              body: JSON.stringify({
-                key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
-                name
-              }),
+              body: JSON.stringify({name}),
               headers: {
                 'Content-Type': 'application/json',
+                key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
                 name: user.name,
                 email: user.email
               }
@@ -55,13 +53,13 @@ module.exports = {
       await fetch(`${user.remoteIP}/scopeModify`,{
         method: 'POST',
         body: JSON.stringify({
-          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
           target: name,
           scopeName: updatedScope.scopeName,
           scopePublicKey: updatedScope.scopePublicKey
         }),
         headers: {
           'Content-Type': 'application/json',
+          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
           name: user.name,
           email: user.email
         }

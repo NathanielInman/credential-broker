@@ -33,12 +33,12 @@ module.exports = {
       await fetch(`${user.remoteIP}/scopeAdd`,{
         method: 'POST',
         body: JSON.stringify({
-          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
           scopeName,
           scopePublicKey
         }),
         headers: {
           'Content-Type': 'application/json',
+          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
           name: user.name,
           email: user.email
         }

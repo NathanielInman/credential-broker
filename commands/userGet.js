@@ -15,12 +15,10 @@ module.exports = {
     try{
       const data = await fetch(`${user.remoteIP}/userGet`,{
         method: 'POST',
-        body: JSON.stringify({
-          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
-          name
-        }),
+        body: JSON.stringify({name}),
         headers: {
           'Content-Type': 'application/json',
+          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
           name: user.name,
           email: user.email
         }

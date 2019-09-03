@@ -8,11 +8,11 @@ module.exports = {
     if(fs.existsSync('./user.json')){
       const user = new User(JSON.parse(fs.readFileSync('./user.json')));
 
-      if(await confirm(`User (${chalk.magenta(user.name)}) exists already, remove?`)){
+      if(await confirm(chalk.green('User (')+chalk.magenta(user.name)+chalk.green(') exists already, remove?'))){
         fs.unlinkSync('./user.json');
         await user.initialize();
       }else{
-        console.log('Canceling initialization');
+        console.log(chalk.red('Canceling initialization'));
         process.exit(0);
       } //end if
     }else{

@@ -4,7 +4,7 @@ const chalk = require('chalk');
 const {User} = require('../models/User.js');
 
 module.exports = {
-  async scopeGet(name){
+  async scopeGet(scopeName){
 
     // short-circuit failure
     if(!fs.existsSync('./user.json')){
@@ -15,12 +15,10 @@ module.exports = {
     try{
       const data = await fetch(`${user.remoteIP}/scopeGet`,{
         method: 'POST',
-        body: JSON.stringify({
-          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
-          name
-        }),
+        body: JSON.stringify({scopeName}),
         headers: {
           'Content-Type': 'application/json',
+          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
           name: user.name,
           email: user.email
         }

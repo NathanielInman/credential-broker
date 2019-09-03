@@ -5,7 +5,7 @@ const {authenticate} = require('./authenticate');
 
 router.post('/',authenticate,async (req,res)=>{
   const {ip,name} = req,
-        targetScopename = req.body.target,
+        targetScopename = req.body.scopeName,
         hasScopeAccess = req.user.permissions.scopes.find(s=> s.name===targetScopename),
         hasScopeEditAccess = hasScopeAccess&&hasScopeAccess.value==='edit';
 

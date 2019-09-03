@@ -32,63 +32,61 @@ module.exports = {
       let answer;
 
       do{
-        this.remoteIP = await prompt('Broker service ip: ');
-        answer = await confirm(`Is this correct: "${this.remoteIP}"?`);
-        if(!answer) console.log('No problem, let\'s try again.');
+        this.remoteIP = await prompt(chalk.green('Broker service ip: '));
+        answer = await confirm(chalk.green(`Is this correct: "${this.remoteIP}"?`));
+        if(!answer) console.log(chalk.green('No problem, let\'s try again.'));
       }while(!answer)
       do{
-        this.name = await prompt('Please enter name: ');
-        answer = await confirm(`Is this correct: "${this.name}"?`);
-        if(!answer) console.log('No problem, let\'s try again.');
+        this.name = await prompt(chalk.green('Please enter name: '));
+        answer = await confirm(chalk.green(`Is this correct: "${this.name}"?`));
+        if(!answer) console.log(chalk.green('No problem, let\'s try again.'));
       }while(!answer)
       do{
-        this.email = await prompt('Please enter email: ');
-        answer = await confirm(`Is this correct: "${this.email}"?`);
-        if(!answer) console.log('No problem, let\'s try again.');
+        this.email = await prompt(chalk.green('Please enter email: '));
+        answer = await confirm(chalk.green(`Is this correct: "${this.email}"?`));
+        if(!answer) console.log(chalk.green('No problem, let\'s try again.'));
       }while(!answer)
       do{
-        console.log('Note: This file will be sent to broker service to validate user identity.');
-        this.pgpPublicKeyLocation = await prompt('Please enter file location including name of public PGP Key: ');
-        answer = await confirm(`Is this correct: "${this.pgpPublicKeyLocation}"?`);
-        if(!answer) console.log('No problem, let\'s try again.');
+        console.log(chalk.green('Note: This file will be sent to broker service to validate user identity.'));
+        this.pgpPublicKeyLocation = await prompt(chalk.green('Please enter file location including name of public PGP Key: '));
+        answer = await confirm(chalk.green(`Is this correct: "${this.pgpPublicKeyLocation}"?`));
+        if(!answer) console.log(chalk.green('No problem, let\'s try again.'));
       }while(!answer)
       do{
-        console.log('Note: this file will never be stored elsewhere, and is only used to validate identity.');
-        this.pgpPrivateKeyLocation = await prompt('Please enter file location including name of private PGP Key: ');
-        answer = await confirm(`Is this correct: "${this.pgpPrivateKeyLocation}"?`);
-        if(!answer) console.log('No problem, let\'s try again.');
+        console.log(chalk.green('Note: this file will never be stored elsewhere, and is only used to validate identity.'));
+        this.pgpPrivateKeyLocation = await prompt(chalk.green('Please enter file location including name of private PGP Key: '));
+        answer = await confirm(chalk.green(`Is this correct: "${this.pgpPrivateKeyLocation}"?`));
+        if(!answer) console.log(chalk.green('No problem, let\'s try again.'));
       }while(!answer)
       this.lastAction = 'initialization';
-      this.permissions.viewUsers = await confirm('Request view all users permission? ');
-      this.permissions.editUsers = await confirm('Request edit all users permission? ');
-      this.permissions.viewScopeNames = await confirm('Request view all scopes permission? ');
-      this.permissions.createScopes = await confirm('Request create scopes permission? ');
+      this.permissions.viewUsers = await confirm(chalk.green('Request view all users permission? '));
+      this.permissions.editUsers = await confirm(chalk.green('Request edit all users permission? '));
+      this.permissions.viewScopeNames = await confirm(chalk.green('Request view all scopes permission? '));
+      this.permissions.createScopes = await confirm(chalk.green('Request create scopes permission? '));
       do{
-        answer = await prompt('Enter requested scopes to access separated by commas: ');
+        answer = await prompt(chalk.green('Enter requested scopes to access separated by commas: '));
         const scopeNames = answer.split(',').map(n=> n.trim());
 
         for(let i=0;i<scopeNames.length;i++){
-          answer = await confirm(`Request full access (Y) or view access to scope "${scopeNames[i]}"(n)?`);
+          answer = await confirm(chalk.green(`Request full access (Y) or view access to scope "${scopeNames[i]}"(n)?`));
           this.permissions.scopes.push({name: scopeNames[i],value: answer?'edit':'view'})
         } //end for
-        answer = await confirm(`Is this correct: "${
+        answer = await confirm(chalk.green(`Is this correct: "${
           this.permissions.scopes.map(s=> `(${s.name}): ${s.value}`).join()
-        }"?`);
+        }"?`));
         if(!answer){
           this.permissions.scopes.length = 0;
-          console.log('No problem, let\'s try again.');
+          console.log(chalk.green('No problem, let\'s try again.'));
         } //end if
       }while(!answer)
 
       try{
         const data = await fetch(`${this.remoteIP}/initialize`,{
           method: 'POST',
-          body: JSON.stringify({
-            key: fs.readFileSync(this.pgpPublicKeyLocation).toString(),
-            ...this
-          }),
+          body: JSON.stringify({...this}),
           headers: {
             'Content-Type': 'application/json',
+            key: fs.readFileSync(this.pgpPublicKeyLocation).toString(),
             name: this.name,
             email: this.email
           }
@@ -97,9 +95,9 @@ module.exports = {
           .then(res=>{
             if(res.success){
               fs.writeFileSync('./user.json',JSON.stringify(this));
-              console.log('Initialization success!');
+              console.log(chalk.green('Initialization success!'));
             }else{
-              console.log(res.error);
+              console.log(chalk.red(res.error));
             } //end if
           });
       }catch(err){

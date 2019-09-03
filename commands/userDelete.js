@@ -17,12 +17,12 @@ module.exports = {
       const data = await fetch(`${user.remoteIP}/userDelete`,{
               method: 'POST',
               body: JSON.stringify({
-                key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
                 name: user.name,
                 target: name
               }),
               headers: {
                 'Content-Type': 'application/json',
+                key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
                 name: user.name,
                 email: user.email
               }
