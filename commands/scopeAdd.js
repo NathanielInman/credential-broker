@@ -46,14 +46,14 @@ module.exports = {
         .then(res=> res.json())
         .then(res=>{
           if(res.success){
-            console.log(chalk.green(res.success));
+            console.log(chalk.green(`Scope "${scopeName}" added successfully!`));
           }else{
             console.log(chalk.red(res.error));
           } //end if
         });
     }catch(err){
-      console.log('Problem connecting to server.');
-      console.log(err);
+      console.log(chalk.red('Problem connecting to server.'));
+      console.log(chalk.red(err));
     }
   }
 };

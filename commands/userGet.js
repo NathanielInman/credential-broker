@@ -69,8 +69,8 @@ module.exports = {
           } //end if
         });
     }catch(err){
-      console.log('Problem connecting to server.');
-      console.log(err);
+      console.log(chalk.red('Problem connecting to server.'));
+      console.log(chalk.red(err));
     }
   }
 };

@@ -11,6 +11,9 @@ module.exports = {
     if(!fs.existsSync('./user.json')){
       return console.log(chalk.red('No user exists locally, initialize first with: ')+chalk.cyan('broker init'));
     } //end if
+    const test = await confirm(chalk.green(`Delete "${secretName}" from scope "${scopeName}"?`));
+
+    if(!test) return;
     const user = new User(JSON.parse(fs.readFileSync('./user.json')));
 
     try{
@@ -31,14 +34,14 @@ module.exports = {
             .then(res=> res.json())
             .then(res=>{
               if(res.success){
-                console.log(`Secret "${name}" deleted successfully!`);
+                console.log(chalk.green(`Secret "${secretName}" from "${scopeName}" deleted successfully!`));
               }else{
-                console.log(res.error);
+                console.log(chalk.red(res.error));
               } //end if
             });
     }catch(err){
-      console.log('Problem connecting to server.');
-      console.log(err);
+      console.log(chalk.red('Problem connecting to server.'));
+      console.log(chalk.red(err));
     }
   }
 };

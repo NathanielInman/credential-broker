@@ -29,15 +29,15 @@ router.post('/',authenticate,async (req,res)=>{
   } //end if
 
   try{
+    const data = await req.broker.db.getItem(`scope:${requestedScope}`);
+
     console.log(
       chalk.cyan(`[${ip}]`)+
       chalk.magenta(`<${name}>`)+
       chalk.grey(':')+
       chalk.green(` Get Scope (${requestedScope})`)
     );
-    res.status(200).json({
-      success: await req.broker.db.getItem(`scope:${requestedScope}`)
-    });
+    res.status(200).json({success: data||{}});
   }catch(err){
     res.status(500).json({error: 'Server had a problem getting scope.'});
     console.log(chalk.red(err));

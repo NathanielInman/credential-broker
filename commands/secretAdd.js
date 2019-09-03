@@ -16,20 +16,20 @@ module.exports = {
     let bool;
 
     do{
-      bool = await confirm(`Is this the correct scope name: "${scopeName}"?`);
+      bool = await confirm(chalk.green(`Is this the correct scope name: "${scopeName}"?`));
       if(!bool){
-        console.log('No problem, let\'s try again.');
-        scopeName = prompt('Enter scope name: ');
+        console.log(chalk.green('No problem, let\'s try again.'));
+        scopeName = prompt(chalk.green('Enter scope name: '));
       } //end if
     }while(!bool)
     do{
-      bool = await confirm(`Is this the correct secret name: "${secretName}"?`);
+      bool = await confirm(chalk.green(`Is this the correct secret name: "${secretName}"?`));
       if(!bool){
-        console.log('No problem, let\'s try again.');
-        secretName = await prompt('Enter new secret name: ');
+        console.log(chalk.green('No problem, let\'s try again.'));
+        secretName = await prompt(chalk.green('Enter new secret name: '));
       } //end if
     }while(!bool)
-    const secretValue = await password(`Please enter the secret value (concealed): `);
+    const secretValue = await password(chalk.green(`Please enter the secret value (concealed): `));
     try{
       await fetch(`${user.remoteIP}/secretAdd`,{
         method: 'POST',
@@ -48,14 +48,14 @@ module.exports = {
         .then(res=> res.json())
         .then(res=>{
           if(res.success){
-            console.log(chalk.green(res.success));
+            console.log(chalk.green(`Secret "${secretName}" added to "${scopeName}" successfully!`));
           }else{
             console.log(chalk.red(res.error));
           } //end if
         });
     }catch(err){
-      console.log('Problem connecting to server.');
-      console.log(err);
+      console.log(chalk.red('Problem connecting to server.'));
+      console.log(chalk.red(err));
     }
   }
 };

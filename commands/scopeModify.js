@@ -35,22 +35,22 @@ module.exports = {
 
       do{
         answer = updatedScope.name;
-        bool = await confirm(`Keep name "${answer}"?`);
+        bool = await confirm(chalk.green(`Keep name "${answer}"?`));
         if(!bool){
-          answer = await prompt('Please enter name: ');
-          bool = await confirm(`Is this correct: "${answer}"?`);
+          answer = await prompt(chalk.green('Please enter name: '));
+          bool = await confirm(chalk.green(`Is this correct: "${answer}"?`));
         } //end if
       }while(!bool)
       updatedScope.name = answer;
       if(updatedScope.publicKey){
-        bool = await confirm(`Continue allowing scope to be a user?`);
+        bool = await confirm(chalk.green(`Continue allowing scope to be a user?`));
         if(!bool){
           updatedScope.publicKey = '';
-        }else if(await confirm('Change existing public key?')){
-          updatedScope.publicKey = prompt('Please enter public key: ');
+        }else if(await confirm(chalk.green('Change existing public key?'))){
+          updatedScope.publicKey = prompt(chalk.green('Please enter public key: '));
         } //end if
-      }else if(!(await confirm(`Continue preventing scope from being a user?`))){
-        updatedScope.publicKey = prompt('Please enter public key: ');
+      }else if(!(await confirm(chalk.green(`Continue preventing scope from being a user?`)))){
+        updatedScope.publicKey = prompt(chalk.green('Please enter public key: '));
       } //end if
       await fetch(`${user.remoteIP}/scopeModify`,{
         method: 'POST',
@@ -69,15 +69,15 @@ module.exports = {
         .then(res=> res.json())
         .then(res=>{
           if(res.success){
-            console.log('Scope modification success!');
+            console.log(chalk.green(`Scope "${scopeName}" modified successfully!`));
           }else{
-            console.log(res.error);
+            console.log(chalk.red(res.error));
           } //end if
         });
 
     }catch(err){
-      console.log('Problem connecting to server.');
-      console.log(err);
+      console.log(chalk.red('Problem connecting to server.'));
+      console.log(chalk.red(err));
     }
   }
 };
