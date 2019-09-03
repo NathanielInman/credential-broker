@@ -18,7 +18,7 @@ module.exports = {
         body: JSON.stringify({scopeName}),
         headers: {
           'Content-Type': 'application/json',
-          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
+          key: encodeURIComponent(fs.readFileSync(user.pgpPrivateKeyLocation).toString()),
           name: user.name,
           email: user.email
         }
