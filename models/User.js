@@ -1,7 +1,8 @@
 const chalk = require('chalk');
+const openpgp = require('openpgp');
 const fs = require('fs');
 const fetch = require('node-fetch');
-const {prompt,confirm} = require('../libraries/prompt.js');
+const {password,prompt,confirm} = require('../libraries/prompt.js');
 
 const defaultPermissions = {
   viewUsers: false,
@@ -14,13 +15,14 @@ module.exports = {
   User: class User{
     constructor({
       remoteIP='',name='',email='',lastAuthentication=null,
-      lastAction='',lastScope='',
+      lastAction='',lastScope='',usePassword=false,
       pgpPrivateKeyLocation='',pgpPublicKeyLocation='',
       permissions=defaultPermissions
     }={}){
       this.remoteIP = remoteIP;
       this.name = name;
       this.email = email;
+      this.usePassword = usePassword;
       this.pgpPrivateKeyLocation = pgpPrivateKeyLocation;
       this.pgpPublicKeyLocation = pgpPublicKeyLocation;
       this.lastAuthentication = lastAuthentication;
@@ -46,18 +48,37 @@ module.exports = {
         answer = await confirm(chalk.green(`Is this correct: "${this.email}"?`));
         if(!answer) console.log(chalk.green('No problem, let\'s try again.'));
       }while(!answer)
-      do{
-        console.log(chalk.green('Note: This file will be sent to broker service to validate user identity.'));
-        this.pgpPublicKeyLocation = await prompt(chalk.green('Please enter file location including name of public PGP Key: '));
-        answer = await confirm(chalk.green(`Is this correct: "${this.pgpPublicKeyLocation}"?`));
-        if(!answer) console.log(chalk.green('No problem, let\'s try again.'));
-      }while(!answer)
-      do{
-        console.log(chalk.green('Note: this file will never be stored elsewhere, and is only used to validate identity.'));
-        this.pgpPrivateKeyLocation = await prompt(chalk.green('Please enter file location including name of private PGP Key: '));
-        answer = await confirm(chalk.green(`Is this correct: "${this.pgpPrivateKeyLocation}"?`));
-        if(!answer) console.log(chalk.green('No problem, let\'s try again.'));
-      }while(!answer)
+      answer = await confirm(chalk.green('Establish a password? (Will be asked on every action)'))
+      if(answer){
+        this.usePassword = true;
+        let passphrase,passphraseConfirm;
+
+        do{
+          passphrase = await password(chalk.green('Please enter password: '));
+          passphraseConfirm = await password(chalk.green('Please confirm password: '));
+          answer = passphrase===passphraseConfirm;
+          if(!answer){
+            console.log(chalk.red('Passwords didn\'t match, let\'s try again.'));
+          } //end if
+        }while(!answer)
+        console.log(chalk.green('Generating keys...'));
+        const key = await openpgp.generateKey({
+          userIds: `${this.name} <${this.email}>`,
+          passphrase
+        });
+        console.log(chalk.green('done.'));
+        console.log(chalk.green('Writing public key...'));
+        fs.writeFileSync('./id_rsa.pub',key.publicKeyArmored);
+        console.log(chalk.green('done.'));
+        console.log(chalk.green('Writing private key...'));
+        fs.writeFileSync('./id_rsa',key.privateKeyArmored);
+        console.log(chalk.green('done.'));
+        console.log(chalk.green('Writing revocation certificate...'));
+        fs.writeFileSync('./id_rsa.revocationCertificate',key.revocationCertificate);
+        console.log(chalk.green('done.'));
+      }else{
+        this.usePassword = false;
+      } //end if
       this.lastAction = 'initialization';
       this.permissions.viewUsers = await confirm(chalk.green('Request view all users permission? '));
       this.permissions.editUsers = await confirm(chalk.green('Request edit all users permission? '));
@@ -86,7 +107,7 @@ module.exports = {
           body: JSON.stringify({...this}),
           headers: {
             'Content-Type': 'application/json',
-            key: fs.readFileSync(this.pgpPublicKeyLocation).toString(),
+            key: fs.readFileSync('./id_rsa.pub').toString(),
             name: this.name,
             email: this.email
           }
