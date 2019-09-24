@@ -1,3 +1,8 @@
+# app specific
+id_rsa
+id_rsa.pub
+id_rsa.revocationCertificate
+
 # vim
 *.swp
 *.swo

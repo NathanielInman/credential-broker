@@ -107,7 +107,7 @@ module.exports = {
           body: JSON.stringify({...this}),
           headers: {
             'Content-Type': 'application/json',
-            key: fs.readFileSync('./id_rsa.pub').toString(),
+            key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
             name: this.name,
             email: this.email
           }
