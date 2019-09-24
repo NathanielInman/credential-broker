@@ -34,9 +34,13 @@ module.exports = {
       let answer;
 
       do{
-        this.remoteIP = await prompt(chalk.green('Broker service ip: '));
-        answer = await confirm(chalk.green(`Is this correct: "${this.remoteIP}"?`));
-        if(!answer) console.log(chalk.green('No problem, let\'s try again.'));
+        this.remoteIP = await prompt(chalk.green('Broker service url: '));
+        if(!this.remoteIP.match(/^(http|https):\/\//g)){
+          console.log(chalk.green('Missing http(s) in url, let\'s try again.'));
+        }else{
+          answer = await confirm(chalk.green(`Is this correct: "${this.remoteIP}"?`));
+          if(!answer) console.log(chalk.green('No problem, let\'s try again.'));
+        } //end if
       }while(!answer)
       do{
         this.name = await prompt(chalk.green('Please enter name: '));
@@ -86,15 +90,19 @@ module.exports = {
       this.permissions.createScopes = await confirm(chalk.green('Request create scopes permission? '));
       do{
         answer = await prompt(chalk.green('Enter requested scopes to access separated by commas: '));
-        const scopeNames = answer.split(',').map(n=> n.trim());
+        const scopeNames = answer.split(',').map(n=> n.trim()).filter(o=>o.length);
 
         for(let i=0;i<scopeNames.length;i++){
           answer = await confirm(chalk.green(`Request full access (Y) or view access to scope "${scopeNames[i]}"(n)?`));
           this.permissions.scopes.push({name: scopeNames[i],value: answer?'edit':'view'})
         } //end for
-        answer = await confirm(chalk.green(`Is this correct: "${
-          this.permissions.scopes.map(s=> `(${s.name}): ${s.value}`).join()
-        }"?`));
+        if(!scopeNames.length){
+          answer = await confirm(chalk.green('Proceed without requesting scope access?'));
+        }else{
+          answer = await confirm(chalk.green(`Is this correct: "${
+            this.permissions.scopes.map(s=> `(${s.name}): ${s.value}`).join()
+          }"?`));
+        } //end if
         if(!answer){
           this.permissions.scopes.length = 0;
           console.log(chalk.green('No problem, let\'s try again.'));
