@@ -4,8 +4,8 @@ const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate.js');
 const {encrypt} = require('../libraries/encrypt.js');
 
-router.post('/',authenticate,async (req,res)=>{
-  const {ip,name,user,key} = req;
+router.post('/',express.text(),authenticate,async (req,res)=>{
+  const {ip,name,user} = req;
 
   try{
 

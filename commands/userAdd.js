@@ -3,6 +3,7 @@ const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {prompt,confirm} = require('../libraries/prompt.js');
+const {sign} = require('../libraries/sign.js');
 
 module.exports = {
   async userAdd(name){
@@ -54,9 +55,9 @@ module.exports = {
     try{
       await fetch(`${user.remoteIP}/userAdd`,{
         method: 'POST',
-        body: JSON.stringify({...newUser}),
+        body: await sign(user,JSON.stringify({...newUser})),
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain',
           key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email

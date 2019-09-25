@@ -3,21 +3,33 @@ const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 const {encrypt} = require('../libraries/encrypt.js');
+const {verify} = require('../libraries/verify.js');
 
-router.post('/',authenticate,async (req,res)=>{
+router.post('/',express.text(),authenticate,async (req,res)=>{
   const {ip,name,user,key} = req,
-        requestedUsername = req.body.name;
+        requestedUsername = await verify(key,req.body);
 
   try{
 
     // short-circuit fail-first
-    if(!user.permissions.viewUsers){
+    if(!requestedUsername){
       console.log(
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
         chalk.red('[FAILURE] ')+
-        chalk.green(` Get All Users`)
+        chalk.green(`Get All Users (SIGNING-VERIFICATION-FAILURE)`)
+      );
+      return res.status(403).json({
+        error: 'Request has been tempered with!'
+      });
+    }else if(!user.permissions.viewUsers){
+      console.log(
+        chalk.cyan(`[${ip}]`)+
+        chalk.magenta(`<${name}>`)+
+        chalk.grey(': ')+
+        chalk.red('[FAILURE] ')+
+        chalk.green(`Get All Users`)
       );
       return res.status(401).json({error: `User "${name}" does not have user edit permission.`});
     }else{

@@ -3,6 +3,7 @@ const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {prompt,confirm} = require('../libraries/prompt.js');
+const {sign} = require('../libraries/sign.js');
 
 module.exports = {
   async userModify(name){
@@ -16,9 +17,9 @@ module.exports = {
     try{
       const data = await fetch(`${user.remoteIP}/userGet`,{
               method: 'POST',
-              body: JSON.stringify({name}),
+              body: await sign(user,JSON.stringify({name})),
               headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain',
                 key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
                 name: user.name,
                 email: user.email
@@ -109,9 +110,9 @@ module.exports = {
       } //end for
       await fetch(`${user.remoteIP}/userModify`,{
         method: 'POST',
-        body: JSON.stringify({...updatedUser}),
+        body: await sign(user,JSON.stringify({...updatedUser})),
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain',
           key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email

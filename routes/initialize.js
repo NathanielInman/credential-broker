@@ -2,7 +2,7 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 
-router.post('/',async (req,res)=>{
+router.post('/',express.json(),async (req,res)=>{
   const {name,email,ip,key} = req,
         user = await req.broker.db.getItem(`user:${name}`);
 

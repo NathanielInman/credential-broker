@@ -19,7 +19,7 @@ module.exports = {
         method: 'POST',
         body: '',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain',
           key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email

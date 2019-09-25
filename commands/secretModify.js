@@ -3,6 +3,7 @@ const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {prompt,confirm,password} = require('../libraries/prompt.js');
+const {sign} = require('../libraries/sign.js');
 
 module.exports = {
   async secretModify(scopeName,secretName){
@@ -26,13 +27,13 @@ module.exports = {
     try{
       await fetch(`${user.remoteIP}/secretModify`,{
         method: 'POST',
-        body: JSON.stringify({
+        body: await sign(user,JSON.stringify({
           scopeName,
           secretName,
           secretValue
-        }),
+        })),
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain',
           key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email

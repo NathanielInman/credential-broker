@@ -2,15 +2,29 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
+const {verify} = require('../libraries/verify.js');
 
-router.post('/',authenticate,async (req,res)=>{
+router.post('/',express.text(),authenticate,async (req,res)=>{
   const {ip,name,user,key} = req,
-        targetScopename = req.body.scopeName,
-        hasScopeAccess = user.permissions.scopes.find(s=> s.name===targetScopename),
+        {scopeName,secretName} = await verify(key,req.body);
+
+  if(!scopeName||!secretName){
+    console.log(
+      chalk.cyan(`[${ip}]`)+
+      chalk.magenta(`<${name}>`)+
+      chalk.grey(': ')+
+      chalk.red('[FAILURE] ')+
+      chalk.green(`Secret Delete (SIGNING-VERIFICATION-FAILURE)`)
+    );
+    return res.status(403).json({
+      error: 'Request has been tempered with!'
+    });
+  } //end if
+  const hasScopeAccess = user.permissions.scopes.find(s=> s.name===scopeName),
         hasScopeEditAccess = hasScopeAccess&&hasScopeAccess.value==='edit';
 
   try{
-    const targetScope = await req.broker.db.getItem(`scope:${targetScopename}`);
+    const targetScope = await req.broker.db.getItem(`scope:${scopeName}`);
 
     // short-circuit fail-first
     if(!hasScopeEditAccess){
@@ -19,7 +33,7 @@ router.post('/',authenticate,async (req,res)=>{
         chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
         chalk.red('[FAILURE] ')+
-        chalk.green(`Secret Delete (${targetScopename})`)
+        chalk.green(`Secret Delete (${scopeName})`)
       );
       return res.status(401).json({
         error: `User "${name}" does not have scope edit permission.`
@@ -30,20 +44,20 @@ router.post('/',authenticate,async (req,res)=>{
         chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
         chalk.red('[FAILURE] ')+
-        chalk.green(`Secret Delete (${targetScopename}-NO-SCOPE)`)
+        chalk.green(`Secret Delete (${scopeName}-NO-SCOPE)`)
       );
       return res.status(401).json({
-        error: `Scope "${targetScopename}" does not exist.`
+        error: `Scope "${scopeName}" does not exist.`
       });
     }else{
       console.log(
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<${name}>`)+
         chalk.grey(': ')+
-        chalk.green(`Secret Delete (${targetScopename})`)
+        chalk.green(`Secret Delete (${scopeName})`)
       );
-      delete targetScope[req.body.secretName];
-      await req.broker.db.setItem(`scope:${targetScopename}`);
+      delete targetScope[secretName];
+      await req.broker.db.setItem(`scope:${scopeName}`);
       res.status(200).json({success: 'Deleted scope secret successfully.'});
     } //end if
   }catch(err){

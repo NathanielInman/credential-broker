@@ -3,6 +3,7 @@ const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {prompt,confirm} = require('../libraries/prompt.js');
+const {sign} = require('../libraries/sign.js');
 
 module.exports = {
   async scopeModify(name){
@@ -16,9 +17,9 @@ module.exports = {
     try{
       const data = await fetch(`${user.remoteIP}/scopeGet`,{
               method: 'POST',
-              body: JSON.stringify({name}),
+              body: await sign(user,JSON.stringify({name})),
               headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain',
                 key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
                 name: user.name,
                 email: user.email
@@ -52,13 +53,13 @@ module.exports = {
       } //end if
       await fetch(`${user.remoteIP}/scopeModify`,{
         method: 'POST',
-        body: JSON.stringify({
+        body: await sign(user,JSON.stringify({
           target: name,
           scopeName: updatedScope.scopeName,
           scopePublicKey: updatedScope.scopePublicKey
-        }),
+        })),
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain',
           key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email

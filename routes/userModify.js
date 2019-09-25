@@ -2,11 +2,24 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
+const {verify} = require('../libraries/verify.js');
 
-router.post('/',authenticate,async (req,res)=>{
+router.post('/',express.text(),authenticate,async (req,res)=>{
   const {ip,name,user,key} = req,
-        requestedUsername = req.body.name;
+        requestedUsername = await verify(key,req.body);
 
+  if(!requestedUsername){
+    console.log(
+      chalk.cyan(`[${ip}]`)+
+      chalk.magenta(`<${name}>`)+
+      chalk.grey(': ')+
+      chalk.red('[FAILURE] ')+
+      chalk.green(`User Modify (SIGNING-VERIFICATION-FAILURE)`)
+    );
+    return res.status(403).json({
+      error: 'Request has been tempered with!'
+    });
+  } //end if
   try{
     const user = await req.broker.db.getItem(`user:${requestedUsername}`);
 

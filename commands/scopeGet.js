@@ -3,6 +3,7 @@ const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {decrypt} = require('../libraries/decrypt.js');
+const {sign} = require('../libraries/sign.js');
 
 module.exports = {
   async scopeGet(scopeName){
@@ -16,16 +17,16 @@ module.exports = {
     try{
       const data = await fetch(`${user.remoteIP}/scopeGet`,{
         method: 'POST',
-        body: JSON.stringify({scopeName}),
+        body: await sign(user,JSON.stringify({scopeName})),
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain',
           key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email
         }
       })
         .then(res=> res.json())
-        .then(res=>{
+        .then(async res=>{
           if(res.success){
             console.log(chalk.green(await decrypt(user,res.success)));
           }else{

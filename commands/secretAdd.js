@@ -3,6 +3,7 @@ const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {prompt,confirm,password} = require('../libraries/prompt.js');
+const {sign} = require('../libraries/sign.js');
 
 module.exports = {
   async secretAdd(scopeName,secretName){
@@ -30,16 +31,13 @@ module.exports = {
       } //end if
     }while(!bool)
     const secretValue = await password(chalk.green(`Please enter the secret value (concealed): `));
+
     try{
       await fetch(`${user.remoteIP}/secretAdd`,{
         method: 'POST',
-        body: JSON.stringify({
-          scopeName,
-          secretName,
-          secretValue
-        }),
+        body: await sign(user,JSON.stringify({scopeName,secretName,secretValue})),
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain',
           key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email
