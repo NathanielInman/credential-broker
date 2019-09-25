@@ -41,6 +41,11 @@ module.exports = {
         chalk.green(`${req.originalUrl}: User does not exist`)
       );
       return res.status(401).json({error: 'Your user does not exist.'});
+    }else{
+
+      // attach the user to the request so any route can attach their
+      // individual requirements or filters based on their permissions
+      req.user = user;
     } //end if
 
     //short-circuit failure
@@ -55,9 +60,14 @@ module.exports = {
       return res.status(401).json({error: 'Your user structure invalid, data corrupted.'});
     } //end if
 
-    // attach the user to the request so any route can attach their
-    // individual requirements or filters based on their permissions
-    req.user = user;
+    // ensure the passphrase is either attached to the request object or
+    // set the passphrase to the default private key encryption which is
+    // the users email
+    if(!req.headers.passphrase){
+      req.passphrase = user.email;
+    }else{
+      req.passphrase = req.headers.passphrase;
+    } //end if
     next();
   }
 };

@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const openpgp = require('openpgp');
 const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
@@ -19,15 +20,24 @@ module.exports = {
         body: '',
         headers: {
           'Content-Type': 'application/json',
-          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
+          key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email
         }
       })
         .then(res=> res.json())
-        .then(res=>{
+        .then(async res=>{
           if(res.success&&res.success.length){
-            console.log(chalk.green(res.success));
+            const privateKey = fs.readFileSync('./id_rsa').toString(),
+                  privateKeys = (await openpgp.key.readArmored(privateKey)).keys;
+
+            await Promise.all(privateKeys.map(k=> k.decrypt(user.email)));
+            const {data} = await openpgp.decrypt({
+              message: await openpgp.message.readArmored(res.success),
+              privateKeys
+            });
+
+            console.log(chalk.green(data));
           }else if(res.success){
             console.log(chalk.cyan('No scopes exist or you don\'t have access to view them.'));
           }else{

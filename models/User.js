@@ -16,15 +16,12 @@ module.exports = {
     constructor({
       remoteIP='',name='',email='',lastAuthentication=null,
       lastAction='',lastScope='',usePassword=false,
-      pgpPrivateKeyLocation='',pgpPublicKeyLocation='',
       permissions=defaultPermissions
     }={}){
       this.remoteIP = remoteIP;
       this.name = name;
       this.email = email;
       this.usePassword = usePassword;
-      this.pgpPrivateKeyLocation = pgpPrivateKeyLocation;
-      this.pgpPublicKeyLocation = pgpPublicKeyLocation;
       this.lastAuthentication = lastAuthentication;
       this.lastAction = lastAction;
       this.lastScope = lastScope;
@@ -52,10 +49,11 @@ module.exports = {
         answer = await confirm(chalk.green(`Is this correct: "${this.email}"?`));
         if(!answer) console.log(chalk.green('No problem, let\'s try again.'));
       }while(!answer)
-      answer = await confirm(chalk.green('Establish a password? (Will be asked on every action)'))
+      answer = await confirm(chalk.green('Establish a password? (Will be asked on every action)'));
+      let passphrase,passphraseConfirm;
+
       if(answer){
         this.usePassword = true;
-        let passphrase,passphraseConfirm;
 
         do{
           passphrase = await password(chalk.green('Please enter password: '));
@@ -65,24 +63,25 @@ module.exports = {
             console.log(chalk.red('Passwords didn\'t match, let\'s try again.'));
           } //end if
         }while(!answer)
-        console.log(chalk.green('Generating keys...'));
-        const key = await openpgp.generateKey({
-          userIds: `${this.name} <${this.email}>`,
-          passphrase
-        });
-        console.log(chalk.green('done.'));
-        console.log(chalk.green('Writing public key...'));
-        fs.writeFileSync('./id_rsa.pub',key.publicKeyArmored);
-        console.log(chalk.green('done.'));
-        console.log(chalk.green('Writing private key...'));
-        fs.writeFileSync('./id_rsa',key.privateKeyArmored);
-        console.log(chalk.green('done.'));
-        console.log(chalk.green('Writing revocation certificate...'));
-        fs.writeFileSync('./id_rsa.revocationCertificate',key.revocationCertificate);
-        console.log(chalk.green('done.'));
       }else{
         this.usePassword = false;
+        passphrase=this.email;
       } //end if
+      console.log(chalk.green('Generating keys...'));
+      const key = await openpgp.generateKey({
+        userIds: `${this.name} <${this.email}>`,
+        passphrase
+      });
+      console.log(chalk.green('done.'));
+      console.log(chalk.green('Writing public key...'));
+      fs.writeFileSync('./id_rsa.pub',key.publicKeyArmored);
+      console.log(chalk.green('done.'));
+      console.log(chalk.green('Writing private key...'));
+      fs.writeFileSync('./id_rsa',key.privateKeyArmored);
+      console.log(chalk.green('done.'));
+      console.log(chalk.green('Writing revocation certificate...'));
+      fs.writeFileSync('./id_rsa.revocationCertificate',key.revocationCertificate);
+      console.log(chalk.green('done.'));
       this.lastAction = 'initialization';
       this.permissions.viewUsers = await confirm(chalk.green('Request view all users permission? '));
       this.permissions.editUsers = await confirm(chalk.green('Request edit all users permission? '));

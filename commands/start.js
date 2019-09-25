@@ -24,7 +24,7 @@ module.exports = {
       req.ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
       req.name = req.headers.name||'';
       req.email = req.headers.email||'';
-      req.key = req.headers.key||'';
+      req.key = decodeURIComponent(req.headers.key||'');
       next();
     });
     app.use(async (req,res,next)=>{

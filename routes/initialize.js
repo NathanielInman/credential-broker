@@ -3,7 +3,7 @@ const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 
 router.post('/',async (req,res)=>{
-  const {name,ip} = req,
+  const {name,email,ip,key} = req,
         user = await req.broker.db.getItem(`user:${name}`);
 
   // short-circuit success-first
@@ -22,11 +22,9 @@ router.post('/',async (req,res)=>{
   if(!scopes&&!users){
     let newUser = {
       date: (new Date).toISOString(),
-      name: req.body.name,
-      email: req.body.email,
+      name,email,key,
       addedBy: 'ROOT',
       addedByIP: ip,
-      key: req.body.key,
       permissions: {
         viewUsers: req.body.permissions.viewUsers,
         editUsers: req.body.permissions.editUsers,
@@ -57,11 +55,9 @@ router.post('/',async (req,res)=>{
       );
       let newUser = {
         date: (new Date).toISOString(),
-        name: req.body.name,
-        email: req.body.email,
+        name,email,key,
         addedBy: 'ROOT',
         addedByIP: ip,
-        key: req.body.key,
         permissions: {
           viewUsers: req.body.permissions.viewUsers,
           editUsers: req.body.permissions.editUsers,
@@ -77,11 +73,9 @@ router.post('/',async (req,res)=>{
     }else{
       let newUser = {
         date: (new Date).toISOString(),
-        name: req.body.name,
-        email: req.body.email,
+        name,email,key,
         addedBy: 'ROOT',
         addedByIP: ip,
-        key: req.body.key,
         permissions: {
           viewUsers: false,
           editUsers: false,
