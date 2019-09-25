@@ -20,13 +20,13 @@ module.exports = {
       const data = await fetch(`${user.remoteIP}/secretDelete`,{
               method: 'POST',
               body: JSON.stringify({
-                key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
                 name: user.name,
                 scopeName,
                 secretName
               }),
               headers: {
                 'Content-Type': 'application/json',
+                key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
                 name: user.name,
                 email: user.email
               }

@@ -4,10 +4,10 @@ const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 
 router.post('/',authenticate,async (req,res)=>{
-  const {ip,name} = req;
+  const {ip,name,user,key} = req;
 
   // short-circuit fail-first
-  if(!req.user.permissions.editUsers){
+  if(!user.permissions.editUsers){
     console.log(
       chalk.cyan(`[${ip}]`)+
       chalk.magenta(`<${name}>`)+
@@ -16,7 +16,7 @@ router.post('/',authenticate,async (req,res)=>{
       chalk.green(` Add User (${req.body.name})`)
     );
     return res.status(401).json({
-      error: `User "${user.name}" does not have user edit permission.`
+      error: `User "${name}" does not have user edit permission.`
     });
   } //end if
 

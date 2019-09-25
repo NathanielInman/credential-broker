@@ -22,7 +22,7 @@ module.exports = {
               }),
               headers: {
                 'Content-Type': 'application/json',
-                key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
+                key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
                 name: user.name,
                 email: user.email
               }

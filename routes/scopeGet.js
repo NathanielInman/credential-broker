@@ -2,9 +2,10 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
+const {encrypt} = require('../libraries/encrypt.js');
 
 router.post('/',authenticate,async (req,res)=>{
-  const {ip,name,email} = req,
+  const {ip,name,user,key} = req,
         requestedScope = req.body.scopeName,
         hasScopeAccess = req.user.permissions.scopes.find(s=> s.name===requestedScope);
 
@@ -25,20 +26,19 @@ router.post('/',authenticate,async (req,res)=>{
       chalk.grey(':')+
       chalk.green(` Get Scope (${requestedScope}-IS-SCOPE)`)
     );
-    return res.status(200).json({success: req.user});
+    return res.status(200).json({success: user});
   } //end if
 
   try{
-    const data = (await req.broker.db.getItem(`scope:${requestedScope}`)||{});
-
     console.log(
       chalk.cyan(`[${ip}]`)+
       chalk.magenta(`<${name}>`)+
       chalk.grey(':')+
       chalk.green(` Get Scope (${requestedScope})`)
     );
+    const data = (await req.broker.db.getItem(`scope:${requestedScope}`)||{});
 
-    res.status(200).json({success: data});
+    res.status(200).json({success: await encrypt(key,data)});
   }catch(err){
     res.status(500).json({error: 'Server had a problem getting scope.'});
     console.log(chalk.red(err));

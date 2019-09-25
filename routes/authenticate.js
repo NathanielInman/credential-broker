@@ -59,15 +59,6 @@ module.exports = {
       );
       return res.status(401).json({error: 'Your user structure invalid, data corrupted.'});
     } //end if
-
-    // ensure the passphrase is either attached to the request object or
-    // set the passphrase to the default private key encryption which is
-    // the users email
-    if(!req.headers.passphrase){
-      req.passphrase = user.email;
-    }else{
-      req.passphrase = req.headers.passphrase;
-    } //end if
     next();
   }
 };

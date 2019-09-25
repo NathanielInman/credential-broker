@@ -4,9 +4,9 @@ const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 
 router.post('/',authenticate,async (req,res)=>{
-  const {ip,name} = req,
+  const {ip,name,user,key} = req,
         targetScopename = req.body.scopeName,
-        hasScopeAccess = req.user.permissions.scopes.find(s=> s.name===targetScopename),
+        hasScopeAccess = user.permissions.scopes.find(s=> s.name===targetScopename),
         hasScopeEditAccess = hasScopeAccess&&hasScopeAccess.value==='edit';
 
   try{
@@ -22,7 +22,7 @@ router.post('/',authenticate,async (req,res)=>{
         chalk.green(`Scope Delete (${targetScopename})`)
       );
       return res.status(401).json({
-        error: `User "${req.user.name}" does not have scope edit permission.`
+        error: `User "${name}" does not have scope edit permission.`
       });
     }else if(!targetScope){
       console.log(

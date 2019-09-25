@@ -4,15 +4,14 @@ const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 
 router.post('/',authenticate,async (req,res)=>{
-  const {ip,name} = req,
+  const {ip,name,user,key} = req,
         targetUsername = req.body.target;
 
-  console.log(targetUsername);
   try{
     const targetUser = await req.broker.db.getItem(`user:${targetUsername}`);
 
     // short-circuit fail-first
-    if(!req.user.permissions.editUsers){
+    if(!user.permissions.editUsers){
       console.log(
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<${name}>`)+

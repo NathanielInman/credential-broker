@@ -2,6 +2,7 @@ const fetch = require('node-fetch');
 const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
+const {decrypt} = require('../libraries/decrypt.js');
 
 module.exports = {
   async scopeGet(scopeName){
@@ -18,7 +19,7 @@ module.exports = {
         body: JSON.stringify({scopeName}),
         headers: {
           'Content-Type': 'application/json',
-          key: encodeURIComponent(fs.readFileSync(user.pgpPrivateKeyLocation).toString()),
+          key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email
         }
@@ -26,7 +27,7 @@ module.exports = {
         .then(res=> res.json())
         .then(res=>{
           if(res.success){
-            console.log(chalk.green(JSON.stringify(res.success)));
+            console.log(chalk.green(await decrypt(user,res.success)));
           }else{
             console.log(chalk.red(res.error));
           } //end if

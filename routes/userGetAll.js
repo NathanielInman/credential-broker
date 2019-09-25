@@ -2,15 +2,16 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
+const {encrypt} = require('../libraries/encrypt.js');
 
 router.post('/',authenticate,async (req,res)=>{
-  const {ip,name} = req,
+  const {ip,name,user,key} = req,
         requestedUsername = req.body.name;
 
   try{
 
     // short-circuit fail-first
-    if(!req.user.permissions.viewUsers){
+    if(!user.permissions.viewUsers){
       console.log(
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<${name}>`)+
@@ -18,21 +19,18 @@ router.post('/',authenticate,async (req,res)=>{
         chalk.red('[FAILURE] ')+
         chalk.green(` Get All Users`)
       );
-      return res.status(401).json({error: `User "${user.name}" does not have user edit permission.`});
+      return res.status(401).json({error: `User "${name}" does not have user edit permission.`});
     }else{
-      const users = await req.broker.db.getItem('users');
-
       console.log(
         chalk.cyan(`[${ip}]`)+
         chalk.magenta(`<${name}>`)+
         chalk.grey(':')+
         chalk.green(` Get All Users`)
       );
-      if(!users){
-        return res.status(200).json({success: []});
-      }else{
-        return res.status(200).json({success: users.map(user=> user.name)});
-      } //end if
+      const users = await req.broker.db.getItem('users'),
+            userData = JSON.stringify(!users?[]:users.map(user=> user.name));
+
+      res.status(200).json({success: await encrypt(key,userData)})
     } //end if
   }catch(err){
     res.status(500).json({error: 'Server error retrieving users.'})

@@ -2,6 +2,7 @@ const fetch = require('node-fetch');
 const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
+const {decrypt} = require('../libraries/decrypt.js');
 
 module.exports = {
   async userGetAll(){
@@ -18,7 +19,7 @@ module.exports = {
         body: '',
         headers: {
           'Content-Type': 'application/json',
-          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
+          key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email
         }
@@ -26,8 +27,10 @@ module.exports = {
         .then(res=> res.json())
         .then(res=>{
           if(res.success){
+            const data = await decrypt(user,res.success);
+
             console.log(chalk.magenta('[USERS]'));
-            res.success.forEach(n=> console.log(chalk.green(n)));
+            data.forEach(userName=> console.log(chalk.green(userName)));
           }else{
             console.log(chalk.red(res.error));
           } //end if

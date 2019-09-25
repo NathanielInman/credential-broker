@@ -1,9 +1,9 @@
 const fetch = require('node-fetch');
-const openpgp = require('openpgp');
 const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {prompt,confirm} = require('../libraries/prompt.js');
+const {decrypt} = require('../libraries/decrypt.js');
 
 module.exports = {
   async scopeGetAll(){
@@ -28,16 +28,7 @@ module.exports = {
         .then(res=> res.json())
         .then(async res=>{
           if(res.success&&res.success.length){
-            const privateKey = fs.readFileSync('./id_rsa').toString(),
-                  privateKeys = (await openpgp.key.readArmored(privateKey)).keys;
-
-            await Promise.all(privateKeys.map(k=> k.decrypt(user.email)));
-            const {data} = await openpgp.decrypt({
-              message: await openpgp.message.readArmored(res.success),
-              privateKeys
-            });
-
-            console.log(chalk.green(data));
+            console.log(chalk.green(await decrypt(user,res.success)));
           }else if(res.success){
             console.log(chalk.cyan('No scopes exist or you don\'t have access to view them.'));
           }else{

@@ -2,6 +2,7 @@ const fetch = require('node-fetch');
 const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
+const {decrypt} = require('../libraries/decrypt.js');
 
 module.exports = {
   async userGet(name){
@@ -18,7 +19,7 @@ module.exports = {
         body: JSON.stringify({name}),
         headers: {
           'Content-Type': 'application/json',
-          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
+          key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email
         }
@@ -46,20 +47,22 @@ module.exports = {
             });
           } //end if
           if(res.success){
+            const data = await decrypt(user,res.success);
+
             console.log(chalk.magenta('[SERVER]'));
-            console.log(chalk.cyan('date: ')+chalk.green(res.success.date));
-            console.log(chalk.cyan('name: ')+chalk.green(res.success.name));
-            console.log(chalk.cyan('email: ')+chalk.green(res.success.email));
-            console.log(chalk.cyan('addedBy: ')+chalk.green(res.success.addedBy));
-            console.log(chalk.cyan('addedByIP: ')+chalk.green(res.success.addedByIP));
-            console.log(chalk.cyan('publicKey: ')+chalk.green(res.success.key));
+            console.log(chalk.cyan('date: ')+chalk.green(data.date));
+            console.log(chalk.cyan('name: ')+chalk.green(data.name));
+            console.log(chalk.cyan('email: ')+chalk.green(data.email));
+            console.log(chalk.cyan('addedBy: ')+chalk.green(data.addedBy));
+            console.log(chalk.cyan('addedByIP: ')+chalk.green(data.addedByIP));
+            console.log(chalk.cyan('publicKey: ')+chalk.green(data.key));
             console.log(chalk.cyan('permissions:'));
-            console.log(chalk.cyan('  viewUsers: ')+chalk.green(res.success.permissions.viewUsers));
-            console.log(chalk.cyan('  editUsers: ')+chalk.green(res.success.permissions.editUsers));
-            console.log(chalk.cyan('  viewScopeNames: ')+chalk.green(res.success.permissions.viewScopeNames));
-            console.log(chalk.cyan('  createScopes: ')+chalk.green(res.success.permissions.createScopes));
+            console.log(chalk.cyan('  viewUsers: ')+chalk.green(data.permissions.viewUsers));
+            console.log(chalk.cyan('  editUsers: ')+chalk.green(data.permissions.editUsers));
+            console.log(chalk.cyan('  viewScopeNames: ')+chalk.green(data.permissions.viewScopeNames));
+            console.log(chalk.cyan('  createScopes: ')+chalk.green(data.permissions.createScopes));
             console.log(chalk.cyan('scopes:'));
-            res.success.permissions.scopes.forEach(scope=>{
+            data.permissions.scopes.forEach(scope=>{
               console.log(chalk.cyan(`  ${scope.name}: `)+chalk.green(scope.value));
             });
           }else{

@@ -27,13 +27,13 @@ module.exports = {
       await fetch(`${user.remoteIP}/secretModify`,{
         method: 'POST',
         body: JSON.stringify({
-          key: fs.readFileSync(user.pgpPrivateKeyLocation).toString(),
           scopeName,
           secretName,
           secretValue
         }),
         headers: {
           'Content-Type': 'application/json',
+          key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
           name: user.name,
           email: user.email
         }

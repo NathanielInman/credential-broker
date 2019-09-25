@@ -4,10 +4,10 @@ const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 
 router.post('/',authenticate,async (req,res)=>{
-  const {ip,name} = req;
+  const {ip,name,user} = req;
 
   // short-circuit fail-first
-  if(!req.user.permissions.createScopes){
+  if(!user.permissions.createScopes){
     console.log(
       chalk.cyan(`[${ip}]`)+
       chalk.magenta(`<${name}>`)+
@@ -16,7 +16,7 @@ router.post('/',authenticate,async (req,res)=>{
       chalk.green(` Add Scope (${req.body.scopeName})`)
     );
     return res.status(401).json({
-      error: `User "${user.name}" does not have scope create permission.`
+      error: `User "${name}" does not have scope create permission.`
     });
   } //end if
 
@@ -47,8 +47,8 @@ router.post('/',authenticate,async (req,res)=>{
       scopes.push({name: req.body.scopeName,publicKey: req.body.scopePublicKey});
     } //end if
     await req.broker.db.setItem('scopes',scopes);
-    req.user.permissions.scopes.push({name: req.body.scopeName,value: 'edit'});
-    await req.broker.db.setItem(`user:${req.user.name}`,req.user);
+    user.permissions.scopes.push({name: req.body.scopeName,value: 'edit'});
+    await req.broker.db.setItem(`user:${name}`,user);
     res.status(200).json({success: `Added scope ${req.body.scopeName}`});
   }catch(err){
     res.status(500).json({error: 'Server had a problem adding new scope.'});
