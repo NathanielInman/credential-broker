@@ -4,6 +4,7 @@ const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {prompt,confirm} = require('../libraries/prompt.js');
 const {sign} = require('../libraries/sign.js');
+const {spinner} = require('../libraries/spinner.js');
 
 module.exports = {
   async userAdd(name){
@@ -53,6 +54,8 @@ module.exports = {
       } //end if
     }while(!answer)
     try{
+      spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
+      spinner.start();
       await fetch(`${user.remoteIP}/userAdd`,{
         method: 'POST',
         body: await sign(user,JSON.stringify({...newUser})),
@@ -65,6 +68,9 @@ module.exports = {
       })
         .then(res=> res.json())
         .then(res=>{
+          spinner.stop();
+          readline.cursorTo(process.stdout, 0);
+          console.log(chalk.green('Synchronizing with server... (done)'));
           if(res.success){
             console.log(chalk.green(`User "${newUser.name}" added successfully!`));
           }else{

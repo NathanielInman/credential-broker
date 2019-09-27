@@ -4,6 +4,7 @@ const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {prompt,confirm,password} = require('../libraries/prompt.js');
 const {sign} = require('../libraries/sign.js');
+const {spinner} = require('../libraries/spinner.js');
 
 module.exports = {
   async secretModify(scopeName,secretName){
@@ -25,6 +26,8 @@ module.exports = {
     }while(!bool)
     const secretValue = await password(chalk.green(`Please enter the updated secret value (concealed): `));
     try{
+      spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
+      spinner.start();
       await fetch(`${user.remoteIP}/secretModify`,{
         method: 'POST',
         body: await sign(user,JSON.stringify({
@@ -41,6 +44,9 @@ module.exports = {
       })
         .then(res=> res.json())
         .then(res=>{
+          spinner.stop();
+          readline.cursorTo(process.stdout, 0);
+          console.log(chalk.green('Synchronizing with server... (done)'));
           if(res.success){
             console.log(chalk.green(`Secret "${secretName}" from "${scopeName}" modified successfully!`));
           }else{

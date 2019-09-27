@@ -4,6 +4,7 @@ const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {prompt,confirm} = require('../libraries/prompt.js');
 const {sign} = require('../libraries/sign.js');
+const {spinner} = require('../libraries/spinner.js');
 
 module.exports = {
   async userModify(name){
@@ -15,6 +16,8 @@ module.exports = {
     const user = new User(JSON.parse(fs.readFileSync('./user.json')));
 
     try{
+      spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
+      spinner.start();
       const data = await fetch(`${user.remoteIP}/userGet`,{
               method: 'POST',
               body: await sign(user,JSON.stringify({name})),
@@ -27,6 +30,9 @@ module.exports = {
             })
             .then(res=> res.json());
 
+      spinner.stop();
+      readline.cursorTo(process.stdout, 0);
+      console.log(chalk.green('Synchronizing with server... (done)'));
       if(data.error) return console.log(chalk.red(res.error));
       const updatedUser = data.success;
 
@@ -108,6 +114,8 @@ module.exports = {
         }while(!bool)
         updatedUser.permissions.scopes[i].value = answer?'edit':'view';
       } //end for
+      spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
+      spinner.start();
       await fetch(`${user.remoteIP}/userModify`,{
         method: 'POST',
         body: await sign(user,JSON.stringify({...updatedUser})),
@@ -120,6 +128,9 @@ module.exports = {
       })
         .then(res=> res.json())
         .then(res=>{
+          spinner.stop();
+          readline.cursorTo(process.stdout, 0);
+          console.log(chalk.green('Synchronizing with server... (done)'));
           if(res.success){
             console.log(chalk.green(`User "${updatedUser.name}" modified successfully!`));
           }else{

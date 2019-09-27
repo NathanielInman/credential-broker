@@ -4,6 +4,7 @@ const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {prompt,confirm} = require('../libraries/prompt.js');
 const {sign} = require('../libraries/sign.js');
+const {spinner} = require('../libraries/spinner.js');
 
 module.exports = {
   async scopeModify(name){
@@ -15,6 +16,8 @@ module.exports = {
     const user = new User(JSON.parse(fs.readFileSync('./user.json')));
 
     try{
+      spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
+      spinner.start();
       const data = await fetch(`${user.remoteIP}/scopeGet`,{
               method: 'POST',
               body: await sign(user,JSON.stringify({name})),
@@ -27,6 +30,9 @@ module.exports = {
             })
             .then(res=> res.json());
 
+      spinner.stop();
+      readline.cursorTo(process.stdout, 0);
+      console.log(chalk.green('Synchronizing with server... (done)'));
       if(data.error) return console.log(chalk.red(res.error));
       const updatedScope = data.success;
 
@@ -51,6 +57,8 @@ module.exports = {
       }else if(!(await confirm(chalk.green(`Continue preventing scope from being a user?`)))){
         updatedScope.publicKey = prompt(chalk.green('Please enter public key: '));
       } //end if
+      spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
+      spinner.start();
       await fetch(`${user.remoteIP}/scopeModify`,{
         method: 'POST',
         body: await sign(user,JSON.stringify({
@@ -67,6 +75,9 @@ module.exports = {
       })
         .then(res=> res.json())
         .then(res=>{
+          spinner.stop();
+          readline.cursorTo(process.stdout, 0);
+          console.log(chalk.green('Synchronizing with server... (done)'));
           if(res.success){
             console.log(chalk.green(`Scope "${scopeName}" modified successfully!`));
           }else{

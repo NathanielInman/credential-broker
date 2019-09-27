@@ -4,6 +4,7 @@ const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {prompt,confirm} = require('../libraries/prompt.js');
 const {sign} = require('../libraries/sign.js');
+const {spinner} = require('../libraries/spinner.js');
 
 module.exports = {
   async scopeAdd(name){
@@ -31,6 +32,8 @@ module.exports = {
       bool = true;
     }while(!bool)
     try{
+      spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
+      spinner.start();
       await fetch(`${user.remoteIP}/scopeAdd`,{
         method: 'POST',
         body: await sign(user,JSON.stringify({scopeName,scopePublicKey})),
@@ -43,6 +46,9 @@ module.exports = {
       })
         .then(res=> res.json())
         .then(res=>{
+          spinner.stop();
+          readline.cursorTo(process.stdout, 0);
+          console.log(chalk.green('Synchronizing with server... (done)'));
           if(res.success){
             console.log(chalk.green(`Scope "${scopeName}" added successfully!`));
           }else{

@@ -3,6 +3,7 @@ const fs = require('fs');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
 const {decrypt} = require('../libraries/decrypt.js');
+const {spinner} = require('../libraries/spinner.js');
 
 module.exports = {
   async userGetAll(){
@@ -14,7 +15,9 @@ module.exports = {
     const user = new User(JSON.parse(fs.readFileSync('./user.json')));
 
     try{
-      const data = await fetch(`${user.remoteIP}/userGetAll`,{
+      spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
+      spinner.start();
+      await fetch(`${user.remoteIP}/userGetAll`,{
         method: 'POST',
         body: '',
         headers: {
@@ -26,6 +29,9 @@ module.exports = {
       })
         .then(res=> res.json())
         .then(async res=>{
+          spinner.stop();
+          readline.cursorTo(process.stdout, 0);
+          console.log(chalk.green('Synchronizing with server... (done)'));
           if(res.success){
             const data = await decrypt(user,res.success);
 

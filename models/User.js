@@ -5,7 +5,7 @@ const fetch = require('node-fetch');
 const readline = require('readline');
 const crypto = require('crypto');
 const {password,prompt,confirm} = require('../libraries/prompt.js');
-const {Spinner} = require('cli-spinner');
+const {spinner} = require('../libraries/spinner.js');
 const {sleep} = require('../libraries/sleep.js');
 
 //const identity = crypto.createDiffieHellman(2048),
@@ -18,10 +18,6 @@ const defaultPermissions = {
   createScopes: false,
   scopes: []
 };
-
-const spinner = new Spinner();
-
-spinner.setSpinnerString('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏');
 
 module.exports = {
   User: class User{
