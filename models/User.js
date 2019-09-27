@@ -2,7 +2,14 @@ const chalk = require('chalk');
 const openpgp = require('openpgp');
 const fs = require('fs');
 const fetch = require('node-fetch');
+const readline = require('readline');
+const crypto = require('crypto');
 const {password,prompt,confirm} = require('../libraries/prompt.js');
+const {Spinner} = require('cli-spinner');
+const {sleep} = require('../libraries/sleep.js');
+
+//const identity = crypto.createDiffieHellman(2048),
+//      identityKey = identity.generateKeys();
 
 const defaultPermissions = {
   viewUsers: false,
@@ -11,6 +18,11 @@ const defaultPermissions = {
   createScopes: false,
   scopes: []
 };
+
+const spinner = new Spinner();
+
+spinner.setSpinnerString('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏');
+
 module.exports = {
   User: class User{
     constructor({
@@ -67,21 +79,40 @@ module.exports = {
         this.usePassword = false;
         passphrase=this.email;
       } //end if
-      console.log(chalk.green('Generating keys...'));
+      spinner.setSpinnerTitle(chalk.yellow('Generating keys... %s'));
+      spinner.start();
+      await sleep(1000);
       const key = await openpgp.generateKey({
         userIds: `${this.name} <${this.email}>`,
         passphrase
       });
-      console.log(chalk.green('done.'));
-      console.log(chalk.green('Writing public key...'));
+      readline.cursorTo(process.stdout, 0);
+      console.log(chalk.green('Generating keys... (done)'));
+      spinner.stop();
+      spinner.setSpinnerTitle(chalk.yellow('Writing public key... %s'));
+      spinner.start();
+      await sleep(1000);
       fs.writeFileSync('./id_rsa.pub',key.publicKeyArmored);
-      console.log(chalk.green('done.'));
-      console.log(chalk.green('Writing private key...'));
+      await sleep(1000);
+      readline.cursorTo(process.stdout, 0);
+      console.log(chalk.green('Writing public key... (done)'));
+      spinner.stop();
+      spinner.setSpinnerTitle(chalk.yellow('Writing private key... %s'));
+      spinner.start();
+      await sleep(1000);
       fs.writeFileSync('./id_rsa',key.privateKeyArmored);
-      console.log(chalk.green('done.'));
-      console.log(chalk.green('Writing revocation certificate...'));
+      await sleep(1000);
+      readline.cursorTo(process.stdout, 0);
+      console.log(chalk.green('Writing private key... (done)'));
+      spinner.stop();
+      spinner.setSpinnerTitle(chalk.yellow('Writing revocation certificate... %s'));
+      spinner.start();
+      await sleep(1000);
       fs.writeFileSync('./id_rsa.revocationCertificate',key.revocationCertificate);
-      console.log(chalk.green('done.'));
+      await sleep(1000);
+      spinner.stop();
+      readline.cursorTo(process.stdout, 0);
+      console.log(chalk.green('Writing revocation certificate... (done)'));
       this.lastAction = 'initialization';
       this.permissions.viewUsers = await confirm(chalk.green('Request view all users permission? '));
       this.permissions.editUsers = await confirm(chalk.green('Request edit all users permission? '));
@@ -109,7 +140,9 @@ module.exports = {
       }while(!answer)
 
       try{
-        const data = await fetch(`${this.remoteIP}/initialize`,{
+        spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
+        spinner.start();
+        await fetch(`${this.remoteIP}/initialize`,{
           method: 'POST',
           body: JSON.stringify({...this}),
           headers: {
@@ -121,6 +154,9 @@ module.exports = {
         })
           .then(res=> res.json())
           .then(res=>{
+            spinner.stop();
+            readline.cursorTo(process.stdout, 0);
+            console.log(chalk.green('Synchronizing with server... (done)'));
             if(res.success){
               fs.writeFileSync('./user.json',JSON.stringify(this));
               console.log(chalk.green('Initialization success!'));
