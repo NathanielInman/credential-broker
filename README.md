@@ -1,3 +1,4 @@
+![Logo And Splash Banner](./artwork/splash.png)
 # Credential Broker
 A secure and easy way to manage adding, deleting and retrieving sensitive information for users and applications.
 
