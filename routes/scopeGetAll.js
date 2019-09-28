@@ -3,6 +3,7 @@ const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate.js');
 const {encrypt} = require('../libraries/encrypt.js');
+const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
   const {ip,name,user} = req;
@@ -11,23 +12,12 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
 
     // short-circuit fail-first
     if(!user.permissions.viewScopeNames){
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.red('[FAILURE] ')+
-        chalk.green(` Get All Scope Names`)
-      );
+      log(ip,name,'Get All Scope Names',true);
       return res.status(401).json({
         error: `User "${user.name}" does not have get all scope names permission.`
       });
     }else{
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(':')+
-        chalk.green(` Get All Scope Names`)
-      );
+      log(ip,name,'Get All Scope Names');
       const scopes = await req.broker.db.getItem('scopes'),
             scopeData = JSON.stringify(!scopes?[]:scopes.map(scope=> scope.name));
 

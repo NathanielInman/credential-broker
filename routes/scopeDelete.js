@@ -3,6 +3,7 @@ const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 const {verify} = require('../libraries/verify.js');
+const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
   const {ip,name,user,key} = req,
@@ -10,16 +11,8 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
 
   //short-circuit fail-first
   if(!scopeName){
-    console.log(
-      chalk.cyan(`[${ip}]`)+
-      chalk.magenta(`<${name}>`)+
-      chalk.grey(': ')+
-      chalk.red('[FAILURE] ')+
-      chalk.green(`Scope Delete (SIGNING-VERIFICATION-FAILURE)`)
-    );
-    return res.status(403).json({
-      error: 'Request has been tempered with!'
-    });
+    log(ip,name,'Scope Delete (SIGNING-VERIFICATION-FAILURE)',true);
+    return res.status(403).json({error: 'Request has been tempered with!'});
   } //end if
   const hasScopeAccess = user.permissions.scopes.find(s=> s.name===scopeName),
         hasScopeEditAccess = hasScopeAccess&&hasScopeAccess.value==='edit';
@@ -29,34 +22,15 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
 
     // short-circuit fail-first
     if(!hasScopeEditAccess){
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.red('[FAILURE] ')+
-        chalk.green(`Scope Delete (${scopeName})`)
-      );
+      log(ip,name,`Scope Delete (${scopeName})`,true);
       return res.status(401).json({
         error: `User "${name}" does not have scope edit permission.`
       });
     }else if(!targetScope){
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.red('[FAILURE] ')+
-        chalk.green(`Scope Delete (${scopeName}-NO-SCOPE)`)
-      );
-      return res.status(401).json({
-        error: `Scope "${scopeName}" does not exist.`
-      });
+      log(ip,name,`Scope Delete (${scopeName}-NO_SCOPE)`,true);
+      return res.status(401).json({error: `Scope "${scopeName}" does not exist.`});
     }else{
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.green(`Scope Delete (${scopeName})`)
-      );
+      log(ip,name,`Scope Delete (${scopeName})`);
       const users = await req.broker.db.getItem('users');
 
       users.forEach(user=>{

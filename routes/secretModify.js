@@ -3,22 +3,15 @@ const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 const {verify} = require('../libraries/verify.js');
+const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
   const {ip,name,user,key} = req,
         {scopeName,secretName,secretValue} = await verify(key,req.body);
 
   if(!scopeName||!secretName||!secretValue){
-    console.log(
-      chalk.cyan(`[${ip}]`)+
-      chalk.magenta(`<${name}>`)+
-      chalk.grey(': ')+
-      chalk.red('[FAILURE] ')+
-      chalk.green(`Secret Modify (SIGNING-VERIFICATION-FAILURE)`)
-    );
-    return res.status(403).json({
-      error: 'Request has been tempered with!'
-    });
+    log(ip,name,'Secret Modify (SIGNING-VERIFICATION-FAILURE)',true);
+    return res.status(403).json({error: 'Request has been tempered with!'});
   } //end if
   const hasScopeAccess = user.permissions.scopes.find(s=> s.name===scopeName),
         hasScopeEditAccess = hasScopeAccess&&hasScopeAccess.value==='edit';
@@ -28,36 +21,17 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
 
     // short-circuit fail-first
     if(!hasScopeEditAccess){
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.red('[FAILURE] ')+
-        chalk.green(`Secret Modify (${scopeName})`)
-      );
+      log(ip,name,`Secret Modify (${scopeName})`,true);
       return res.status(401).json({
         error: `User "${name}" does not have scope edit permission.`
       });
     }else if(!keys.includes(`scope:${scopeName}`)){
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.red('[FAILURE] ')+
-        chalk.green(`Secret Modify (${scopeName}-NO-SCOPE)`)
-      );
-      return res.status(401).json({
-        error: `Scope "${scopeName}" does not exist.`
-      });
+      log(ip,name,`Secret Modify (${scopeName}-NO-SCOPE)`,true);
+      return res.status(401).json({error: `Scope "${scopeName}" does not exist.`});
     }else{
       let targetScope = await req.broker.db.getItem(`scope:${scopeName}`);
 
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.green(`Secret Modify (${scopeName})`)
-      );
+      log(ip,name,`Secret Modify (${scopeName})`);
       if(!targetScope){
         targetScope = {};
         targetScope[secretName] = secretValue;

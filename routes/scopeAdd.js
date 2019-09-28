@@ -3,6 +3,7 @@ const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 const {verify} = require('../libraries/verify.js');
+const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
   const {ip,name,user,key} = req,
@@ -10,47 +11,24 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
 
   // short-circuit fail-first
   if(!scopeName||!scopePublicKey){
-    console.log(
-      chalk.cyan(`[${ip}]`)+
-      chalk.magenta(`<${name}>`)+
-      chalk.grey(': ')+
-      chalk.red('[FAILURE] ')+
-      chalk.green(`Add Scope (SIGNING-VERIFICATION-FAILURE)`)
-    );
+    log(ip,name,'Add Scope (SIGNING-VERIFICATION-FAILURE)',true);
     return res.status(403).json({
       error: 'Request has been tempered with!'
     });
   }else if(!user.permissions.createScopes){
-    console.log(
-      chalk.cyan(`[${ip}]`)+
-      chalk.magenta(`<${name}>`)+
-      chalk.grey(': ')+
-      chalk.red('[FAILURE] ')+
-      chalk.green(`Add Scope (${scopeName})`)
-    );
+    log(ip,name,`Add Scope (${scopeName})`,true);
     return res.status(401).json({
       error: `User "${name}" does not have scope create permission.`
     });
   } //end if
 
   try{
-    console.log(
-      chalk.cyan(`[${ip}]`)+
-      chalk.magenta(`<${name}>`)+
-      chalk.grey(':')+
-      chalk.green(` Add Scope (${scopeName})`)
-    );
+    log(ip,name,`Add Scope (${scopeName})`);
     await req.broker.db.setItem(`scope:${scopeName}`,{});
     let scopes = await req.broker.db.getItem('scopes');
 
     if(scopes&&scopes.find(s=>s.name===scopeName)){
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.red('[FAILURE] ')+
-        chalk.green(`Add Scope (${scopeName})`)
-      );
+      log(ip,name,`Add Scope (${scopeName})`,true);
       return res.status(400).json({
         error: `Scope name "${scopeName}" already exists and cannot be created.`
       });

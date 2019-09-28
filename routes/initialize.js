@@ -1,6 +1,7 @@
 const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
+const {log} = require('../libraries/log.js');
 
 router.post('/',express.json(),async (req,res)=>{
   const {name,email,ip,key} = req,
@@ -8,12 +9,7 @@ router.post('/',express.json(),async (req,res)=>{
 
   // short-circuit success-first
   if(user){
-    console.log(
-      chalk.cyan(`[${ip}]`)+
-      chalk.magenta(`<${name}>`)+
-      chalk.grey(':')+
-      chalk.green(' Initialize User')
-    );
+    log(ip,name,'Initialize User');
     return res.status(200).json({success: 'You user is properly linked'});
   } //end if
   const users = await req.broker.db.getItem('users'),
@@ -34,12 +30,7 @@ router.post('/',express.json(),async (req,res)=>{
       }
     };
 
-    console.log(
-      chalk.cyan(`[${ip}]`)+
-      chalk.magenta(`<${name}>`)+
-      chalk.grey(':')+
-      chalk.green(' Initialize User (FIRST)')
-    );
+    log(ip,name,'Initialize User (FIRST)');
     await req.broker.db.setItem(`user:${name}`,newUser);
     await req.broker.db.setItem('users',[newUser]);
     res.status(200).json({success: 'First user created successfully with requested permissions.'});
@@ -47,12 +38,7 @@ router.post('/',express.json(),async (req,res)=>{
     const {value} = req.broker.strategies.find(s=> s.name==='First account gets access');
 
     if(value){
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(':')+
-        chalk.green(' Initialize User (FIRST-GAINED-ALL-ACCESS)')
-      );
+      log(ip,name,'Initialize User (FIRST-GAINED-ALL-ACCESS)');
       let newUser = {
         date: (new Date).toISOString(),
         name,email,key,
@@ -87,13 +73,7 @@ router.post('/',express.json(),async (req,res)=>{
 
       await req.broker.db.setItem(`user:${name}`,newUser);
       await req.broker.db.setItem('users',[newUser]);
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.red('[FAILURE] ')+
-        chalk.green(' Initialize User (FIRST-ALL-ACCESS-DENIED)')
-      );
+      log(ip,name,'Initialize User (FIRST-ALL-ACCESS-DENIED)',true);
       res.status(200).json({success: 'User created but without any permissions because "First account strategy get access" strategy turned off.'});
     } //end if
   }else{
@@ -101,13 +81,7 @@ router.post('/',express.json(),async (req,res)=>{
       .filter(user=> user.permissions.editUsers)
       .map(user=> user.name);
 
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.red('[FAILURE] ')+
-        chalk.green(' Initialize User (NOT-SETUP)')
-      );
+    log(ip,name,'Initialize User (NOT-SETUP)',true);
     res.status(400).json({error: `In order to be added as a user, please contact user administrators: ${names.join()}`});
   } //end if
 });

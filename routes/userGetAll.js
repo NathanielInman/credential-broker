@@ -4,6 +4,7 @@ const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 const {encrypt} = require('../libraries/encrypt.js');
 const {verify} = require('../libraries/verify.js');
+const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
   const {ip,name,user,key} = req,
@@ -13,32 +14,13 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
 
     // short-circuit fail-first
     if(!requestedUsername){
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.red('[FAILURE] ')+
-        chalk.green(`Get All Users (SIGNING-VERIFICATION-FAILURE)`)
-      );
-      return res.status(403).json({
-        error: 'Request has been tempered with!'
-      });
+      log(ip,name,'Get All Users (SIGNING-VERIFICATION-FAILURE)',true);
+      return res.status(403).json({error: 'Request has been tempered with!'});
     }else if(!user.permissions.viewUsers){
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(': ')+
-        chalk.red('[FAILURE] ')+
-        chalk.green(`Get All Users`)
-      );
+      log(ip,name,'Get All Users',true);
       return res.status(401).json({error: `User "${name}" does not have user edit permission.`});
     }else{
-      console.log(
-        chalk.cyan(`[${ip}]`)+
-        chalk.magenta(`<${name}>`)+
-        chalk.grey(':')+
-        chalk.green(` Get All Users`)
-      );
+      log(ip,name,'Get All Users');
       const users = await req.broker.db.getItem('users'),
             userData = JSON.stringify(!users?[]:users.map(user=> user.name));
 
@@ -51,4 +33,3 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
 });
 
 module.exports = {router};
-
