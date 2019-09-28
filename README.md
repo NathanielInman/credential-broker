@@ -20,6 +20,7 @@ broker get $scopeName
 An extensive list of commands are found [here](#commands).
 
 ## Benefits & Reasoning
+  - Security should be more robust than vaulting or holding data behind a vpn without sacrificing speed of access
   - Devops shouldn't implicitly have access to all secrets 
     - Just because an employee has access to the infrastructure doesn't mean they have a need-to-know. To view access types, you can jump to [the types of access section](#types-of-access)
   - You can attach **TTL**'s to secrets if it's mission critical from them to disappear after a certain point
@@ -34,15 +35,29 @@ An extensive list of commands are found [here](#commands).
     - For more information on the strategies you can jump to [the abandonment section.](#abandonment)
   
 ## Introduction
-A credential broker service stores all sensitive information and has a command-line client which can act as a streaming pre-hook to initialize environment variables upon an application at runtime that does not store anything to disk. The broker service itself stores everything in encrypted format with the broker client having a key to unlock the data. The server requires a username, private PGP key & application name for it’s initial request. Upon the initial request if the user exists, matches the public key given, has access to the scope requested and has validated a time-based two-factor authentication within the last 24 hours it will return the encrypted data. After retrieval the client decrypts the data and sets the environment variables. If the two-factor authentication hasn’t occurred within the last 24 hours the server challenges the user first. All communications are over SSL.
+A credential broker service stores all sensitive information and has a command-line client which can act as a streaming pre-hook to initialize environment variables upon an application at runtime that does not store anything to disk. The broker service itself stores everything in encrypted format with the broker client having a key to unlock the data, provided the user is authenticated and has been authorized for the data requested. The server mimics an SSH authentication using [Diffie-Hellman](https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange) to establish encryption of traffic, performing a challenge to validate a user owns the private [OpenPGP](https://en.wikipedia.org/wiki/Pretty_Good_Privacy#OpenPGP) key to their account and a [2FA](https://en.wikipedia.org/wiki/Multi-factor_authentication) request at a configurable time period to ensure the user hasn't been compromised. [SSL](https://en.wikipedia.org/wiki/Transport_Layer_Security) should be configured on the server to help prevent [man-in the middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack).
 
 Users can also be applications. A broker scope itself can be tied to an application such that an app server would use their private PGP key to match with the broker services stored public key to access all the variables stored under that applications scope while starting. Applications don't require two-factor authentication as they're trusted.
 
 ### Simple Example
-![Success & Failure Example](/artwork/example1.svg)
+At its most basic, users may be limited to certain scopes.
 
-### Authentication Sequence Diagram
-![Authentication Sequence Diagram](/artwork/example2.svg)
+![Success & Failure Example](/artwork/simpleExample.svg)
+
+### Session Encryption Sequence Diagram
+Before any request is fired from the client, in the background it establishes a shared key encryption. This **must** be over SSL to help prevent man-in-the-middle attacks. Session length may be configurable, though smaller session length increases security.
+
+![Session Encryption Sequence Diagram](/artwork/encryptSession.svg)
+
+### Session Authentication Sequence Diagram
+Before any request is fired from the client, instead of just assuming that the person with the public key of the user is the user, we authenticate that they are who they are using a challenge mechanism that encrypts a random number, encrypts with the public key and requests the client to decrypt it, set a MD5 of the value and send it back to validate they do indeed own the private key for the user. Session length may be configurable, though smaller session length increases security.
+
+![Session Authenticate Sequence Diagram](/artwork/authenticateSession.svg)
+
+### Two-Factor Authentication Sequence Diagram
+Two-factor authentication may be setup on a user to help prevent unauthorized access of a user. The time period may be configured for which to ask for the authentication.
+
+![Two-Factor Authentication Sequence Diagram](/artwork/twoFactorAuthentication.svg)
 
 ## Server Setup
 In order to start the server merely type `broker start`. It will ask a series of questions before it's operational. For more information on what these strategies mean and their reasons for existing, please see [the abandonment section.](#abandonment) If the user types `N/no` it validates their choice and gives them a warning specific to an abandonment situation that would leave their data without anyone who has access.
