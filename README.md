@@ -45,12 +45,12 @@ At its most basic, users may be limited to certain scopes.
 ![Success & Failure Example](/artwork/simpleExample.svg)
 
 ### Session Encryption Sequence Diagram
-Before any request is fired from the client, in the background it establishes a shared key encryption. This **must** be over SSL to help prevent man-in-the-middle attacks.
+Before any request is fired from the client, in the background it establishes a shared key encryption. This **must** be over SSL to help prevent man-in-the-middle attacks. Session length may be configurable, though smaller session length increases security.
 
 ![Session Encryption Sequence Diagram](/artwork/encryptSession.svg)
 
 ### Session Authentication Sequence Diagram
-Instead of just assuming that the person with the public key of the user is the user, we authenticate that they are who they are using a challenge mechanism that encrypts a random number, encrypts with the public key and requests the client to decrypt it, set a MD5 of the value and send it back to validate they do indeed own the private key for the user.
+Before any request is fired from the client, instead of just assuming that the person with the public key of the user is the user, we authenticate that they are who they are using a challenge mechanism that encrypts a random number, encrypts with the public key and requests the client to decrypt it, set a MD5 of the value and send it back to validate they do indeed own the private key for the user. Session length may be configurable, though smaller session length increases security.
 
 ![Session Authenticate Sequence Diagram](/artwork/authenticateSession.svg)
 
