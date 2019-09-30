@@ -20,7 +20,7 @@ broker get $scopeName
 An extensive list of commands are found [here](#commands).
 
 ## Benefits & Reasoning
-  - Security should be more robust than vaulting or holding data behind a vpn without sacrificing speed of access
+  - Security should be more robust than vaulting or holding data behind a VPN, all without sacrificing speed of access
   - Devops shouldn't implicitly have access to all secrets 
     - Just because an employee has access to the infrastructure doesn't mean they have a need-to-know. To view access types, you can jump to [the types of access section](#types-of-access)
   - You can attach **TTL**'s to secrets if it's mission critical from them to disappear after a certain point
