@@ -6,7 +6,7 @@ const {encrypt} = require('../libraries/encrypt.js');
 const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
-  const {ip,name,user} = req;
+  const {ip,name,key,user} = req;
 
   try{
 

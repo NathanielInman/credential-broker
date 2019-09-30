@@ -1,6 +1,7 @@
 const fetch = require('node-fetch');
 const fs = require('fs');
 const chalk = require('chalk');
+const readline = require('readline');
 const {User} = require('../models/User.js');
 const {decrypt} = require('../libraries/decrypt.js');
 const {spinner} = require('../libraries/spinner.js');

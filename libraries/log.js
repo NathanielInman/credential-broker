@@ -6,7 +6,7 @@ module.exports = {
       chalk.cyan(`[${ip}]`)+
       chalk.magenta(`<${name}>`)+
       chalk.grey(':')+
-      failure?chalk.red(' [FAILURE] '):''+
+      (failure?chalk.red(' [FAILURE] '):'')+
       chalk.green(` ${description}`)
     );
   }
