@@ -2,6 +2,7 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {log} = require('../libraries/log.js');
+const {mail} = require('../libraries/mail.js');
 
 router.post('/',express.json(),async (req,res)=>{
   const {name,email,ip,key} = req,
@@ -10,6 +11,12 @@ router.post('/',express.json(),async (req,res)=>{
   // short-circuit success-first
   if(user){
     log(ip,name,'Initialize User');
+    mail({
+      from: 'nate@theoestudio.com', //req.broker.externalIP,
+      to: email,
+      subject: 'Welcome to Credential Broker!',
+      text: `Welcome to Crednetial Broker ${name}!`
+    });
     return res.status(200).json({success: 'You user is properly linked'});
   } //end if
   const users = await req.broker.db.getItem('users'),
@@ -33,6 +40,12 @@ router.post('/',express.json(),async (req,res)=>{
     log(ip,name,'Initialize User (FIRST)');
     await req.broker.db.setItem(`user:${name}`,newUser);
     await req.broker.db.setItem('users',[newUser]);
+    mail({
+      from: 'nate@theoestudio.com', //req.broker.externalIP,
+      to: email,
+      subject: 'Welcome to Credential Broker!',
+      text: `Welcome to Crednetial Broker ${name}!`
+    });
     res.status(200).json({success: 'First user created successfully with requested permissions.'});
   }else if(!users){
     const {value} = req.broker.strategies.find(s=> s.name==='First account gets access');
@@ -55,6 +68,12 @@ router.post('/',express.json(),async (req,res)=>{
 
       await req.broker.db.setItem(`user:${name}`,newUser);
       await req.broker.db.setItem('users',[newUser]);
+    mail({
+      from: 'nate@theoestudio.com', //req.broker.externalIP,
+      to: email,
+      subject: 'Welcome to Credential Broker!',
+      text: `Welcome to Crednetial Broker ${name}!`
+    });
       res.status(200).json({success: `First user created successfully and given access to scopes: ${scopes.map(s=>s.name).join()}.`});
     }else{
       let newUser = {
@@ -74,6 +93,12 @@ router.post('/',express.json(),async (req,res)=>{
       await req.broker.db.setItem(`user:${name}`,newUser);
       await req.broker.db.setItem('users',[newUser]);
       log(ip,name,'Initialize User (FIRST-ALL-ACCESS-DENIED)',true);
+      mail({
+        from: 'nate@theoestudio.com', //req.broker.externalIP,
+        to: email,
+        subject: 'Welcome to Credential Broker!',
+        text: `Welcome to Crednetial Broker ${name}!`
+      });
       res.status(200).json({success: 'User created but without any permissions because "First account strategy get access" strategy turned off.'});
     } //end if
   }else{

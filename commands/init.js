@@ -2,7 +2,14 @@ const fs = require('fs');
 const {confirm} = require('../libraries/prompt.js');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
+const {mail} = require('../libraries/mail.js');
 
+    mail({
+      from: 'nate@theoestudio.com', //req.broker.externalIP,
+      to: 'nate@theoestudio.com',
+      subject: 'Welcome to Credential Broker!',
+      text: `Welcome to Crednetial Broker test!`
+    });
 module.exports = {
   async init(){
     if(fs.existsSync('./user.json')){

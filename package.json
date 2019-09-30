@@ -33,6 +33,7 @@
     "keypress": "^0.2.1",
     "node-fetch": "^2.6.0",
     "node-persist": "^3.0.5",
+    "nodemailer": "^6.3.0",
     "openpgp": "^4.6.0"
   }
 }
