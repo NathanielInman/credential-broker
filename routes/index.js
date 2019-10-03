@@ -1,5 +1,8 @@
 const express = require('express');
-const initialize = require('./initialize.js');
+const secure = require('./authSecure.js');
+const identify = require('./authIdentify.js');
+const challenge = require('./authChallenge.js');
+const initialize = require('./userInitialize.js');
 const userAdd = require('./userAdd.js');
 const userGet = require('./userGet.js');
 const userGetAll = require('./userGetAll.js');
@@ -15,7 +18,13 @@ const secretModify = require('./secretModify.js');
 const secretDelete = require('./secretDelete.js');
 const router = express.Router({mergeParams: true});
 
-router.use('/initialize', initialize.router);
+// Secure communications & authentication routes
+router.use('/authSecure', secure.router);
+router.use('/authIdentify', identify.router);
+router.use('/authChallenge', challenge.router);
+
+// General routes
+router.use('/userInitialize', initialize.router);
 router.use('/userAdd', userAdd.router);
 router.use('/userGet', userGet.router);
 router.use('/userGetAll', userGetAll.router);

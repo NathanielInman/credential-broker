@@ -1,6 +1,6 @@
 const {help} = require('./help.js');
 const {start} = require('./start.js');
-const {init} = require('./init.js');
+const {userInitialize} = require('./userInitialize.js');
 const {userAdd} = require('./userAdd.js');
 const {userDelete} = require('./userDelete.js');
 const {userModify} = require('./userModify.js');
@@ -16,8 +16,8 @@ const {secretDelete} = require('./secretDelete.js');
 const {secretModify} = require('./secretModify.js');
 
 module.exports = {
-  help,start,init,
-  userAdd,userDelete,userModify,userGetAll,userGet,
+  help,start,
+  userInitialize,userAdd,userDelete,userModify,userGetAll,userGet,
   scopeAdd,scopeDelete,scopeModify,scopeGetAll,scopeGet,
   secretAdd,secretDelete,secretModify
 };
