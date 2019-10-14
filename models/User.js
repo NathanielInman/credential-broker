@@ -14,7 +14,7 @@ module.exports = {
     constructor({
       remoteIP='',name='',email='',lastAuthentication=null,
       lastAction='',lastScope='',usePassword=false,
-      permissions=defaultPermissions
+      permissions=defaultPermissions,secret=''
     }={}){
       this.remoteIP = remoteIP;
       this.name = name;
@@ -23,7 +23,8 @@ module.exports = {
       this.lastAuthentication = lastAuthentication;
       this.lastAction = lastAction;
       this.lastScope = lastScope;
-      this.permissions = defaultPermissions
+      this.permissions = defaultPermissions;
+      this.secret = secret;
     }
     getVersionNumber(){
       if(!fs.existsSync('./package.json')){

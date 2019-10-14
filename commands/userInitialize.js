@@ -1,5 +1,6 @@
 const fs = require('fs');
 const openpgp = require('openpgp');
+const crypto = require('crypto');
 const fetch = require('node-fetch');
 const {password,prompt,confirm} = require('../libraries/prompt.js');
 const {spinner} = require('../libraries/spinner.js');
@@ -7,7 +8,7 @@ const {sleep} = require('../libraries/sleep.js');
 const readline = require('readline');
 const chalk = require('chalk');
 const {User} = require('../models/User.js');
-const {authSecure} = require('../libraries/authSecure.js');
+const {authSecure,authSecureEncrypt,authSecureDecrypt} = require('../libraries/authSecure.js');
 
 module.exports = {
   async userInitialize(){
@@ -15,7 +16,6 @@ module.exports = {
 
     if(fs.existsSync('./user.json')){
       user = new User(JSON.parse(fs.readFileSync('./user.json')));
-      await authSecure(user);
       if(await confirm(chalk.green('User (')+chalk.magenta(user.name)+chalk.green(') exists already, remove?'))){
         fs.unlinkSync('./user.json');
       }else{
@@ -124,20 +124,28 @@ module.exports = {
       } //end if
     }while(!answer)
 
+    // we initialize a secure transmission path by using diffie-hellman
+    // to create an asymetric shared key that's used to encrypt traffic.
+    if(!user.secret) user.secret = await authSecure(user);
+
     try{
       spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
       spinner.start();
       await fetch(`${user.remoteIP}/userInitialize`,{
         method: 'POST',
-        body: JSON.stringify({...user}),
+        body: JSON.stringify({
+          ...user,
+          key: fs.readFileSync('./id_rsa.pub').toString()
+        }),
         headers: {
-          'Content-Type': 'application/json',
-          key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
-          name: user.name,
-          email: user.email
+          'Content-Type': 'text/plain',
+          key: crypto.createHash('md5').update(user.name).digest('hex'),
+          name: authSecureEncrypt(user.secret,user.name),
+          email: authSecureEncrypt(user.secret,user.email)
         }
       })
-        .then(res=> res.json())
+        .then(res=> res.text())
+        .then(res=> JSON.parse(authSecureDecrypt(user.secret,res)))
         .then(res=>{
           spinner.stop();
           readline.cursorTo(process.stdout, 0);

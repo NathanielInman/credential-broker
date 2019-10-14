@@ -2,10 +2,12 @@ const fetch = require('node-fetch');
 const fs = require('fs');
 const chalk = require('chalk');
 const readline = require('readline');
+const crypto = require('crypto');
 const {User} = require('../models/User.js');
 const {prompt,confirm} = require('../libraries/prompt.js');
 const {decrypt} = require('../libraries/decrypt.js');
 const {spinner} = require('../libraries/spinner.js');
+const {authSecureEncrypt,authSecureDecrypt} = require('../libraries/authSecure.js');
 
 module.exports = {
   async scopeGetAll(){
@@ -24,13 +26,19 @@ module.exports = {
         body: '',
         headers: {
           'Content-Type': 'text/plain',
-          key: encodeURIComponent(fs.readFileSync('./id_rsa.pub').toString()),
-          name: user.name,
-          email: user.email
+          key: crypto.createHash('md5').update(user.name).digest('hex'),
+          name: authSecureEncrypt(user.secret,user.name),
+          email: authSecureEncrypt(user.secret,user.email)
         }
       })
-        .then(res=> res.json())
+        .then(res=> res.text())
+        .then(res=>{
+          console.log('decrypting',res);
+          return JSON.parse(authSecureDecrypt(user.secret,res));
+        })
         .then(async res=>{
+          console.log('decrypted',res);
+
           spinner.stop();
           readline.cursorTo(process.stdout, 0);
           console.log(chalk.green('Synchronizing with server... (done)'));

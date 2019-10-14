@@ -15,5 +15,20 @@ module.exports = {
           secret = client.computeSecret(serverKey,'base64','base64');
 
     return secret;
+  },
+  authSecureEncrypt(secret,content){
+    const iv = crypto.randomBytes(16),
+          cipher = crypto.createCipheriv('aes-256-cbc',secret.substr(0,32),iv),
+          encrypted = cipher.update(content,'utf8','base64')+cipher.final('base64');
+
+    return encodeURIComponent(`${iv.toString('hex')}:${encrypted}`);
+  },
+  authSecureDecrypt(secret,content){
+    const parts = decodeURIComponent(content).split(':'),
+          iv = Buffer.from(parts.shift(),'hex'),
+          decipher = crypto.createDecipheriv('aes-256-cbc',secret.substr(0,32),iv),
+          decrypted = decipher.update(parts.shift(),'base64','utf8')+decipher.final('utf8');
+
+    return decrypted;
   }
 };

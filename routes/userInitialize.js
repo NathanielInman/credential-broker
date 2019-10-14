@@ -3,15 +3,26 @@ const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {log} = require('../libraries/log.js');
 const {mail} = require('../libraries/mail.js');
+const {authSecureEncrypt,authSecureDecrypt} = require('../libraries/authSecure.js');
 
 router.post('/',express.json(),async (req,res)=>{
-  const {name,email,ip,key} = req,
+  const secret = await req.broker.db.getItem(`session:${req.headers.key}`),
+        name = authSecureDecrypt(secret,req.headers.name),
+        email = authSecureDecrypt(secret,req.headers.email),
+        {ip} = req;
         user = await req.broker.db.getItem(`user:${name}`);
 
   // short-circuit success-first
   if(user){
     log(ip,name,'Initialize User');
-    return res.status(200).json({success: 'You user is properly linked'});
+    return res.status(200).send(
+      authSecureEncrypt(
+        secret,
+        JSON.stringify({
+          success: 'You user is properly linked'
+        })
+      )
+    );
   } //end if
   const users = await req.broker.db.getItem('users'),
         scopes = await req.broker.db.getItem('scopes');
@@ -34,7 +45,14 @@ router.post('/',express.json(),async (req,res)=>{
     log(ip,name,'Initialize User (FIRST)');
     await req.broker.db.setItem(`user:${name}`,newUser);
     await req.broker.db.setItem('users',[newUser]);
-    res.status(200).json({success: 'First user created successfully with requested permissions.'});
+    res.status(200).send(
+      authSecureEncrypt(
+        secret,
+        JSON.stringify({
+          success: 'First user created successfully with requested permissions.'
+        })
+      )
+    );
   }else if(!users){
     const {value} = req.broker.strategies.find(s=> s.name==='First account gets access');
 
@@ -56,7 +74,14 @@ router.post('/',express.json(),async (req,res)=>{
 
       await req.broker.db.setItem(`user:${name}`,newUser);
       await req.broker.db.setItem('users',[newUser]);
-      res.status(200).json({success: `First user created successfully and given access to scopes: ${scopes.map(s=>s.name).join()}.`});
+      res.status(200).send(
+        authSecureEncrypt(
+          secret,
+          JSON.stringify({
+            success: `First user created successfully and given access to scopes: ${scopes.map(s=>s.name).join()}.`
+          })
+        )
+      );
     }else{
       let newUser = {
         date: (new Date).toISOString(),
@@ -75,7 +100,14 @@ router.post('/',express.json(),async (req,res)=>{
       await req.broker.db.setItem(`user:${name}`,newUser);
       await req.broker.db.setItem('users',[newUser]);
       log(ip,name,'Initialize User (FIRST-ALL-ACCESS-DENIED)',true);
-      res.status(200).json({success: 'User created but without any permissions because "First account strategy get access" strategy turned off.'});
+      res.status(200).send(
+        authSecureEncrypt(
+          secret,
+          JSON.stringify({
+            success: 'User created but without any permissions because "First account strategy get access" strategy turned off.'
+          })
+        )
+      );
     } //end if
   }else{
     const names = users
@@ -83,7 +115,14 @@ router.post('/',express.json(),async (req,res)=>{
       .map(user=> user.name);
 
     log(ip,name,'Initialize User (NOT-SETUP)',true);
-    res.status(400).json({error: `In order to be added as a user, please contact user administrators: ${names.join()}`});
+    res.status(400).send(
+      authSecureEncrypt(
+        secret,
+        JSON.stringify({
+          error: `In order to be added as a user, please contact user administrators: ${names.join()}`
+        })
+      )
+    );
   } //end if
 });
 

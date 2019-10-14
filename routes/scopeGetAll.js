@@ -3,11 +3,13 @@ const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate.js');
 const {encrypt} = require('../libraries/encrypt.js');
+const {authSecureEncrypt} = require('../libraries/authSecure.js');
 const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
-  const {ip,name,key,user} = req;
+  const {ip,name,key,secret,user} = req;
 
+  console.log('scope get all',ip,name,key,user);
   try{
 
     // short-circuit fail-first
@@ -19,9 +21,13 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
     }else{
       log(ip,name,'Get All Scope Names');
       const scopes = await req.broker.db.getItem('scopes'),
-            scopeData = JSON.stringify(!scopes?[]:scopes.map(scope=> scope.name));
+            scopeData = JSON.stringify(!scopes?[]:scopes.map(scope=> scope.name)),
+            encrypted = await encrypt(key,scopeData),
+            payload = authSecureEncrypt(secret,JSON.stringify({success: encrypted}));
 
-      res.status(200).json({success: await encrypt(key,scopeData)});
+      console.log('encrypting key',key);
+      console.log('encrypting value',scopeData);
+      res.status(200).send(payload);
     } //end if
   }catch(err){
     res.status(500).json({error: 'Server error retrieving scopes.'})
