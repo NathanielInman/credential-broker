@@ -9,7 +9,6 @@ const {log} = require('../libraries/log.js');
 router.post('/',express.text(),authenticate,async (req,res)=>{
   const {ip,name,key,secret,user} = req;
 
-  console.log('scope get all',ip,name,key,user);
   try{
 
     // short-circuit fail-first
@@ -25,8 +24,6 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
             encrypted = await encrypt(key,scopeData),
             payload = authSecureEncrypt(secret,JSON.stringify({success: encrypted}));
 
-      console.log('encrypting key',key);
-      console.log('encrypting value',scopeData);
       res.status(200).send(payload);
     } //end if
   }catch(err){

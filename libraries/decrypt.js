@@ -11,7 +11,6 @@ module.exports = {
             await password(chalk.green('Please enter password: '));
 
     await Promise.all(privateKeys.map(k=> k.decrypt(passwordValue)));
-    console.log('decrypting PGP',`"${passwordValue}"`,`"${text}"`);
     const {data} = await openpgp.decrypt({
       message: await openpgp.message.readArmored(text),
       privateKeys

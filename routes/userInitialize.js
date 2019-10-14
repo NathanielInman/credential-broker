@@ -14,15 +14,30 @@ router.post('/',express.json(),async (req,res)=>{
 
   // short-circuit success-first
   if(user){
+
+    // override the existing users public key in case the user changed it
     log(ip,name,'Initialize User');
-    return res.status(200).send(
-      authSecureEncrypt(
-        secret,
-        JSON.stringify({
-          success: 'You user is properly linked'
-        })
-      )
-    );
+    if(user.key!==req.body.key){
+      user.key = req.body.key;
+      await req.broker.db.setItem(`user:${name}`,user);
+      return res.status(200).send(
+        authSecureEncrypt(
+          secret,
+          JSON.stringify({
+            success: 'Your user is properly linked. Updated public key.'
+          })
+        )
+      );
+    }else{
+      return res.status(200).send(
+        authSecureEncrypt(
+          secret,
+          JSON.stringify({
+            success: 'Your user is properly linked'
+          })
+        )
+      );
+    } //end if
   } //end if
   const users = await req.broker.db.getItem('users'),
         scopes = await req.broker.db.getItem('scopes');

@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const {User} = require('../models/User.js');
 const {prompt,confirm} = require('../libraries/prompt.js');
 const {decrypt} = require('../libraries/decrypt.js');
+const {encrypt} = require('../libraries/encrypt.js');
 const {spinner} = require('../libraries/spinner.js');
 const {authSecureEncrypt,authSecureDecrypt} = require('../libraries/authSecure.js');
 
@@ -32,12 +33,8 @@ module.exports = {
         }
       })
         .then(res=> res.text())
-        .then(res=>{
-          console.log('decrypting',res);
-          return JSON.parse(authSecureDecrypt(user.secret,res));
-        })
+        .then(res=> JSON.parse(authSecureDecrypt(user.secret,res)))
         .then(async res=>{
-          console.log('decrypted',res);
 
           spinner.stop();
           readline.cursorTo(process.stdout, 0);
