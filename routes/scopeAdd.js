@@ -2,36 +2,34 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
-const {verify} = require('../libraries/verify.js');
-const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
-  const {ip,name,user,key} = req,
-        {scopeName,scopePublicKey} = await verify(key,req.body);
+  const {name,user} = req,
+        {scopeName,scopePublicKey} = req.body;
 
   // short-circuit fail-first
   if(!scopeName||!scopePublicKey){
-    log(ip,name,'Add Scope (SIGNING-VERIFICATION-FAILURE)',true);
-    return res.status(403).json({
-      error: 'Request has been tempered with!'
-    });
+    req.log('Add Scope (Bad Request)',true);
+    return req.respond({status:400,body: {
+      error: 'Missing scopePublicKey or scopeName'
+    }});
   }else if(!user.permissions.createScopes){
-    log(ip,name,`Add Scope (${scopeName})`,true);
-    return res.status(401).json({
-      error: `User "${name}" does not have scope create permission.`
+    req.log(`Add Scope (${scopeName})`,true);
+    return respond({
+      status:401,body:{error: `User ${name}" does not have scope create permission.`}
     });
   } //end if
 
   try{
-    log(ip,name,`Add Scope (${scopeName})`);
+    req.log(`Add Scope (${scopeName})`);
     await req.broker.db.setItem(`scope:${scopeName}`,{});
     let scopes = await req.broker.db.getItem('scopes');
 
     if(scopes&&scopes.find(s=>s.name===scopeName)){
-      log(ip,name,`Add Scope (${scopeName})`,true);
-      return res.status(400).json({
+      req.log(`Add Scope (${scopeName})`,true);
+      return req.respond({status:400,body:{
         error: `Scope name "${scopeName}" already exists and cannot be created.`
-      });
+      }});
     }else if(!scopes){
       scopes = [{name: scopeName,publicKey: scopePublicKey}];
     }else{
@@ -40,9 +38,9 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
     await req.broker.db.setItem('scopes',scopes);
     user.permissions.scopes.push({name: scopeName,value: 'edit'});
     await req.broker.db.setItem(`user:${name}`,user);
-    res.status(200).json({success: `Added scope ${scopeName}`});
+    req.respond({body:{success: `Added scope ${scopeName}`}});
   }catch(err){
-    res.status(500).json({error: 'Server had a problem adding new scope.'});
+    req.respond({status:500,body:{error: 'Server had a problem adding new scope.'}});
     console.log(chalk.red(err));
   }
 });

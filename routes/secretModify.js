@@ -2,16 +2,16 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
-const {verify} = require('../libraries/verify.js');
-const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
-  const {ip,name,user,key} = req,
-        {scopeName,secretName,secretValue} = await verify(key,req.body);
+  const {name,user} = req,
+        {scopeName,secretName,secretValue} = req.body;
 
   if(!scopeName||!secretName||!secretValue){
-    log(ip,name,'Secret Modify (SIGNING-VERIFICATION-FAILURE)',true);
-    return res.status(403).json({error: 'Request has been tempered with!'});
+    req.log('Secret Modify (Bad Request)',true);
+    return req.respond({status:400,body:{
+      error: 'Missing scopeName, secretName or secretValue'
+    }});
   } //end if
   const hasScopeAccess = user.permissions.scopes.find(s=> s.name===scopeName),
         hasScopeEditAccess = hasScopeAccess&&hasScopeAccess.value==='edit';
@@ -21,17 +21,19 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
 
     // short-circuit fail-first
     if(!hasScopeEditAccess){
-      log(ip,name,`Secret Modify (${scopeName})`,true);
-      return res.status(401).json({
+      req.log(`Secret Modify (${scopeName})`,true);
+      req.respond({status:401,body:{
         error: `User "${name}" does not have scope edit permission.`
-      });
+      }});
     }else if(!keys.includes(`scope:${scopeName}`)){
-      log(ip,name,`Secret Modify (${scopeName}-NO-SCOPE)`,true);
-      return res.status(401).json({error: `Scope "${scopeName}" does not exist.`});
+      req.log(`Secret Modify (${scopeName}-NO-SCOPE)`,true);
+      req.respond({status:401,body:{
+        error: `Scope "${scopeName}" does not exist.`
+      }});
     }else{
       let targetScope = await req.broker.db.getItem(`scope:${scopeName}`);
 
-      log(ip,name,`Secret Modify (${scopeName})`);
+      req.log(`Secret Modify (${scopeName})`);
       if(!targetScope){
         targetScope = {};
         targetScope[secretName] = secretValue;
@@ -39,10 +41,10 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
         targetScope[secretName] = req.body.secretValue;
       } //end if
       await req.broker.db.setItem(`scope:${scopeName}`,targetScope);
-      res.status(200).json({success: 'Modified secret successfully.'});
+      req.respond({body:{success: 'Modified secret successfully.'}});
     } //end if
   }catch(err){
-    res.status(500).json({error: 'Server error adding secret.'})
+    req.respond({status:500,body:{error: 'Server error adding secret.'}})
     console.log(chalk.red(err));
   }
 });

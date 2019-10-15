@@ -2,17 +2,15 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
-const {verify} = require('../libraries/verify.js');
-const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
-  const {ip,name,user,key} = req,
-        {scopeName} = await verify(key,req.body);
+  const {name,user} = req,
+        {scopeName} = req.body;
 
   //short-circuit fail-first
   if(!scopeName){
-    log(ip,name,'Scope Delete (SIGNING-VERIFICATION-FAILURE)',true);
-    return res.status(403).json({error: 'Request has been tempered with!'});
+    req.log('Scope Delete (Bad Request)',true);
+    return req.respond({status:400,body:{error: 'Missing scopeName'}});
   } //end if
   const hasScopeAccess = user.permissions.scopes.find(s=> s.name===scopeName),
         hasScopeEditAccess = hasScopeAccess&&hasScopeAccess.value==='edit';
@@ -22,15 +20,17 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
 
     // short-circuit fail-first
     if(!hasScopeEditAccess){
-      log(ip,name,`Scope Delete (${scopeName})`,true);
-      return res.status(401).json({
-        error: `User "${name}" does not have scope edit permission.`
-      });
+      req.log(`Scope Delete (${scopeName})`,true);
+      return req.respond({status:401,body:{
+        error: `User "${name}" does not have scope edit permission`
+      }})
     }else if(!targetScope){
-      log(ip,name,`Scope Delete (${scopeName}-NO_SCOPE)`,true);
-      return res.status(401).json({error: `Scope "${scopeName}" does not exist.`});
+      req.log(`Scope Delete (${scopeName}-NO_SCOPE)`,true);
+      return req.respond({res,status:401,body:{
+        error: `Scope "${scopeName}" does not exist.`
+      }})
     }else{
-      log(ip,name,`Scope Delete (${scopeName})`);
+      req.log(`Scope Delete (${scopeName})`);
       const users = await req.broker.db.getItem('users');
 
       users.forEach(user=>{
@@ -44,10 +44,10 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
       const scopes = await req.broker.db.getItem('scopes');
 
       await req.broker.db.setItem('scopes',scopes.filter(s=> s.name!==scopeName));
-      res.status(200).json({success: 'Deleted scope successfully.'});
+      req.respond({body:{success: 'Deleted scope successfully.'}});
     } //end if
   }catch(err){
-    res.status(500).json({error: 'Server error modifying user.'})
+    req.respond({status:500,body:{error: 'Server error modifying user.'}});
     console.log(chalk.red(err));
   }
 });

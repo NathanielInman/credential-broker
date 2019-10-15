@@ -2,16 +2,16 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
-const {verify} = require('../libraries/verify.js');
-const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
-  const {ip,name,user,key} = req,
-        {target,scopeName,scopePublicKey} = await verify(key,req.body);
+  const {name,user} = req,
+        {target,scopeName,scopePublicKey} = req.body;
 
   if(!target||!scopeName||!scopePublicKey){
-    log(ip,name,'Scope Modify (SIGNING-VERIFICATION-FAILURE)',true);
-    return res.status(403).json({error: 'Request has been tempered with!'});
+    req.log('Scope Modify (Bad Request)',true);
+    return req.respond({status:400,body:{
+      error: 'Missing target, scopeName or scopePublicKey'
+    }});
   } //end if
   const hasScopeAccess = user.permissions.scopes.find(s=> s.name===scopeName),
         hasScopeEditAccess = hasScopeAccess&&hasScopeAccess.value==='edit';
@@ -21,17 +21,17 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
 
     // short-circuit fail-first
     if(!hasScopeEditAccess){
-      log(ip,name,`Scope Modify (${scopeName})`,true);
-      return res.status(401).json({
+      req.log(`Scope Modify (${scopeName})`,true);
+      return req.respond({status:401,body:{
         error: `User "${name}" does not have scope edit permission.`
-      });
+      }});
     }else if(!targetScope){
-      log(ip,name,`Scope Modify (${scopeName}-NO-SCOPE)`,true);
-      return res.status(401).json({
+      req.log(`Scope Modify (${scopeName}-NO-SCOPE)`,true);
+      return req.respond({status:401,body:{
         error: `Scope "${scopeName}" does not exist.`
-      });
+      }});
     }else{
-      log(ip,name,`Scope Modify (${target}->${scopeName})`);
+      req.log(`Scope Modify (${target}->${scopeName})`);
       targetScope.name = scopeName;
       targetScope.scopePublicKey = scopePublicKey;
       if(target!==scopeName){
@@ -56,10 +56,10 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
         // just public key updated
         await req.broker.db.setItem(`scope:${scopeName}`);
       } //end if
-      res.status(200).json({success: 'Modified scope successfully.'});
+      req.respond({body:{success: 'Modified scope successfully.'}});
     } //end if
   }catch(err){
-    res.status(500).json({error: 'Server error modifying user.'})
+    req.respond({status:500,body:{error: 'Server error modifying user.'}});
     console.log(chalk.red(err));
   }
 });

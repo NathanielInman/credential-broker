@@ -2,32 +2,29 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate.js');
-const {encrypt} = require('../libraries/encrypt.js');
-const {authSecureEncrypt} = require('../libraries/authSecure.js');
-const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
-  const {ip,name,key,secret,user} = req;
+  const {user} = req;
 
   try{
 
     // short-circuit fail-first
     if(!user.permissions.viewScopeNames){
-      log(ip,name,'Get All Scope Names',true);
-      return res.status(401).json({
+      req.log('Get All Scope Names (Bad Request)',true);
+      return req.respond({status:401,body:{
         error: `User "${user.name}" does not have get all scope names permission.`
-      });
+      }});
     }else{
-      log(ip,name,'Get All Scope Names');
+      req.log('Get All Scope Names');
       const scopes = await req.broker.db.getItem('scopes'),
-            scopeData = JSON.stringify(!scopes?[]:scopes.map(scope=> scope.name)),
-            encrypted = await encrypt(key,scopeData),
-            payload = authSecureEncrypt(secret,JSON.stringify({success: encrypted}));
+            scopeData = JSON.stringify({
+              success: (scopes||[]).map(scope=> scope.name)
+            });
 
-      res.status(200).send(payload);
+      req.respond({body:scopeData});
     } //end if
   }catch(err){
-    res.status(500).json({error: 'Server error retrieving scopes.'})
+    req.respond({status:500,body:{error: 'Server error retrieving scopes.'}});
     console.log(chalk.red(err));
   }
 });

@@ -2,6 +2,8 @@ const fs = require('fs');
 const chalk = require('chalk');
 const bodyParser = require('body-parser');
 const {Broker} = require('../models/Broker.js');
+const {log} = require('../libraries/log.js');
+const {respond} = require('../libraries/respond.js');
 const {router} = require('../routes/index.js');
 
 module.exports = {
@@ -22,6 +24,8 @@ module.exports = {
     app.use((req,res,next)=>{
       req.ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
       req.key = decodeURIComponent(req.headers.key||'');
+      req.log = (string,isError)=> log(req.ip,req.name,string,isError);
+      req.respond = ({status=200,body=''})=> respond({req,res,status,body});
       next();
     });
     app.use(async (req,res,next)=>{

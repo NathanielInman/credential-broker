@@ -1,7 +1,6 @@
 const express = require('express');
 const chalk = require('chalk');
 const {authSecureDecrypt} = require('../libraries/authSecure.js');
-const {log} = require('../libraries/log.js');
 
 module.exports = {
   async authenticate(req,res,next){
@@ -9,14 +8,14 @@ module.exports = {
 
     // short-circuit failure
     if(!req.headers.key){
-      log(ip,'unknown',`${req.originalUrl}: Key missing`,true);
-      return res.status(402).json({error: 'Your key was not passed in the header.'});
+      req.log(`${req.originalUrl}: Key missing`,true);
+      return res.status(402).send('User key was not passed in the header.');
     } //end if
 
     // short-circuit failure
     if(!req.headers.name){
-      log(ip,'unknown',`${req.originalUrl}: Username missing`,true);
-      return res.status(401).json({error: 'Your name was not passed in the header.'});
+      req.log(`${req.originalUrl}: Username missing`,true);
+      return res.status(401).send('User name was not passed in the header.');
     } //end if
 
     try{
@@ -29,16 +28,16 @@ module.exports = {
       req.email = email;
     }catch(err){
       console.log(err);
-      log(ip,'unknown',`${req.originalUrl}: Authentication Faiulre`,true);
-      return res.status(401).json({error: 'Improper authentication headers.'});
+      req.log(`${req.originalUrl}: Authentication Faiulre`,true);
+      return res.status(401).send('Improper authentication headers.');
     }
 
     const user = await req.broker.db.getItem(`user:${req.name}`);
 
     //short-circuit failure
     if(!user){
-      log(ip,req.name,`${req.originalUrl}: User does not exist`,true);
-      return res.status(401).json({error: 'Your user does not exist.'});
+      req.log(`${req.originalUrl}: User does not exist`,true);
+      return res.status(401).send('User does not exist.');
     }else{
 
       // attach the user to the request so any route can attach their
@@ -49,8 +48,25 @@ module.exports = {
 
     //short-circuit failure
     if(!user.permissions){
-      log(ip,req,name,`${req.originalUrl}: User data is corrupted`,true);
-      return res.status(401).json({error: 'Your user structure invalid, data corrupted.'});
+      req.log(`${req.originalUrl}: User data is corrupted`,true);
+      return req.respond({
+        status:401,body:{error: 'Your user structure invalid, data corrupted.'}
+      });
+    } //end if
+
+    //a body was sent with the request, verify the identity of the body
+    //matches the users public key; otherwise the request was tampered with
+    //or someone is spoofing or impersonating the user
+    if(req.body){
+      try{
+        req.body = await verify(user.key,req.body);
+      }catch(err){
+        console.log(err);
+        req.log(`${req.originalUrl}: Signing verification failure`,true);
+        return req.respond({
+          status:401,body:{error: 'Request has been tampered with!'}
+        });
+      }
     } //end if
     next();
   }

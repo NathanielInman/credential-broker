@@ -2,28 +2,28 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
-const {verify} = require('../libraries/verify.js');
-const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
-  const {ip,name,user,key} = req,
-        newUser = await verify(key,req.body);
+  const {name,user} = req,
+        newUser = req.body
 
   if(!newUser){
-    log(ip,name,'User Add (SIGNING-VERIFICATION-FAILURE)',true);
-    return res.status(403).json({error: 'Request has been tempered with!'});
+    req.log('User Add (Bad Request)',true);
+    return req.respond({status:400,body:{
+      error: 'Missing user object'
+    }});
   } //end if
 
   // short-circuit fail-first
   if(!user.permissions.editUsers){
-    log(ip,name,`Add User (${newUser.name})`,true);
-    return res.status(401).json({
+    req.log(`Add User (${newUser.name})`,true);
+    return req.respond({status:401,body:{
       error: `User "${name}" does not have user edit permission.`
-    });
+    }});
   } //end if
 
   try{
-    log(ip,name,`Add User (${newUser.name})`);
+    req.log(`Add User (${newUser.name})`);
     let newUser = {
       date: (new Date).toISOString(),
       name: newUser.name,
@@ -45,9 +45,9 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
     await req.broker.db.setItem(`user:${newUser.name}`,newUser);
     users.push(newUser);
     await req.broker.db.setItem('users',users);
-    res.status(200).json({success: `Added user ${newUser.name}`});
+    req.respond({body:{success: `Added user ${newUser.name}`}});
   }catch(err){
-    res.status(500).json({error: 'Server had a problem adding new user.'});
+    req.respond({status:500,body:{error: 'Server had a problem adding new user.'}})
     console.log(chalk.red(err));
   }
 });

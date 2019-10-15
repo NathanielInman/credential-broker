@@ -2,36 +2,35 @@ const express = require('express');
 const chalk = require('chalk');
 const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
-const {encrypt} = require('../libraries/encrypt.js');
-const {verify} = require('../libraries/verify.js');
-const {log} = require('../libraries/log.js');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
-  const {ip,name,user,key} = req,
-        {scopeName} = await verify(key,req.body);
+  const {name,user} = req,
+        {scopeName} = req.body;
 
   if(!scopeName){
-    log(ip,name,'Get Scope (SIGNING-VERIFICATION-FAILURE)',true);
-    return res.status(403).json({error: 'Request has been tempered with!'});
+    req.log('Get Scope (Bad Request)',true);
+    return req.respond({status:400,body:{error: 'Missing scopeName'}});
   } //end if
   const hasScopeAccess = req.user.permissions.scopes.find(s=> s.name===scopeName);
 
   // short-circuit fail-first
   if(scopeName!==name&&!hasScopeAccess){
-    log(ip,name,`Get Scope (${scopeName})`,true);
-    return res.status(401).json({error: `User "${name}" does not have get all scopes permission.`});
+    req.log(`Get Scope (${scopeName})`,true);
+    return req.respond({status:401,body:{
+      error: `User "${name}" does not have get all scopes permission.`
+    }})
   }else if(scopeName===name){
-    log(ip,name,`Get Scope (${scopeName}-IS-SCOPE)`);
-    return res.status(200).json({success: user});
+    req.log(`Get Scope (${scopeName}-IS-SCOPE)`);
+    return req.respond({body:{success: user}});
   } //end if
 
   try{
-    log(ip,name,`Get Scope (${scopeName})`);
+    req.log(`Get Scope (${scopeName})`);
     const data = (await req.broker.db.getItem(`scope:${scopeName}`)||{});
 
-    res.status(200).json({success: await encrypt(key,data)});
+    req.respond({body:{success: data}});
   }catch(err){
-    res.status(500).json({error: 'Server had a problem getting scope.'});
+    req.respond({status:500,body:{error: 'Server had a problem getting scope.'}});
     console.log(chalk.red(err));
   }
 });
