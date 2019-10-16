@@ -29,19 +29,19 @@ module.exports = {
       if(res.success){
 
         console.log(chalk.magenta('[SERVER]'));
-        console.log(chalk.cyan('date: ')+chalk.green(res.date));
-        console.log(chalk.cyan('name: ')+chalk.green(res.name));
-        console.log(chalk.cyan('email: ')+chalk.green(res.email));
-        console.log(chalk.cyan('addedBy: ')+chalk.green(res.addedBy));
-        console.log(chalk.cyan('addedByIP: ')+chalk.green(res.addedByIP));
-        console.log(chalk.cyan('publicKey: ')+chalk.green(res.key));
+        console.log(chalk.cyan('date: ')+chalk.green(res.success.date));
+        console.log(chalk.cyan('name: ')+chalk.green(res.success.name));
+        console.log(chalk.cyan('email: ')+chalk.green(res.success.email));
+        console.log(chalk.cyan('addedBy: ')+chalk.green(res.success.addedBy));
+        console.log(chalk.cyan('addedByIP: ')+chalk.green(res.success.addedByIP));
+        console.log(chalk.cyan('publicKey: ')+chalk.green(res.success.key));
         console.log(chalk.cyan('permissions:'));
-        console.log(chalk.cyan('  viewUsers: ')+chalk.green(res.permissions.viewUsers));
-        console.log(chalk.cyan('  editUsers: ')+chalk.green(res.permissions.editUsers));
-        console.log(chalk.cyan('  viewScopeNames: ')+chalk.green(res.permissions.viewScopeNames));
-        console.log(chalk.cyan('  createScopes: ')+chalk.green(res.permissions.createScopes));
+        console.log(chalk.cyan('  viewUsers: ')+chalk.green(res.success.permissions.viewUsers));
+        console.log(chalk.cyan('  editUsers: ')+chalk.green(res.success.permissions.editUsers));
+        console.log(chalk.cyan('  viewScopeNames: ')+chalk.green(res.success.permissions.viewScopeNames));
+        console.log(chalk.cyan('  createScopes: ')+chalk.green(res.success.permissions.createScopes));
         console.log(chalk.cyan('scopes:'));
-        res.permissions.scopes.forEach(scope=>{
+        res.success.permissions.scopes.forEach(scope=>{
           console.log(chalk.cyan(`  ${scope.name}: `)+chalk.green(scope.value));
         });
       }else{

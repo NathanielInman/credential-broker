@@ -138,7 +138,7 @@ module.exports = {
           key: fs.readFileSync('./id_rsa.pub').toString()
         }),
         headers: {
-          'Content-Type': 'text/plain',
+          'Content-Type': 'application/json',
           key: crypto.createHash('md5').update(user.name).digest('hex'),
           name: authSecureEncrypt(user.secret,user.name),
           email: authSecureEncrypt(user.secret,user.email)

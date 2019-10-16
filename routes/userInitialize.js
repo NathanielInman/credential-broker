@@ -9,7 +9,8 @@ router.post('/',express.json(),async (req,res)=>{
   const secret = await req.broker.db.getItem(`session:${req.headers.key}`),
         name = authSecureDecrypt(secret,req.headers.name),
         email = authSecureDecrypt(secret,req.headers.email),
-        {ip} = req;
+        {ip} = req,
+        {key} = req.body,
         user = await req.broker.db.getItem(`user:${name}`);
 
   // short-circuit success-first
@@ -42,7 +43,7 @@ router.post('/',express.json(),async (req,res)=>{
   const users = await req.broker.db.getItem('users'),
         scopes = await req.broker.db.getItem('scopes');
 
-  if(!scopes&&!users){
+  if(!scopes&&!users.length){
     let newUser = {
       date: (new Date).toISOString(),
       name,email,key,
@@ -68,7 +69,7 @@ router.post('/',express.json(),async (req,res)=>{
         })
       )
     );
-  }else if(!users){
+  }else if(!users.length){
     const {value} = req.broker.strategies.find(s=> s.name==='First account gets access');
 
     if(value){

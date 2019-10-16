@@ -5,27 +5,27 @@ const {authenticate} = require('./authenticate');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
   const {name,user} = req,
-        requestedUsername = req.body;
+        requestedUser = req.body;
 
   // short-circuit fail-first
-  if(!requestedUsername){
+  if(!requestedUser.name){
     req.log('User Get (Bad Request)',true);
     return req.respond({status:400,body:{
       error: 'Missing requestedUsername'
     }})
-  }else if(requestedUsername!==name&&!user.permissions.editUsers){
-    req.log(`User Get (${requestedUsername})`,true);
+  }else if(requestedUser.name!==name&&!user.permissions.editUsers){
+    req.log(`User Get (${requestedUser.name})`,true);
     return req.respond({status:401,body:{
       error: `User "${name}" does not have user edit permission.`
     }});
-  }else if(requestedUsername===name){
-    req.log(`User Get (${requestedUsername})`);
+  }else if(requestedUser.name===name){
+    req.log(`User Get (${requestedUser.name})`);
     return req.respond({body:{success: user}});
   } //end if
 
   try{
-    req.log(`User Get (${requestedUsername})`);
-    const data = JSON.stringify(await req.broker.db.getItem(`user:${requestedUsername}`));
+    req.log(`User Get (${requestedUser.name})`);
+    const data = JSON.stringify(await req.broker.db.getItem(`user:${requestedUser.name}`));
 
     req.respond({body:{success: data}});
   }catch(err){

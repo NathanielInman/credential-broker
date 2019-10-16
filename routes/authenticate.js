@@ -1,10 +1,11 @@
 const express = require('express');
 const chalk = require('chalk');
 const {authSecureDecrypt} = require('../libraries/authSecure.js');
+const {verify} = require('../libraries/verify.js');
 
 module.exports = {
   async authenticate(req,res,next){
-    const {ip,key} = req;
+    const {ip} = req;
 
     // short-circuit failure
     if(!req.headers.key){
@@ -28,7 +29,7 @@ module.exports = {
       req.email = email;
     }catch(err){
       console.log(err);
-      req.log(`${req.originalUrl}: Authentication Faiulre`,true);
+      req.log(`${req.originalUrl}: Authentication Failure`,true);
       return res.status(401).send('Improper authentication headers.');
     }
 
