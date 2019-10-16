@@ -40,8 +40,8 @@ router.post('/',express.json(),async (req,res)=>{
       );
     } //end if
   } //end if
-  const users = await req.broker.db.getItem('users'),
-        scopes = await req.broker.db.getItem('scopes');
+  const users = await req.broker.db.getItem('users')||[],
+        scopes = await req.broker.db.getItem('scopes')||[];
 
   if(!scopes&&!users.length){
     let newUser = {
@@ -84,7 +84,7 @@ router.post('/',express.json(),async (req,res)=>{
           editUsers: req.body.permissions.editUsers,
           viewScopeNames: req.body.permissions.viewScopeNames,
           createScopes: req.body.permissions.createScopes,
-          scopes: req.body.permissions.scopes.map(s=> ({name: s.name,value: s.value}))
+          scopes: scopes.map(scope=> ({name: scope.name,value: false}))
         }
       };
 
