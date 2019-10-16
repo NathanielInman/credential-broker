@@ -21,7 +21,7 @@ module.exports = {
       bool = true;
     }while(!bool)
     try{
-      const {user,...res} = request('scopeAdd',{scopeName,scopePublicKey});
+      const {user,...res} = await request('scopeAdd',{scopeName,scopePublicKey});
 
       if(res.success){
         console.log(chalk.green(`Scope "${scopeName}" added successfully!`));

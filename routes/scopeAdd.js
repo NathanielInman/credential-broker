@@ -8,7 +8,7 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
         {scopeName,scopePublicKey} = req.body;
 
   // short-circuit fail-first
-  if(!scopeName||!scopePublicKey){
+  if(!scopeName){
     req.log('Add Scope (Bad Request)',true);
     return req.respond({status:400,body: {
       error: 'Missing scopePublicKey or scopeName'
