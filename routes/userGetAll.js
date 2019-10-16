@@ -4,18 +4,12 @@ const router = express.Router({mergeParams: true});
 const {authenticate} = require('./authenticate');
 
 router.post('/',express.text(),authenticate,async (req,res)=>{
-  const {name,user} = req,
-        requestedUsername = req.body;
+  const {name,user} = req;
 
   try{
 
     // short-circuit fail-first
-    if(!requestedUsername){
-      req.log('Get All Users (Bad Request)',true);
-      return req.respond({status:400,body:{
-        error: 'Missing requestedUsername'
-      }});
-    }else if(!user.permissions.viewUsers){
+    if(!user.permissions.viewUsers){
       req.log('Get All Users',true);
       return req.respond({status:401,body:{
         error: `User "${name}" does not have user edit permission.`
@@ -23,7 +17,7 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
     }else{
       req.log('Get All Users');
       const users = await req.broker.db.getItem('users'),
-            userData = JSON.stringify(!users?[]:users.map(user=> user.name));
+            userData = (users||[]).map(user=> user.name);
 
       req.respond({body:{success: userData}});
     } //end if

@@ -7,10 +7,8 @@ module.exports = {
       const res = await request('userGetAll');
 
       if(res.success){
-        const data = await decrypt(user,res.success);
-
         console.log(chalk.magenta('[USERS]'));
-        data.forEach(userName=> console.log(chalk.green(userName)));
+        res.success.forEach(userName=> console.log(chalk.green(userName)));
       }else{
         console.log(chalk.red(res.error));
       } //end if
