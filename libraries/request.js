@@ -5,11 +5,11 @@ const crypto = require('crypto');
 const readline = require('readline');
 const {User} = require('../models/User.js');
 const {spinner} = require('./spinner.js');
-const {decrypt} = require('./decrypt.js');
-const {sign} = require('./sign.js');
-const {authSecureEncrypt,authSecureDecrypt} = require('./authSecure.js');
+const {decrypt,sign} = require('./authPGP.js');
+const {authSecure,authSecureEncrypt,authSecureDecrypt} = require('./authSecure.js');
 
-function authenticate(user){
+async function authenticate(user){
+  await authSecure(user);
   return fetch(`${user.remoteIP}/authIdentify`,{
     method: 'POST',body:'',
     headers: {
@@ -51,16 +51,7 @@ function request({user,uri,body='',method='POST'}={}){
       name: authSecureEncrypt(user.secret,user.name),
       email: authSecureEncrypt(user.secret,user.email)
     }
-  })
-    .then(res=> res.text())
-    .then(res=> authSecureDecrypt(user.secret,res))
-    .then(async res=> ({user,...JSON.parse(await decrypt(user,res))}))
-    .then(res=>{
-      spinner.stop();
-      readline.cursorTo(process.stdout, 0);
-      console.log(chalk.green('Synchronizing with server... (done)'));
-      return res;
-    });
+  });
 } //end request()
 
 module.exports = {
@@ -75,12 +66,23 @@ module.exports = {
     const user = new User(JSON.parse(fs.readFileSync('./user.json')));
 
     if(body!=='') body=await sign(user,JSON.stringify(body));
-    let result = await request({user,uri,method,body});
+    return request({user,uri,method,body})
+      .then(res=> res.text())
+      .then(async res=>{
 
-    if(result.error&&result.error==='Session expired.'){
-      await authenticate(user);
-      result = request({user,uri,method,body});
-    } //end if
-    return result;
+        if(res==='Session expired.'){
+          await authenticate(user);
+          return request({user,uri,method,body});
+        } //end if
+        return res;
+      })
+      .then(res=> authSecureDecrypt(user.secret,res))
+      .then(async res=> ({user,...JSON.parse(await decrypt(user,res))}))
+      .then(res=>{
+        spinner.stop();
+        readline.cursorTo(process.stdout, 0);
+        console.log(chalk.green('Synchronizing with server... (done)'));
+        return res;
+      });
   }
 };

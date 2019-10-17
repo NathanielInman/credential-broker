@@ -1,3 +1,4 @@
+const fs = require('fs');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
 
@@ -14,7 +15,8 @@ module.exports = {
           }).then(res=> res.json()),
           secret = client.computeSecret(serverKey,'base64','base64');
 
-    return secret;
+    user.secret = secret;
+    fs.writeFileSync('./user.json',JSON.stringify(user));
   },
   authSecureEncrypt(secret,content){
     const iv = crypto.randomBytes(16),

@@ -126,7 +126,8 @@ module.exports = {
 
     // we initialize a secure transmission path by using diffie-hellman
     // to create an asymetric shared key that's used to encrypt traffic.
-    if(!user.secret) user.secret = await authSecure(user);
+    // This saves the user object so it needs to happen last in init
+    await authSecure(user);
 
     try{
       spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
@@ -151,7 +152,6 @@ module.exports = {
           readline.cursorTo(process.stdout, 0);
           console.log(chalk.green('Synchronizing with server... (done)'));
           if(res.success){
-            fs.writeFileSync('./user.json',JSON.stringify(user));
             console.log(chalk.green('Initialization success!'));
           }else{
             console.log(chalk.red(res.error));

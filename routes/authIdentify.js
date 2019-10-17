@@ -15,20 +15,19 @@ router.post('/',express.text(),async (req,res)=>{
     req.log('authIdentify: Name missing',true);
     return res.status(401).send('Encrypted name missing from the header.');
   } //end if
-  const secret = await req.broker.db.getItem(`session:${req.headers.id}`),
+  const session = await req.broker.db.getItem(`session:${req.headers.id}`);
+
+  console.log('session',session);
+  if(!session){
+    req.log('authIdentify: No session to attach',true);
+    return res.status(401).send('Session expired.');
+  } //end if
+  const {secret} = session,
         name = authSecureDecrypt(secret,req.headers.name),
         user = await req.broker.db.getItem(`user:${name}`),
         randomNumber = crypto.randomBytes(256).toString('base64')
 
-  req.broker.db.setItem(
-    `user:${name}`,
-    {
-      ...user,
-      session:{
-        id:req.headers.id,challenge:randomNumber
-      }
-    }
-  );
+  req.broker.db.setItem(`session:${req.headers.id}`,{secret,challenge:randomNumber});
   req.key = user.key;
   req.secret = secret;
   req.respond({body: randomNumber});

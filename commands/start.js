@@ -21,14 +21,13 @@ module.exports = {
     const express = require('express');
     const app = express();
 
-    app.use((req,res,next)=>{
+    app.use(async (req,res,next)=>{
       req.ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
       req.key = decodeURIComponent(req.headers.key||'');
       req.log = (string,isError)=> log(req.ip,req.name,string,isError);
       req.respond = ({status=200,body=''})=> respond({req,res,status,body});
-      next();
-    });
-    app.use(async (req,res,next)=>{
+
+      // ensure the broker settings are loaded, they can be used for configuration
       await broker.dbLoading;
       req.broker = broker;
       next();

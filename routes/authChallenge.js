@@ -18,26 +18,25 @@ router.post('/',express.text(),async (req,res)=>{
     req.log('authChallenge: Challenge missing',true);
     return res.status(401).send('Encrypted challenge missing from the header.');
   } //end if
-  const secret = await req.broker.db.getItem(`session:${req.headers.id}`),
+  const session = await req.broker.db.getItem(`session:${req.headers.id}`);
+
+  if(!session){
+    req.log('authChallenge: No session to attach',true);
+    return res.status(401).send('Session expired.');
+  } //end if
+  const {secret,challenge} = session,
         name = authSecureDecrypt(secret,req.headers.name),
         challengeResponse = authSecureDecrypt(secret,req.headers.challenge),
         user = await req.broker.db.getItem(`user:${name}`),
         challengeExpected = crypto.createHash('md5')
-          .update(user.session.challenge)
+          .update(challenge)
           .digest('hex');
 
-  if(req.headers.id!==user.session.id){
-    req.log('authChallenge: Compromised session',true);
-    return res.status(401).send('Session compromised.');
-  }else if(challengeResponse!==challengeExpected){
+  if(challengeResponse!==challengeExpected){
     req.log('authChallenge: Failure to match',true);
     return res.status(401).send('Challenge does not match');
   } //end if
-  user.session = {
-    id: req.headers.id,
-    authenticated: true
-  };
-  req.broker.db.setItem(`user:${name}`,user);
+  req.broker.db.setItem(`session:${req.headers.id}`,{secret,authenticated:true});
   req.key = user.key;
   req.secret = secret;
   req.respond({body: 'Authenticated'});

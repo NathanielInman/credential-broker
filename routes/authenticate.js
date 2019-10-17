@@ -20,13 +20,18 @@ module.exports = {
     } //end if
 
     try{
-      const secret = await req.broker.db.getItem(`session:${req.headers.id}`),
+      const session = await req.broker.db.getItem(`session:${req.headers.id}`);
+
+      // we omit logging this, it's an expected behavior to have to re-auth
+      if(!session) return res.status(401).send('Session expired.');
+      const {secret,authenticated} = session,
             name = authSecureDecrypt(secret,req.headers.name),
             email = authSecureDecrypt(secret,req.headers.email);
 
       req.secret = secret; //diffie-hellman key to encrypt transmission payloads
       req.name = name;
       req.email = email;
+      if(!authenticated) return res.status(401).send('Session expired.');
     }catch(err){
       console.log(err);
       req.log(`${req.originalUrl}: Authentication Failure`,true);
@@ -68,14 +73,6 @@ module.exports = {
           status:401,body:{error: 'Request has been tampered with!'}
         });
       }
-    } //end if
-
-    // short-circuit failure
-    if(!user.session||!user.session.authenticated){
-
-      // we omit logging this, it's an expected thing to have to re-auth
-      // a session
-      return req.respond({status:401,body:{error: 'Session expired.'}});
     } //end if
     next();
   }

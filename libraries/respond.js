@@ -1,4 +1,4 @@
-const {encrypt} = require('../libraries/encrypt.js');
+const {encrypt} = require('./authPGP.js');
 const {authSecureEncrypt} = require('./authSecure.js');
 
 module.exports = {
