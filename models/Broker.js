@@ -1,8 +1,12 @@
 const chalk = require('chalk');
 const fs = require('fs');
 const fetch = require('node-fetch');
-const {prompt,confirm} = require('../libraries/prompt.js');
+const {spinner} = require('../libraries/spinner.js');
+const {sleep} = require('../libraries/sleep.js');
+const readline = require('readline');
+const {password,prompt,confirm} = require('../libraries/prompt.js');
 const storage = require('node-persist');
+const nodemailer = require('nodemailer');
 
 const defaultSessionTTL = 1000*60*5; //5 minutes
 const defaultStrategies = [
@@ -50,7 +54,8 @@ module.exports = {
   Broker: class Broker{
     constructor({
       externalIP='',port=4000,scopeNumber=0,userNumber=0,
-      lastAccess='',lastUser='', strategies=defaultStrategies
+      lastAccess='',lastUser='', strategies=defaultStrategies,
+      emailService='None',emailTransport={}
     }={}){
       this.externalIP = externalIP;
       this.port = port;
@@ -60,6 +65,8 @@ module.exports = {
       this.lastUser = lastUser;
       this.strategies = strategies;
       this.sessionTTL = defaultSessionTTL;
+      this.emailService = emailService;
+      this.emailTransport = emailTransport;
       this.db = storage;
       this.dbLoading = storage.init({
         dir: './data/',
@@ -68,11 +75,77 @@ module.exports = {
       });
     }
     async askStrategies(){
+      let answer;
+
+      answer = await confirm(chalk.green('Use email service?'))
+      if(answer){
+        this.emailService = 'SMTP';
+        do{
+          this.emailTransport.host = await prompt(chalk.green('Enter email host: '));
+          answer = await confirm(chalk.green(`Is this correct: "${this.emailTransport.host}"`));
+          if(!answer) console.log('No problem, let\'s try again.');
+        }while(!answer)
+        do{
+          this.emailTransport.port = parseInt(await prompt(chalk.green('Enter email port: ')));
+          answer = await confirm(chalk.green(`Is this correct: "${this.emailTransport.port}"`));
+          if(!answer) console.log('No problem, let\'s try again');
+        }while(!answer)
+        this.emailTransport.tls = await confirm(chalk.green('Use TLS with email'));
+        this.emailTransport.auth = {type: 'login', user: '', pass: ''};
+        do{
+          this.emailTransport.auth.user = await prompt(chalk.green('Enter email username: '));
+          answer = await confirm(chalk.green(`Is this correct: "${this.emailTransport.auth.user}"`));
+          if(!answer) console.log('No problem, let\'s try again');
+        }while(!answer)
+        do{
+          this.emailTransport.auth.pass = await password(chalk.green('Enter email password: '));
+          const confirm = await password(chalk.green(`Please confirm password: `));
+
+          if(this.emailTransport.auth.pass!==confirm){
+            answer = false;
+            console.log('Passwords do not match, let\'s try again');
+          } //end if
+        }while(!answer)
+        if(await confirm(chalk.green(`Use OAuth2?`))){
+          this.emailTransport.auth.type = 'OAuth2';
+          do{
+            this.emailTransport.auth.clientId = await prompt(chalk.green('Enter email OAuth2 clientId: '));
+            answer = await confirm(chalk.green(`Is this correct: "${this.emailTransport.auth.clientId}"`));
+            if(!answer) console.log('No problem, let\'s try again');
+          }while(!answer)
+          do{
+            this.emailTransport.auth.clientSecret = await prompt(chalk.green('Enter email OAuth2 clientSecret: '));
+            answer = await confirm(chalk.green(`Is this correct: "${this.emailTransport.auth.clientSecret}"`));
+            if(!answer) console.log('No problem, let\'s try again');
+          }while(!answer)
+          do{
+            this.emailTransport.auth.refreshToken = await prompt(chalk.green('Enter email OAuth2 refreshToken: '));
+            answer = await confirm(chalk.green(`Is this correct: "${this.emailTransport.auth.refreshToken}"`));
+            if(!answer) console.log('No problem, let\'s try again');
+          }while(!answer)
+        } //end if
+        let transporter = nodemailer.createTransport(this.emailTransport);
+
+        spinner.setSpinnerTitle(chalk.yellow('Validating email settings... %s'));
+        spinner.start();
+        await sleep(1000);
+        const emailStatus = await transporter.verify();
+
+        readline.cursorTo(process.stdout, 0);
+        console.log(chalk.green('Validating email settings... (done)'));
+        spinner.stop();
+        if(emailStatus===true){
+          console.log(chalk.green('Email settings validated and operational.'));
+        }else{
+          console.log(chalk.red(emailStatus));
+          return;
+        } //end if
+      }else{
+        this.emailService = 'None';
+      } //end if
       for await(let strategy of this.strategies){
         strategy.value = await confirm(chalk.green(`Allow strategy: "${strategy.name}"?`));
       } //end for
-      let answer;
-
       answer = await confirm(chalk.green(`Change session TTL? (${prettyPrintMS(this.sessionTTL)})`));
       if(answer){
         do{
