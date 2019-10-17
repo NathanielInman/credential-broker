@@ -5,6 +5,19 @@ const router = express.Router({mergeParams: true});
 const {log} = require('../libraries/log.js');
 
 router.post('/',async (req,res)=>{
+
+  // short-circuit failure
+  if(!req.headers.key){
+    req.log('authSecure: Key missing',true);
+    return res.status(401).send('User key was not passed in the header.');
+  }else if(!req.headers.id){
+    req.log('authSecure: Id missing',true);
+    return res.status(401).send('User session id was not passed in the header.');
+  }else if(!req.headers.prime){
+    req.log('authSecure: Prime missing',true);
+    return res.status(401).send('Diffie hellman prime missing in the header.');
+  } //end if
+
   const {id,key,prime} = req.headers,
         server = crypto.createDiffieHellman(prime,'base64'),
         serverKey = server.generateKeys('base64'),

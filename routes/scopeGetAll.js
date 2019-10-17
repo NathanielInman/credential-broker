@@ -17,9 +17,7 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
     }else{
       req.log('Get All Scope Names');
       const scopes = await req.broker.db.getItem('scopes'),
-            scopeData = JSON.stringify({
-              success: (scopes||[]).map(scope=> scope.name)
-            });
+            scopeData = {success: (scopes||[]).map(scope=> scope.name)};
 
       req.respond({body:scopeData});
     } //end if

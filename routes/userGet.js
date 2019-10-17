@@ -25,7 +25,7 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
 
   try{
     req.log(`User Get (${requestedUser.name})`);
-    const data = JSON.stringify(await req.broker.db.getItem(`user:${requestedUser.name}`));
+    const data = await req.broker.db.getItem(`user:${requestedUser.name}`);
 
     req.respond({body:{success: data}});
   }catch(err){

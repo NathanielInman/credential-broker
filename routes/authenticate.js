@@ -8,9 +8,9 @@ module.exports = {
     const {ip} = req;
 
     // short-circuit failure
-    if(!req.headers.key){
+    if(!req.headers.id){
       req.log(`${req.originalUrl}: Key missing`,true);
-      return res.status(402).send('User key was not passed in the header.');
+      return res.status(401).send('User key was not passed in the header.');
     } //end if
 
     // short-circuit failure
@@ -20,7 +20,7 @@ module.exports = {
     } //end if
 
     try{
-      const secret = await req.broker.db.getItem(`session:${req.headers.key}`),
+      const secret = await req.broker.db.getItem(`session:${req.headers.id}`),
             name = authSecureDecrypt(secret,req.headers.name),
             email = authSecureDecrypt(secret,req.headers.email);
 
@@ -68,6 +68,14 @@ module.exports = {
           status:401,body:{error: 'Request has been tampered with!'}
         });
       }
+    } //end if
+
+    // short-circuit failure
+    if(!user.session||!user.session.authenticated){
+
+      // we omit logging this, it's an expected thing to have to re-auth
+      // a session
+      return req.respond({status:401,body:{error: 'Session expired.'}});
     } //end if
     next();
   }
