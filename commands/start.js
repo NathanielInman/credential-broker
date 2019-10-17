@@ -47,6 +47,7 @@ module.exports = {
     console.log(chalk.blue( '@@@@@@@@@.   @@@@@@@@@, ')+broker.getStrategyString(2));
     console.log(chalk.blue( '@@@@@@@@@@#(@@@@@@@@@@, ')+broker.getStrategyString(3));
     console.log(chalk.blue( '@@@@@@@@@@@@@@@@@@@@@@  ')+broker.getStrategyString(4));
+    console.log(broker.getSessionTTL());
     app.listen(broker.port);
   }
 };

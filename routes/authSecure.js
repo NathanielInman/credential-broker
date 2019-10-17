@@ -20,15 +20,17 @@ router.post('/',async (req,res)=>{
 
   const {id,key,prime} = req.headers;
 
-  console.log('computing secret',id,key,prime);
   const server = crypto.createDiffieHellman(prime,'base64'),
         serverKey = server.generateKeys('base64'),
         secret  = server.computeSecret(key,'base64','base64'),
         ip = req.headers['x-forwarded-for']||req.connection.remoteAddress;
 
   log(ip,id,'Auth Secure');
-  console.log('attempting to create session',id);
-  await req.broker.db.setItem(`session:${id}`,{secret,authenticated:false});
+  await req.broker.db.setItem(
+    `session:${id}`,
+    {secret,authenticated:false},
+    {ttl: req.broker.sessionTTL}
+  );
   res.status(200).json(serverKey);
 });
 

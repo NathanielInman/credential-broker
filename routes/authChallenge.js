@@ -36,7 +36,11 @@ router.post('/',express.text(),async (req,res)=>{
     req.log('authChallenge: Failure to match',true);
     return res.status(401).send('Challenge does not match');
   } //end if
-  req.broker.db.setItem(`session:${req.headers.id}`,{secret,authenticated:true});
+  req.broker.db.setItem(
+    `session:${req.headers.id}`,
+    {secret,authenticated:true},
+    {ttl: req.broker.sessionTTL}
+  );
   req.key = user.key;
   req.secret = secret;
   req.respond({body: 'Authenticated'});

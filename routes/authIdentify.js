@@ -27,7 +27,11 @@ router.post('/',express.text(),async (req,res)=>{
         user = await req.broker.db.getItem(`user:${name}`),
         randomNumber = crypto.randomBytes(256).toString('base64')
 
-  req.broker.db.setItem(`session:${req.headers.id}`,{secret,challenge:randomNumber});
+  req.broker.db.setItem(
+    `session:${req.headers.id}`,
+    {secret,challenge:randomNumber},
+    {ttl: req.broker.sessionTTL}
+  );
   req.key = user.key;
   req.secret = secret;
   req.respond({body: randomNumber});

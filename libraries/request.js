@@ -72,7 +72,8 @@ module.exports = {
 
         if(res==='Session expired.'){
           await authenticate(user);
-          return request({user,uri,method,body});
+          return request({user,uri,method,body})
+            .then(res=> res.text());
         } //end if
         return res;
       })

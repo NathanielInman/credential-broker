@@ -1,9 +1,10 @@
 const chalk = require('chalk');
 const fs = require('fs');
 const fetch = require('node-fetch');
-const {prompt} = require('../libraries/prompt.js');
+const {prompt,confirm} = require('../libraries/prompt.js');
 const storage = require('node-persist');
 
+const defaultSessionTTL = 1000*60*5; //5 minutes
 const defaultStrategies = [
   {
     name: 'Oldest user acquires edit access',
@@ -27,6 +28,24 @@ const defaultStrategies = [
   }
 ];
 
+function prettyPrintMS(ms){
+  const seconds = Math.floor(ms/1000),
+        minutes = Math.floor(seconds/60),
+        hours = Math.floor(minutes/60),
+        days = Math.floor(hours/24),
+        weeks = Math.floor(days/7);
+
+  let result = [];
+
+  if(weeks) result.push(`${weeks} week${weeks>1?'s':''}`);
+  if(days) result.push(`${days%7} day${days>1?'s':''}`);
+  if(hours) result.push(`${hours%24} hour${hours>1?'s':''}`);
+  if(minutes) result.push(`${minutes%60} minute${minutes>1?'s':''}`);
+  if(seconds) result.push(`${seconds%60} second${seconds>1?'s':''}`);
+  result.push(`${ms%1000} millisecond${ms>1?'s':''}`);
+  return result.join(' ');
+} //end prettyPrintMS()
+
 module.exports = {
   Broker: class Broker{
     constructor({
@@ -40,6 +59,7 @@ module.exports = {
       this.lastAccess = lastAccess;
       this.lastUser = lastUser;
       this.strategies = strategies;
+      this.sessionTTL = defaultSessionTTL;
       this.db = storage;
       this.dbLoading = storage.init({
         dir: './data/',
@@ -49,13 +69,27 @@ module.exports = {
     }
     async askStrategies(){
       for await(let strategy of this.strategies){
-        strategy.value = await prompt(`Allow strategy: "${strategy.name}"? [Y/n]`);
+        strategy.value = await confirm(chalk.green(`Allow strategy: "${strategy.name}"?`));
       } //end for
+      let answer;
+
+      answer = await confirm(chalk.green(`Change session TTL? (${prettyPrintMS(this.sessionTTL)})`));
+      if(answer){
+        do{
+          this.sessionTTL = parseInt(await prompt(chalk.green('Enter session TTL(in ms): ')));
+          if(isNaN(this.sessionTTL)) this.sessionTTL = defaultSessionTTL;
+          answer = await confirm(chalk.green(`Is this correct: "${prettyPrintMS(this.sessionTTL)}"`));
+          if(!answer) console.log('No problem, let\'s try again.');
+        }while(!answer)
+      } //end if
     }
     getStrategyString(index){
       return this.strategies[index].value?
         chalk.green(`${this.strategies[index].name} ✔`):
         chalk.red(`${this.strategies[index].name} ✘`);
+    }
+    getSessionTTL(){
+      return chalk.green(`Session TTL: ${prettyPrintMS(this.sessionTTL)}`);
     }
     getVersionNumber(){
       if(!fs.existsSync('./package.json')){
