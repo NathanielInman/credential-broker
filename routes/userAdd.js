@@ -43,7 +43,7 @@ router.post('/',express.text(),authenticate,async (req,res)=>{
     const users = await req.broker.db.getItem('users');
 
     await req.broker.db.setItem(`user:${newUser.name}`,newUser);
-    users.push(newUser);
+    users.push({name: newUser.name});
     await req.broker.db.setItem('users',users);
     req.respond({body:{success: `Added user ${newUser.name}`}});
   }catch(err){

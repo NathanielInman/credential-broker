@@ -60,7 +60,7 @@ router.post('/',express.json(),async (req,res)=>{
 
     log(ip,name,'Initialize User (FIRST)');
     await req.broker.db.setItem(`user:${name}`,newUser);
-    await req.broker.db.setItem('users',[newUser]);
+    await req.broker.db.setItem('users',[{name: newUser.name}]);
     res.status(200).send(
       authSecureEncrypt(
         secret,
@@ -89,7 +89,7 @@ router.post('/',express.json(),async (req,res)=>{
       };
 
       await req.broker.db.setItem(`user:${name}`,newUser);
-      await req.broker.db.setItem('users',[newUser]);
+      await req.broker.db.setItem('users',[{name: newUser.name}]);
       res.status(200).send(
         authSecureEncrypt(
           secret,
@@ -114,7 +114,7 @@ router.post('/',express.json(),async (req,res)=>{
       };
 
       await req.broker.db.setItem(`user:${name}`,newUser);
-      await req.broker.db.setItem('users',[newUser]);
+      await req.broker.db.setItem('users',[{name: newUser.name}]);
       log(ip,name,'Initialize User (FIRST-ALL-ACCESS-DENIED)',true);
       res.status(200).send(
         authSecureEncrypt(
@@ -126,9 +126,10 @@ router.post('/',express.json(),async (req,res)=>{
       );
     } //end if
   }else{
-    const names = users
-      .filter(user=> user.permissions.editUsers)
-      .map(user=> user.name);
+    const users = await Promise.all(users.map(user=> req.broker.db.getItem(`user:${user.name}`))),
+          allowedUsers = users
+            .filter(user=> user.permissions.editUsers)
+            .map(user=> user.name);
 
     log(ip,name,'Initialize User (NOT-SETUP)',true);
     res.status(400).send(
