@@ -164,6 +164,12 @@ module.exports = {
     getSessionTTL(){
       return chalk.green(`Session TTL: ${prettyPrintMS(this.sessionTTL)}`);
     }
+    getServerEmail(){
+      if(this.emailService==='None'){
+        return chalk.green('Server Email: ')+chalk.red('Disabled');
+      } //end if
+      return chalk.green('Server Email: ')+chalk.white(this.emailTransport.auth.user);
+    }
     getVersionNumber(){
       if(!fs.existsSync('./package.json')){
         console.log('Broker not installed properly, "package.json" missing.');
@@ -176,6 +182,17 @@ module.exports = {
     async getAddress(){
       this.externalIP = await fetch('http://checkip.amazonaws.com/').then(res=> res.text());
       this.externalIP = this.externalIP.replace(/\r?\n|\r/g,'');
+      if(this.emailServer!=='None'){
+        let transporter = nodemailer.createTransport(this.emailTransport);
+
+        transporter.sendMail({
+          from: 'nate@theoestudio.com',
+          to: 'nate@theoestudio.com',
+          subject: 'Credential Broker - Service Restart',
+          text: 'Credential Broker service restarted with ip: '+this.externalIP,
+          html: 'Credential Broker service restarted with ip: '+this.externalIP,
+        });
+      } //end if
       return chalk.green('External Address: ')+chalk.white(`${this.externalIP}:${this.port}`);
     }
   }
