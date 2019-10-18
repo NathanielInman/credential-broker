@@ -1,7 +1,7 @@
 const chalk = require('chalk');
 const {
   help,start,
-  userInitialize,userAdd,userDelete,userModify,userGetAll,userGet,
+  userAuth,userInitialize,userAdd,userDelete,userModify,userGetAll,userGet,
   scopeAdd,scopeDelete,scopeModify,scopeGetAll,scopeGet,
   secretAdd,secretDelete,secretModify
 } = require('./commands/index.js');
@@ -16,6 +16,7 @@ if(!args.length){ help();
 }else if(args[0]==='help'&&args[1]){ help(args.slice(1).join('-'));
 }else if(args[0]==='start'){ start();
 }else if(args[0]==='init'){ userInitialize();
+}else if(args[0]==='auth'){ userAuth();
 }else if(args[0]==='user'&&!args[1]){ help('user')
 }else if(args[0]==='user'&&args[1]==='add'&&!args[2]){ help('user add');
 }else if(args[0]==='user'&&args[1]==='add'&&args[2]){ userAdd(args[2]);

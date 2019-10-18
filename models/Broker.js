@@ -185,13 +185,13 @@ module.exports = {
       if(this.emailServer!=='None'){
         let transporter = nodemailer.createTransport(this.emailTransport);
 
-        transporter.sendMail({
+        /*transporter.sendMail({
           from: 'nate@theoestudio.com',
           to: 'nate@theoestudio.com',
           subject: 'Credential Broker - Service Restart',
           text: 'Credential Broker service restarted with ip: '+this.externalIP,
           html: 'Credential Broker service restarted with ip: '+this.externalIP,
-        });
+        });*/
       } //end if
       return chalk.green('External Address: ')+chalk.white(`${this.externalIP}:${this.port}`);
     }

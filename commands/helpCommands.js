@@ -5,6 +5,7 @@ module.exports = {
     console.log(chalk.green('Commands: (')+chalk.white('help $command')+chalk.green(' for more information)'));
     console.log(chalk.white('  start                      ')+chalk.green('start broker server'));
     console.log(chalk.white('  init                       ')+chalk.green('initialize client and log into user'));
+    console.log(chalk.white('  auth                       ')+chalk.green('setup two-factor auth on user'));
     console.log(chalk.white('  wipe                       ')+chalk.green('clear all the users on the service'));
     console.log(chalk.white('  user add $username         ')+chalk.green('create a new user'));
     console.log(chalk.white('  user del $username         ')+chalk.green('delete an existing user'));

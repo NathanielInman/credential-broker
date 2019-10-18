@@ -1,8 +1,10 @@
 const express = require('express');
-const secure = require('./authSecure.js');
-const identify = require('./authIdentify.js');
-const challenge = require('./authChallenge.js');
-const initialize = require('./userInitialize.js');
+const authSecure = require('./authSecure.js');
+const authIdentify = require('./authIdentify.js');
+const authChallenge = require('./authChallenge.js');
+const auth2FAInitialize = require('./auth2FAInitialize.js');
+const auth2FAValidate = require('./auth2FAValidate.js');
+const userInitialize = require('./userInitialize.js');
 const userAdd = require('./userAdd.js');
 const userGet = require('./userGet.js');
 const userGetAll = require('./userGetAll.js');
@@ -19,12 +21,14 @@ const secretDelete = require('./secretDelete.js');
 const router = express.Router({mergeParams: true});
 
 // Secure communications & authentication routes
-router.use('/authSecure', secure.router);
-router.use('/authIdentify', identify.router);
-router.use('/authChallenge', challenge.router);
+router.use('/authSecure', authSecure.router);
+router.use('/authIdentify', authIdentify.router);
+router.use('/authChallenge', authChallenge.router);
+router.use('/auth2FAInitialize', auth2FAInitialize.router);
+router.use('/auth2FAValidate', auth2FAValidate.router);
 
 // General routes
-router.use('/userInitialize', initialize.router);
+router.use('/userInitialize', userInitialize.router);
 router.use('/userAdd', userAdd.router);
 router.use('/userGet', userGet.router);
 router.use('/userGetAll', userGetAll.router);
