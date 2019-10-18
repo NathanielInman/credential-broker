@@ -9,6 +9,7 @@ const storage = require('node-persist');
 const nodemailer = require('nodemailer');
 
 const defaultSessionTTL = 1000*60*5; //5 minutes
+const defaultTwoFactorTTL = 1000*60*60*12; //12 hours
 const defaultStrategies = [
   {
     name: 'Oldest user acquires edit access',
@@ -55,7 +56,8 @@ module.exports = {
     constructor({
       externalIP='',port=4000,scopeNumber=0,userNumber=0,
       lastAccess='',lastUser='', strategies=defaultStrategies,
-      emailService='None',emailTransport={}
+      emailService='None',emailTransport={},
+      sessionTTL=defaultSessionTTL,twoFactorTTL=defaultTwoFactorTTL
     }={}){
       this.externalIP = externalIP;
       this.port = port;
@@ -64,7 +66,8 @@ module.exports = {
       this.lastAccess = lastAccess;
       this.lastUser = lastUser;
       this.strategies = strategies;
-      this.sessionTTL = defaultSessionTTL;
+      this.sessionTTL = sessionTTL;
+      this.twoFactorTTL = twoFactorTTL;
       this.emailService = emailService;
       this.emailTransport = emailTransport;
       this.db = storage;
@@ -155,6 +158,15 @@ module.exports = {
           if(!answer) console.log('No problem, let\'s try again.');
         }while(!answer)
       } //end if
+      answer = await confirm(chalk.green(`Change two-factor TTL? (${prettyPrintMS(this.twoFactorTTL)})`));
+      if(answer){
+        do{
+          this.twoFactorTTL = parseInt(await prompt(chalk.green('Enter two-factor TTL(in ms): ')));
+          if(isNaN(this.twoFactorTTL)) this.twoFactorTTL = defaultTwoFactorTTL;
+          answer = await confirm(chalk.green(`Is this correct: "${prettyPrintMS(this.twoFactorTTL)}"`));
+          if(!answer) console.log('No problem, let\'s try again.');
+        }while(!answer)
+      } //end if
     }
     getStrategyString(index){
       return this.strategies[index].value?
@@ -163,6 +175,9 @@ module.exports = {
     }
     getSessionTTL(){
       return chalk.green(`Session TTL: ${prettyPrintMS(this.sessionTTL)}`);
+    }
+    getTwoFactorTTL(){
+      return chalk.green(`Two Factor TTL: ${prettyPrintMS(this.twoFactorTTL)}`);
     }
     getServerEmail(){
       if(this.emailService==='None'){
