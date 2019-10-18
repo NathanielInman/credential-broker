@@ -1,5 +1,6 @@
 const express = require('express');
 const chalk = require('chalk');
+const speakeasy = require('speakeasy');
 const {authSecureDecrypt} = require('../libraries/authSecure.js');
 const {verify} = require('../libraries/verify.js');
 
@@ -19,6 +20,8 @@ module.exports = {
       return res.status(401).send('User name was not passed in the header.');
     } //end if
 
+    // ensure there's a valid active and identified session to help secure
+    // traffic back-and-forth.
     try{
       const session = await req.broker.db.getItem(`session:${req.headers.id}`);
 
@@ -51,6 +54,38 @@ module.exports = {
       req.user = user;
       req.key = user.key; //public key used to encrypt payload
     } //end if
+
+    // ensure there's a validated two-factor token. The two-factor TTL can
+    // be configured during broker server setup.
+    try{
+      const twoFactorSession = await req.broker.db.getItem(`twofactor:${req.headers.id}`);
+
+      // we omit logging this, it's an expected behavior to have to re-auth
+      if(!twoFactorSession&&!req.headers['two-factor-token']){
+        return res.status(401).send('Two-factor expired.');
+      }else if(!twoFactorSession&&req.headers['two-factor-token']){
+        const valid = speakeasy.totp.verify({
+          secret: user.twoFactorSecret,
+          encoding: 'base32',
+          token: req.headers['two-factor-token']
+        });
+
+        if(!valid){
+          req.log(`${req.originalUrl}: Invalid two-factor token`,true);
+          return res.status(401).send('Invalid Two-factor token.');
+        }else{
+          req.broker.db.setItem(
+            `twofactor:${req.headers.id}`,
+            true,
+            {ttl:req.broker.twoFactorTTL}
+          );
+        } //end if
+      } //end if
+    }catch(err){
+      console.log(err);
+      req.log(`${req.originalURL}: Two-Factor Authentication Failure`,true);
+      return res.status(401).send('Improper authentication headers.');
+    }
 
     //short-circuit failure
     if(!user.permissions){

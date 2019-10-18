@@ -6,6 +6,7 @@ const readline = require('readline');
 const {User} = require('../models/User.js');
 const {spinner} = require('./spinner.js');
 const {decrypt,sign} = require('./authPGP.js');
+const {prompt,confirm} = require('../libraries/prompt.js');
 const {authSecure,authSecureEncrypt,authSecureDecrypt} = require('./authSecure.js');
 
 async function authenticate(user){
@@ -42,16 +43,17 @@ async function authenticate(user){
     .then(async res=> JSON.parse(await decrypt(user,res)));
 } //end authenticate()
 
-function request({user,uri,body='',method='POST'}={}){
-  return fetch(`${user.remoteIP}/${uri}`,{
-    method,body,
-    headers: {
-      'Content-Type': 'text/plain',
-      id: crypto.createHash('md5').update(user.name).digest('hex'),
-      name: authSecureEncrypt(user.secret,user.name),
-      email: authSecureEncrypt(user.secret,user.email)
-    }
-  });
+function request({user,uri,body='',method='POST',twoFactorToken=''}={}){
+  const headers = {
+    'Content-Type': 'text/plain',
+    id: crypto.createHash('md5').update(user.name).digest('hex'),
+    name: authSecureEncrypt(user.secret,user.name),
+    email: authSecureEncrypt(user.secret,user.email)
+  };
+
+  if(twoFactorToken) headers['Two-Factor-Token'] = twoFactorToken;
+
+  return fetch(`${user.remoteIP}/${uri}`,{method,body,headers});
 } //end request()
 
 module.exports = {
@@ -73,6 +75,28 @@ module.exports = {
         if(res==='Session expired.'){
           await authenticate(user);
           return request({user,uri,method,body})
+            .then(res=> res.text());
+        } //end if
+        return res;
+      })
+      .then(async res=>{
+        if(res==='Two-factor expired.'){
+          spinner.stop();
+          readline.cursorTo(process.stdout, 0);
+          console.log(chalk.green('Synchronizing with server... (done)'))
+          let bool,
+              twoFactorToken = await prompt(chalk.green('Enter two-factor token: '));
+
+          do{
+            bool = await confirm(chalk.green(`Is this correct: "${twoFactorToken}"?`));
+            if(!bool){
+              console.log(chalk.green('No problem, let\'s try again.'));
+              twoFactorToken = await prompt(chalk.green('Enter two-factor token: '));
+            } //end if
+          }while(!bool)
+          spinner.setSpinnerTitle(chalk.yellow('Synchonizing with server... %s'));
+          spinner.start();
+          return request({user,uri,method,body,twoFactorToken})
             .then(res=> res.text());
         } //end if
         return res;
