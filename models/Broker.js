@@ -1,12 +1,13 @@
 const chalk = require('chalk');
 const fs = require('fs');
 const fetch = require('node-fetch');
-const {spinner} = require('../libraries/spinner.js');
-const {sleep} = require('../libraries/sleep.js');
 const readline = require('readline');
-const {password,prompt,confirm} = require('../libraries/prompt.js');
 const storage = require('node-persist');
 const nodemailer = require('nodemailer');
+const {spinner} = require('../libraries/spinner.js');
+const {sleep} = require('../libraries/sleep.js');
+const {sendMail} = require('../libraries/sendMail.js');
+const {password,prompt,confirm} = require('../libraries/prompt.js');
 
 const defaultSessionTTL = 1000*60*5; //5 minutes
 const defaultTwoFactorTTL = 1000*60*60*12; //12 hours
@@ -197,17 +198,16 @@ module.exports = {
     async getAddress(){
       this.externalIP = await fetch('http://checkip.amazonaws.com/').then(res=> res.text());
       this.externalIP = this.externalIP.replace(/\r?\n|\r/g,'');
-      if(this.emailServer!=='None'){
-        let transporter = nodemailer.createTransport(this.emailTransport);
+      const users = await Promise.all(
+        (await this.db.getItem('users')).map(u=>this.db.getItem(`user:${u.name}`))
+      );
 
-        /*transporter.sendMail({
-          from: 'nate@theoestudio.com',
-          to: 'nate@theoestudio.com',
-          subject: 'Credential Broker - Service Restart',
-          text: 'Credential Broker service restarted with ip: '+this.externalIP,
-          html: 'Credential Broker service restarted with ip: '+this.externalIP,
-        });*/
-      } //end if
+      users.forEach(user=>{
+        sendMail({
+          broker:this,to:user.email,title:'Server Restart',
+          body:'Credential Broker service restarted with ip: '+this.externalIP
+        });
+      });
       return chalk.green('External Address: ')+chalk.white(`${this.externalIP}:${this.port}`);
     }
   }
