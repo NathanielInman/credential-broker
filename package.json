@@ -1,6 +1,6 @@
 {
   "name": "credential-broker",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "A secure and easy way to manage adding, deleting and retrieving sensitive information for users and applications.",
   "main": "index.js",
   "scripts": {
