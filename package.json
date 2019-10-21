@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "npm test",
+    "build": "nexe ./index.js -t 10 -o ./broker",
     "start": "node index.js"
   },
   "repository": {
