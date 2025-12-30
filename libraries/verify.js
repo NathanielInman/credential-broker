@@ -1,13 +1,19 @@
-const openpgp = require('openpgp');
+import * as openpgp from 'openpgp'
 
-module.exports = {
-  async verify(key,text){
-    const publicKeys = (await openpgp.key.readArmored(key)).keys,
-          {signatures,data} = await openpgp.verify({
-            message: await openpgp.cleartext.readArmored(text),
-            publicKeys
-          });
+export async function verify(key, text) {
+  const publicKey = await openpgp.readKey({ armoredKey: key })
+  const message = await openpgp.readCleartextMessage({ cleartextMessage: text })
 
-    return signatures.every(s=>s.valid)?JSON.parse(data):false;
+  const verificationResult = await openpgp.verify({
+    message,
+    verificationKeys: publicKey
+  })
+
+  const { verified } = verificationResult.signatures[0]
+  try {
+    await verified
+    return JSON.parse(verificationResult.data)
+  } catch {
+    return false
   }
-};
+}

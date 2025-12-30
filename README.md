@@ -1,5 +1,7 @@
 ![Logo And Splash Banner](./artwork/splash.png)
+
 # Credential Broker
+
 A secure and easy way to manage adding, deleting and retrieving sensitive information for users and applications.
 
 ## Example Usage
@@ -17,49 +19,57 @@ broker mod $scopeName $secretName
 # Establish all environment variables based on scope if authentication is successful
 broker get $scopeName
 ```
+
 An extensive list of commands are found [here](#commands).
 
 ## Benefits & Reasoning
-  - Security should be more robust than vaulting or holding data behind a VPN, all without sacrificing speed of access
-  - Devops shouldn't implicitly have access to all secrets 
-    - Just because an employee has access to the infrastructure doesn't mean they have a need-to-know. To view access types, you can jump to [the types of access section](#types-of-access)
-  - You can attach **TTL**'s to secrets if it's mission critical from them to disappear after a certain point
-  - Just because a user has access to one application doesn't mean they have access to all it's data
-    - Data can be scoped to a **need-to-know**
-  - No knowledge of a language or configuration structure is required, just a **few intuitive commands**
-  - Adding, removing and changing secrets should be **faster** than unvaulting & editing playbooks
-  - The responsibility of adding and removing secrets can be managed by organizational structure
-    - Just because a developer has access to the secrets to run an application doesn't mean they have access to changing, adding or removing additional secrets
-  - The system can be used to store non-sensitive information
-  - There are default strategies in place to ever **prevent data loss** or access issues when employees leave.
-    - For more information on the strategies you can jump to [the abandonment section.](#abandonment)
-  
+
+- Security should be more robust than vaulting or holding data behind a VPN, all without sacrificing speed of access
+- Devops shouldn't implicitly have access to all secrets
+  - Just because an employee has access to the infrastructure doesn't mean they have a need-to-know. To view access types, you can jump to [the types of access section](#types-of-access)
+- You can attach **TTL**'s to secrets if it's mission critical from them to disappear after a certain point
+- Just because a user has access to one application doesn't mean they have access to all it's data
+  - Data can be scoped to a **need-to-know**
+- No knowledge of a language or configuration structure is required, just a **few intuitive commands**
+- Adding, removing and changing secrets should be **faster** than unvaulting & editing playbooks
+- The responsibility of adding and removing secrets can be managed by organizational structure
+  - Just because a developer has access to the secrets to run an application doesn't mean they have access to changing, adding or removing additional secrets
+- The system can be used to store non-sensitive information
+- There are default strategies in place to ever **prevent data loss** or access issues when employees leave.
+  - For more information on the strategies you can jump to [the abandonment section.](#abandonment)
+
 ## Introduction
+
 A credential broker service stores all sensitive information and has a command-line client which can act as a streaming pre-hook to initialize environment variables upon an application at runtime that does not store anything to disk. The broker service itself stores everything in encrypted format with the broker client having a key to unlock the data, provided the user is authenticated and has been authorized for the data requested. The server mimics an SSH authentication using [Diffie-Hellman](https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange) to establish encryption of traffic, performing a challenge to validate a user owns the private [OpenPGP](https://en.wikipedia.org/wiki/Pretty_Good_Privacy#OpenPGP) key to their account and a [2FA](https://en.wikipedia.org/wiki/Multi-factor_authentication) request at a configurable time period to ensure the user hasn't been compromised. [SSL](https://en.wikipedia.org/wiki/Transport_Layer_Security) should be configured on the server to help prevent [man-in the middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack).
 
 Users can also be applications. A broker scope itself can be tied to an application such that an app server would use their private PGP key to match with the broker services stored public key to access all the variables stored under that applications scope while starting. Applications don't require two-factor authentication as they're trusted.
 
 ### Simple Example
+
 At its most basic, users may be limited to certain scopes.
 
 ![Success & Failure Example](/artwork/simpleExample.svg)
 
 ### Session Encryption Sequence Diagram
+
 Before any request is fired from the client, in the background it establishes a shared key encryption. This **must** be over SSL to help prevent man-in-the-middle attacks. Session length may be configurable, though smaller session length increases security.
 
 ![Session Encryption Sequence Diagram](/artwork/encryptSession.svg)
 
 ### Session Authentication Sequence Diagram
+
 Before any request is fired from the client, instead of just assuming that the person with the public key of the user is the user, we authenticate that they are who they are using a challenge mechanism that encrypts a random number, encrypts with the public key and requests the client to decrypt it, set a MD5 of the value and send it back to validate they do indeed own the private key for the user. Session length may be configurable, though smaller session length increases security.
 
 ![Session Authenticate Sequence Diagram](/artwork/authenticateSession.svg)
 
 ### Two-Factor Authentication Sequence Diagram
+
 Two-factor authentication may be setup on a user to help prevent unauthorized access of a user. The time period may be configured for which to ask for the authentication.
 
 ![Two-Factor Authentication Sequence Diagram](/artwork/twoFactorAuthentication.svg)
 
 ## Server Setup
+
 In order to start the server merely type `broker start`. It will ask a series of questions before it's operational. For more information on what these strategies mean and their reasons for existing, please see [the abandonment section.](#abandonment) If the user types `N/no` it validates their choice and gives them a warning specific to an abandonment situation that would leave their data without anyone who has access.
 
 ```
@@ -72,20 +82,30 @@ Allow strategy "any user can cancel a wipe"?
 ```
 
 ## Abandonment
+
 There are four different scenarios or edge-cases that must be handled when it comes to transitioning access of sensitive data.
 
 1. Person leaves company and their user is removed, being the only edit user of some scopes.
-  - In this scenario the broker first attempts to give edit access to the oldest created user that has view access to the scope. In this scenario it emails all members who have any access to that scope and the person who revoked access of the original user what happened. This behavior can be disabled. This strategy is called `oldest user acquires edit access`. This behavior will not work if the server has been restarted since the person left and `secure data at rest` strategy has been enabled.
-  - If there are no users with view access to scopes created by deleted user, it gives edit access of the scopes to the operator who revoked access of the user and notifies all members that also have user edit access. This behavior can be disabled. This strategy is called `revoker acquires abandoned scope access`. This behavior will not work if the server has been restarted since the person left and `secure data at rest` strategy has been enabled.
+
+- In this scenario the broker first attempts to give edit access to the oldest created user that has view access to the scope. In this scenario it emails all members who have any access to that scope and the person who revoked access of the original user what happened. This behavior can be disabled. This strategy is called `oldest user acquires edit access`. This behavior will not work if the server has been restarted since the person left and `secure data at rest` strategy has been enabled.
+- If there are no users with view access to scopes created by deleted user, it gives edit access of the scopes to the operator who revoked access of the user and notifies all members that also have user edit access. This behavior can be disabled. This strategy is called `revoker acquires abandoned scope access`. This behavior will not work if the server has been restarted since the person left and `secure data at rest` strategy has been enabled.
+
 2. Person leaves company and their user can't be removed as there isn't another user with user edit access.
-  - Any user on the broker may petition a revoking of another user. This sends an email to all users and gives the potentially revoked user 24hours to cancel the revoking before it removes the user. This behavior can be disabled. This strategy is called `all users allowed to revoke`. This behavior will not work if the server has been restarted since the person left and `secure data at rest` strategy has been enabled.
+
+- Any user on the broker may petition a revoking of another user. This sends an email to all users and gives the potentially revoked user 24hours to cancel the revoking before it removes the user. This behavior can be disabled. This strategy is called `all users allowed to revoke`. This behavior will not work if the server has been restarted since the person left and `secure data at rest` strategy has been enabled.
+
 3. There is only one user in broker and they leave a company having deleted their own account first
-  - The next user to create an account will acquire all scopes as edit access, user edit access and ability to create new scopes. This behavior can be disabled. This strategy is called `first account gets all access`. This behavior will not work if the server has been restarted since the person left and `secure data at rest` strategy has been enabled.
+
+- The next user to create an account will acquire all scopes as edit access, user edit access and ability to create new scopes. This behavior can be disabled. This strategy is called `first account gets all access`. This behavior will not work if the server has been restarted since the person left and `secure data at rest` strategy has been enabled.
+
 4. There is only one user in broker and they leave a company without deleting their own account first, or there are many users on the broker but restoration strategies for maintaining a user with edit access has been disabled.
-  - Somebody can run the `broker wipe` command to remove all users from the instance. All users with access to the broker will receive an email giving them 24hours to cancel the operation. This will allow somebody to create the first user and acquire access to all scopes unless `first account gets all access` strategy has been disabled. The ability to allow other users 24hours to cancel a wipe can be disabled and it's strategy is called `any user can cancel a wipe`. Even though `first account gets all access` strategy is enabled, it's behavior will not work if the server has been restarted since the last person left if `secure data at rest` strategy has been enabled.
-5. Either situation 1 through 4 happened and their restoration behaviors were disabled, any user with access to the machine can output the scopes and sensitive item names if `secure data at rest` was not enabled. If `secure data at rest` was enabled then values will forever be encrypted so maybe it's time to rotate those keys or generate new ones. By disabling the strategies above you run the risk of not being able to access the data should these situations occur. 
- 
+
+- Somebody can run the `broker wipe` command to remove all users from the instance. All users with access to the broker will receive an email giving them 24hours to cancel the operation. This will allow somebody to create the first user and acquire access to all scopes unless `first account gets all access` strategy has been disabled. The ability to allow other users 24hours to cancel a wipe can be disabled and it's strategy is called `any user can cancel a wipe`. Even though `first account gets all access` strategy is enabled, it's behavior will not work if the server has been restarted since the last person left if `secure data at rest` strategy has been enabled.
+
+5. Either situation 1 through 4 happened and their restoration behaviors were disabled, any user with access to the machine can output the scopes and sensitive item names if `secure data at rest` was not enabled. If `secure data at rest` was enabled then values will forever be encrypted so maybe it's time to rotate those keys or generate new ones. By disabling the strategies above you run the risk of not being able to access the data should these situations occur.
+
 ## Types of Access
+
 1. View access of other users
 2. Edit access of other users
 3. View access of all scope names
@@ -96,6 +116,7 @@ There are four different scenarios or edge-cases that must be handled when it co
 8. Edit access of a specific scope
 
 ## Commands
+
 Below are a list of all the commands and descriptions of how they operate under various conditions.
 
 ```
@@ -107,7 +128,7 @@ Below are a list of all the commands and descriptions of how they operate under 
 #  the command `broker init`
 broker start
 
-# Anyone with access to the server containing the broker service may trigger a 
+# Anyone with access to the server containing the broker service may trigger a
 #  wipe event. By default it gives 24hour warning to all users that a wipe will occur.
 #  This warning may be disabled. See the ABANDONMENT section to learn more.
 broker wipe
@@ -123,7 +144,7 @@ broker wipe
 #  edit access unless this restoration strategy has been disabled. keep in mind that
 #  just because they inherit all existing data, they won't be able to view or
 #  edit any secrets or scopes that are created by others after this point unless those scopes
-#  become abandoned. The purpose of this structure is to allow admins to inherit data that was 
+#  become abandoned. The purpose of this structure is to allow admins to inherit data that was
 #  abandoned by previous users, such as when employees leave a company. To read more about
 #  these sensitive cases, refer to the ABANDONMENT section in the readme
 # If the server connects and there are existing accounts, but the

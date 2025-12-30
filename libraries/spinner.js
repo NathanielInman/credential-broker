@@ -1,5 +1,4 @@
-const {Spinner} = require('cli-spinner');
-const spinner = new Spinner();
+import { Spinner } from 'cli-spinner'
 
-spinner.setSpinnerString('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏');
-module.exports = {spinner};
+export const spinner = new Spinner()
+spinner.setSpinnerString('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')

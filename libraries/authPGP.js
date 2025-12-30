@@ -1,46 +1,58 @@
-const openpgp = require('openpgp');
-const chalk = require('chalk');
-const fs = require('fs');
-const {password} = require('./prompt.js');
+import * as openpgp from 'openpgp'
+import chalk from 'chalk'
+import fs from 'fs'
+import { password } from './prompt.js'
 
-module.exports = {
-  async decrypt(user,text){
-    const privateKey = fs.readFileSync('./id_rsa').toString(),
-          privateKeys = (await openpgp.key.readArmored(privateKey)).keys,
-          passwordValue = !user.usePassword?user.email:
-            await password(chalk.green('Please enter password: '));
+export async function decrypt(user, text) {
+  const privateKeyArmored = fs.readFileSync('./id_rsa').toString()
+  const passwordValue = !user.usePassword
+    ? user.email
+    : await password(chalk.green('Please enter password: '))
 
-    await Promise.all(privateKeys.map(k=> k.decrypt(passwordValue)));
-    const {data} = await openpgp.decrypt({
-      message: await openpgp.message.readArmored(text),
-      privateKeys
-    });
+  const privateKey = await openpgp.decryptKey({
+    privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyArmored }),
+    passphrase: passwordValue
+  })
 
-    return data;
-  },
-  async encrypt(key,text){
-    const publicKey = fs.readFileSync('./id_rsa.pub','utf8');
+  const message = await openpgp.readMessage({ armoredMessage: text })
 
-    const publicKeys = (await openpgp.key.readArmored(publicKey)).keys,
-          {data} = await openpgp.encrypt({
-            message: openpgp.message.fromText(text),
-            publicKeys
-          });
+  const { data } = await openpgp.decrypt({
+    message,
+    decryptionKeys: privateKey
+  })
 
-    return data;
-  },
-  async sign(user,text){
-    const privateKey = fs.readFileSync('./id_rsa').toString(),
-          privateKeys = (await openpgp.key.readArmored(privateKey)).keys,
-          passwordValue = !user.usePassword?user.email:
-            await password(chalk.green('Please enter password: '));
+  return data
+}
 
-    await Promise.all(privateKeys.map(k=> k.decrypt(passwordValue)));
-    const {data} = await openpgp.sign({
-      message: openpgp.cleartext.fromText(text),
-      privateKeys
-    });
+export async function encrypt(key, text) {
+  const publicKeyArmored = fs.readFileSync('./id_rsa.pub', 'utf8')
+  const publicKey = await openpgp.readKey({ armoredKey: publicKeyArmored })
 
-    return data;
-  }
-};
+  const encrypted = await openpgp.encrypt({
+    message: await openpgp.createMessage({ text }),
+    encryptionKeys: publicKey
+  })
+
+  return encrypted
+}
+
+export async function sign(user, text) {
+  const privateKeyArmored = fs.readFileSync('./id_rsa').toString()
+  const passwordValue = !user.usePassword
+    ? user.email
+    : await password(chalk.green('Please enter password: '))
+
+  const privateKey = await openpgp.decryptKey({
+    privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyArmored }),
+    passphrase: passwordValue
+  })
+
+  const message = await openpgp.createCleartextMessage({ text })
+
+  const signedMessage = await openpgp.sign({
+    message,
+    signingKeys: privateKey
+  })
+
+  return signedMessage
+}

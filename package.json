@@ -2,11 +2,34 @@
   "name": "credential-broker",
   "version": "0.1.0",
   "description": "A secure and easy way to manage adding, deleting and retrieving sensitive information for users and applications.",
+  "type": "module",
   "main": "index.js",
+  "bin": {
+    "broker": "./index.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
-    "test": "npm test",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "build": "./build.sh",
-    "start": "node index.js"
+    "start": "node index.js",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.js": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "repository": {
     "type": "git",
@@ -28,15 +51,25 @@
   },
   "homepage": "https://github.com/NathanielInman/credential-broker#readme",
   "dependencies": {
-    "chalk": "^2.4.2",
+    "chalk": "^5.6.2",
     "cli-spinner": "^0.2.10",
-    "express": "^4.17.1",
+    "express": "^5.2.1",
     "keypress": "^0.2.1",
-    "node-fetch": "^2.6.0",
-    "node-persist": "^3.0.5",
-    "nodemailer": "^6.3.0",
-    "openpgp": "^4.6.0",
+    "node-fetch": "^3.3.2",
+    "node-persist": "^4.0.4",
+    "nodemailer": "^7.0.12",
+    "openpgp": "^6.3.0",
     "qrcode-terminal": "^0.12.0",
     "speakeasy": "^2.0.0"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.16",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "neostandard": "^0.12.2",
+    "prettier": "^3.7.4",
+    "vitest": "^4.0.16"
   }
 }

@@ -1,24 +1,41 @@
-const {help} = require('./help.js');
-const {start} = require('./start.js');
-const {userAuth} = require('./userAuth.js');
-const {userInitialize} = require('./userInitialize.js');
-const {userAdd} = require('./userAdd.js');
-const {userDelete} = require('./userDelete.js');
-const {userModify} = require('./userModify.js');
-const {userGetAll} = require('./userGetAll.js');
-const {userGet} = require('./userGet.js');
-const {scopeAdd} = require('./scopeAdd.js');
-const {scopeDelete} = require('./scopeDelete.js');
-const {scopeModify} = require('./scopeModify.js');
-const {scopeGetAll} = require('./scopeGetAll.js');
-const {scopeGet} = require('./scopeGet.js');
-const {secretAdd} = require('./secretAdd.js');
-const {secretDelete} = require('./secretDelete.js');
-const {secretModify} = require('./secretModify.js');
+import { help } from './help.js'
+import { start } from './start.js'
+import { userAuth } from './userAuth.js'
+import { userInitialize } from './userInitialize.js'
+import { userAdd } from './userAdd.js'
+import { userDelete } from './userDelete.js'
+import { userModify } from './userModify.js'
+import { userGetAll } from './userGetAll.js'
+import { userGet } from './userGet.js'
+import { scopeAdd } from './scopeAdd.js'
+import { scopeDelete } from './scopeDelete.js'
+import { scopeModify } from './scopeModify.js'
+import { scopeGetAll } from './scopeGetAll.js'
+import { scopeGet } from './scopeGet.js'
+import { secretAdd } from './secretAdd.js'
+import { secretDelete } from './secretDelete.js'
+import { secretModify } from './secretModify.js'
+import { wipe } from './wipe.js'
+import { wipeCancel } from './wipeCancel.js'
 
-module.exports = {
-  help,start,
-  userAuth,userInitialize,userAdd,userDelete,userModify,userGetAll,userGet,
-  scopeAdd,scopeDelete,scopeModify,scopeGetAll,scopeGet,
-  secretAdd,secretDelete,secretModify
-};
+export {
+  help,
+  start,
+  userAuth,
+  userInitialize,
+  userAdd,
+  userDelete,
+  userModify,
+  userGetAll,
+  userGet,
+  scopeAdd,
+  scopeDelete,
+  scopeModify,
+  scopeGetAll,
+  scopeGet,
+  secretAdd,
+  secretDelete,
+  secretModify,
+  wipe,
+  wipeCancel
+}

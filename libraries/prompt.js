@@ -1,89 +1,100 @@
-const keypress = require('keypress');
+import keypress from 'keypress'
 
-function prompt(msg){
-  return (new Promise((res) => {
-    process.stdout.write(msg);
-    process.stdin.setEncoding('utf8');
-    process.stdin.once('data', (val) => {
-      res(val.trim());
-    }).resume();
-  })).then((res) => {
-    process.stdin.pause();
-    return res;
-  }).catch((e) => {
-    process.stdin.pause();
-    return Promise.reject(e);
-  });
-} //end prompt()
+export function prompt(msg) {
+  return new Promise((resolve) => {
+    process.stdout.write(msg)
+    process.stdin.setEncoding('utf8')
+    process.stdin
+      .once('data', (val) => {
+        resolve(val.trim())
+      })
+      .resume()
+  })
+    .then((result) => {
+      process.stdin.pause()
+      return result
+    })
+    .catch((e) => {
+      process.stdin.pause()
+      return Promise.reject(e)
+    })
+}
 
-module.exports = {
-  prompt,
-  multiline(msg){
-    return (new Promise((res) => {
-      const buf = [];
-      console.log(msg);
-      process.stdin.setEncoding('utf8');
-      process.stdin.on('data', (val) => {
-        if ('\n' === val || '\r\n' === val) {
-          process.stdin.removeAllListeners('data');
-          res(buf.join('\n'));
+export function multiline(msg) {
+  return new Promise((resolve) => {
+    const buf = []
+    console.log(msg)
+    process.stdin.setEncoding('utf8')
+    process.stdin
+      .on('data', (val) => {
+        if (val === '\n' || val === '\r\n') {
+          process.stdin.removeAllListeners('data')
+          resolve(buf.join('\n'))
         } else {
-          buf.push(val.trimRight());
+          buf.push(val.trimEnd())
         }
-      }).resume();
-    })).then((res) => {
-      process.stdin.pause();
-      return res;
-    }).catch((e) => {
-      process.stdin.pause();
-      return Promise.reject(e);
-    });
-  },
-  confirm(msg){
-    return prompt(`${msg} [Y/n]`).then(val=>{
-      return !val.length||/^y|ye|yes|ok|true$/i.test(val.toLowerCase());
-    });
-  },
-  password(msg,mask='*'){
-    const isTTY = process.stdin.isTTY;
+      })
+      .resume()
+  })
+    .then((result) => {
+      process.stdin.pause()
+      return result
+    })
+    .catch((e) => {
+      process.stdin.pause()
+      return Promise.reject(e)
+    })
+}
 
-    if(!isTTY) return prompt(msg);
+export function confirm(msg) {
+  return prompt(`${msg} [Y/n]`).then((val) => {
+    return !val.length || /^y|ye|yes|ok|true$/i.test(val.toLowerCase())
+  })
+}
 
-    return (new Promise(rec=>{
-      let buf = '';
+export function password(msg, mask = '*') {
+  const isTTY = process.stdin.isTTY
 
-      keypress(process.stdin);
+  if (!isTTY) return prompt(msg)
 
-      process.stdin.setRawMode(true);
-      process.stdout.write(msg);
+  return new Promise((resolve) => {
+    let buf = ''
 
-      process.stdin.on('keypress', (c, key) => {
-        if (key && 'return' === key.name) {
-          console.log();
-          process.stdin.pause();
-          process.stdin.removeAllListeners('keypress');
-          process.stdin.setRawMode(false);
+    keypress(process.stdin)
+
+    process.stdin.setRawMode(true)
+    process.stdout.write(msg)
+
+    process.stdin
+      .on('keypress', (c, key) => {
+        if (key && key.name === 'return') {
+          console.log()
+          process.stdin.pause()
+          process.stdin.removeAllListeners('keypress')
+          process.stdin.setRawMode(false)
           if (!buf.trim().length) {
-            return exports.password(msg, mask)(rec);
+            return password(msg, mask).then(resolve)
           }
-          rec(buf);
-          return;
+          resolve(buf)
+          return
         }
 
-        if (key && key.ctrl && 'c' === key.name) {
-          console.log('%s', buf);
-          process.exit();
+        if (key && key.ctrl && key.name === 'c') {
+          console.log('%s', buf)
+          process.exit()
         }
 
-        process.stdout.write(mask);
-        buf += c;
-      }).resume();
-    })).then(res=> {
-      process.stdin.pause();
-      return res;
-    }).catch(e=> {
-      process.stdin.pause();
-      return Promise.reject(e);
-    });
-  }
-};
+        process.stdout.write(mask)
+        buf += c
+      })
+      .resume()
+  })
+    .then((result) => {
+      process.stdin.pause()
+      return result
+    })
+    .catch((e) => {
+      process.stdin.pause()
+      return Promise.reject(e)
+    })
+}
