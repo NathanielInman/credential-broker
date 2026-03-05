@@ -48,50 +48,36 @@ Users can also be applications. A broker scope itself can be tied to an applicat
 
 At its most basic, users may be limited to certain scopes.
 
+#### User Permissions
+
+| User  | Scopes      |
+|-------|-------------|
+| User1 | App1        |
+| User2 | App1, App2  |
+
+#### Scopes
+
+| Scope | Secrets                  |
+|-------|--------------------------|
+| App1  | App1Secret1, App1Secret2 |
+| App2  | App2Secret1              |
+
 #### Successful Access (User1 requests App1)
 
 ```mermaid
-graph LR
-    subgraph Client
-        U1["User1<br/>Private Key<br/>Scope: App1<br/>Command: GET"]
-    end
-
-    subgraph Server
-        App1["App1<br/>App1Secret1<br/>App1Secret2"]
-        App2["App2<br/>App2Secret1"]
-        Users["Users"]
-        UInfo1["User1: Public Key, App1"]
-        UInfo2["User2: Public Key, App1, App2"]
-    end
-
-    U1 -- "broker get App1" --> Server
-    Server -- "✓ App1Secret1, App1Secret2" --> U1
-    Users --- UInfo1
-    Users --- UInfo2
+sequenceDiagram
+    User1->>Server: broker get App1
+    Server->>Server: User1 has App1 access ✓
+    Server-->>User1: App1Secret1, App1Secret2
 ```
 
 #### Failed Access (User1 requests App2)
 
 ```mermaid
-graph LR
-    subgraph Client
-        U1["User1<br/>Private Key<br/>Scope: App2<br/>Command: GET"]
-    end
-
-    subgraph Server
-        App1["App1<br/>App1Secret1<br/>App1Secret2"]
-        App2["App2 🚫<br/>App2Secret1"]
-        Users["Users"]
-        UInfo1["User1: Public Key, App1"]
-        UInfo2["User2: Public Key, App1, App2"]
-    end
-
-    U1 -- "broker get App2" --> Server
-    Server -- "✗ Access Denied" --> U1
-    Users --- UInfo1
-    Users --- UInfo2
-
-    style App2 fill:#f8d7da,stroke:#dc3545
+sequenceDiagram
+    User1->>Server: broker get App2
+    Server->>Server: User1 lacks App2 access ✗
+    Server-->>User1: Access Denied
 ```
 
 ### Session Encryption Sequence Diagram
