@@ -104,21 +104,23 @@ sequenceDiagram
     participant S as Server
     participant DB as Database
 
-    C->>S: POST /secure<br/>ID: MD5(Username)<br/>Key: DH Public Key<br/>Encrypt: Public Key of Prime<br/>Prime: Shared Prime
+    C->>C: Generate DH prime,<br/>public key, and private key
 
-    S->>S: Use prime to generate<br/>Private & Public Key<br/>with Diffie-Hellman
+    C->>S: POST /authSecure<br/>id: MD5(Username)<br/>key: DH Public Key<br/>prime: DH Prime
 
-    S->>S: Use Diffie-Hellman to<br/>pair client public key<br/>with server private to<br/>make secret
+    S->>S: Generate server keypair<br/>from client's prime
 
-    S->>DB: SAVE /sessions<br/>id: MD5(Username)<br/>secret: DH Secret
+    S->>S: Compute shared secret from<br/>client public key and<br/>server private key
 
-    Note over DB: TTL: 5min
+    S->>DB: SAVE /sessions<br/>id: MD5(Username)<br/>secret: Shared Secret<br/>authenticated: false
+
+    Note over DB: TTL: SessionTTL (default 5min)
 
     S->>C: (200) Server Public Key
 
-    C->>C: Use Diffie-Hellman to<br/>pair server public key<br/>with client private to<br/>make secret
+    C->>C: Compute shared secret from<br/>server public key and<br/>client private key
 
-    Note over C: Save secret<br/>TTL: 15min
+    Note over C: Save secret to local config
 ```
 
 ### Session Authentication Sequence Diagram
@@ -133,39 +135,41 @@ sequenceDiagram
 
     Note over C,S: Identity Phase
 
-    C->>S: POST /identify<br/>ID: MD5(Username)<br/>Name: Encrypted(Username)<br/>Email: Encrypted(Email)
+    C->>S: POST /authIdentify<br/>id: MD5(Username)<br/>name: AES(Username)<br/>email: AES(Email)
 
-    S->>DB: GET /sessions<br/>id: MD5(Username)
-    DB-->>S: Return Secret
+    S->>DB: GET /sessions[id]
+    DB-->>S: Return session (secret)
 
-    S->>S: Use Diffie-Hellman Secret<br/>to Decrypt Username & Email
+    S->>S: AES decrypt name & email<br/>using shared secret
 
-    S->>DB: GET /user<br/>name: Username
+    S->>DB: GET /users[name]
+    DB-->>S: Return user (public key)
 
-    S->>S: Generate random number<br/>Encrypt with PGP public key<br/>Encrypt again with DH Secret
+    S->>S: Generate 256 random bytes<br/>PGP encrypt with user's public key<br/>AES encrypt with shared secret
 
-    S->>DB: SAVE /user<br/>challenge: 256 Random Bytes<br/>session: id
+    S->>DB: UPDATE /sessions[id]<br/>challenge: random bytes
 
-    S->>C: (200) Challenge Body
+    S->>C: (200) AES(PGP(challenge))
 
     Note over C,S: Challenge Phase
 
-    C->>C: Use DH to decrypt challenge body
-    C->>C: Use Private Key to decrypt challenge number
-    C->>C: Create MD5 hash of number
-    C->>C: Encrypt hash with DH
+    C->>C: AES decrypt with shared secret
+    C->>C: PGP decrypt with private key
+    C->>C: Create MD5 hash of challenge
+    C->>C: AES encrypt hash with shared secret
 
-    C->>S: POST /challenge<br/>Challenge: DH(MD5 Hash)<br/>ID: MD5(Username)
+    C->>S: POST /authChallenge<br/>id: MD5(Username)<br/>name: AES(Username)<br/>challenge: AES(MD5 Hash)
 
-    S->>DB: GET /sessions → Return Secret
+    S->>DB: GET /sessions[id]
+    DB-->>S: Return session (secret, challenge)
 
-    S->>S: Use DH Secret to Decrypt
+    S->>S: AES decrypt challenge response
 
-    S->>S: Validate MD5 of session challenge<br/>matches Decrypted MD5 of challenge sent
+    S->>S: Validate MD5(stored challenge)<br/>matches client's MD5 response
 
-    S->>DB: SAVE /sessions<br/>authenticated: true<br/>TTL: 15min
+    S->>DB: UPDATE /sessions[id]<br/>authenticated: true
 
-    S->>C: (200) Refresh Session<br/>TTL: 15min
+    S->>C: (200) AES(PGP("Authenticated"))
 ```
 
 ### Two-Factor Authentication Sequence Diagram
@@ -181,36 +185,44 @@ sequenceDiagram
 
     U->>C: broker get App1
 
-    C->>S: GET /app1<br/>Name: Encrypted(User1)<br/>Email: Encrypted<br/>ID: MD5(Name)<br/>Scope: Encrypted(App1)
+    C->>C: Sign request body with PGP private key
 
-    S->>DB: GET /sessions<br/>id: MD5(Username)
-    DB-->>S: Return Secret
+    C->>S: POST /scopeGet<br/>id: MD5(Username)<br/>name: AES(Username)<br/>email: AES(Email)<br/>body: PGP-signed scope name
 
-    S->>S: Use DH Secret to<br/>Decrypt Name & Scope
+    S->>S: Verify session is authenticated
+    S->>S: AES decrypt name & email
+    S->>S: Verify user exists
 
-    S->>S: Does user exist? ✓<br/>Does user have scope access? ✓<br/>Did they include a challenge? ✓<br/>Has user been challenged today? ✗
+    S->>DB: GET /twofactor[id]
+    DB-->>S: Not found
 
-    S->>C: (401) 2FA Challenge
+    S->>C: (401) "Two-factor expired."
 
-    C->>U: Ask for 2FA Code
-    U->>C: Time-sensitive code
+    C->>U: Enter two-factor token
+    U->>C: TOTP code
 
-    C->>S: GET /app1<br/>Name: Encrypted(User1)<br/>Email: Encrypted<br/>ID: MD5(Name)<br/>Code: Encrypted(2FA Code)<br/>Scope: Encrypted(App1)
+    C->>S: POST /scopeGet<br/>id: MD5(Username)<br/>name: AES(Username)<br/>email: AES(Email)<br/>Two-Factor-Token: TOTP code<br/>body: PGP-signed scope name
 
-    S->>DB: GET /sessions<br/>id: MD5(Username)
-    DB-->>S: Return Secret
+    S->>S: Verify session is authenticated
+    S->>S: AES decrypt name & email
+    S->>S: Verify user exists
 
-    S->>S: Use DH Secret to<br/>Decrypt Name & Scope
+    S->>S: Validate TOTP code against<br/>user's two-factor secret
 
-    S->>S: Does user exist? ✓<br/>Does user have scope access? ✓<br/>Did they include a challenge? ✓<br/>Does challenge succeed? ✓
+    S->>DB: SAVE /twofactor[id] = true
 
-    S->>DB: GET SCOPE: App1
+    Note over DB: TTL: TwoFactorTTL (default 12hr)
 
-    S->>C: (200) Encrypted Body
+    S->>S: Verify PGP signature on body
+    S->>S: Check user has scope access
 
-    C->>C: Decrypt App1
+    S->>DB: GET scope data
 
-    C->>U: Set ENV Variables
+    S->>C: (200) AES(PGP(scope secrets))
+
+    C->>C: AES decrypt, then PGP decrypt
+
+    C->>U: Set ENV variables
 ```
 
 ## Server Setup
