@@ -48,25 +48,170 @@ Users can also be applications. A broker scope itself can be tied to an applicat
 
 At its most basic, users may be limited to certain scopes.
 
-![Success & Failure Example](/artwork/simpleExample.svg)
+#### Successful Access (User1 requests App1)
+
+```mermaid
+graph LR
+    subgraph Client
+        U1["User1<br/>Private Key<br/>Scope: App1<br/>Command: GET"]
+    end
+
+    subgraph Server
+        App1["App1<br/>App1Secret1<br/>App1Secret2"]
+        App2["App2<br/>App2Secret1"]
+        Users["Users"]
+        UInfo1["User1: Public Key, App1"]
+        UInfo2["User2: Public Key, App1, App2"]
+    end
+
+    U1 -- "broker get App1" --> Server
+    Server -- "✓ App1Secret1, App1Secret2" --> U1
+    Users --- UInfo1
+    Users --- UInfo2
+```
+
+#### Failed Access (User1 requests App2)
+
+```mermaid
+graph LR
+    subgraph Client
+        U1["User1<br/>Private Key<br/>Scope: App2<br/>Command: GET"]
+    end
+
+    subgraph Server
+        App1["App1<br/>App1Secret1<br/>App1Secret2"]
+        App2["App2 🚫<br/>App2Secret1"]
+        Users["Users"]
+        UInfo1["User1: Public Key, App1"]
+        UInfo2["User2: Public Key, App1, App2"]
+    end
+
+    U1 -- "broker get App2" --> Server
+    Server -- "✗ Access Denied" --> U1
+    Users --- UInfo1
+    Users --- UInfo2
+
+    style App2 fill:#f8d7da,stroke:#dc3545
+```
 
 ### Session Encryption Sequence Diagram
 
 Before any request is fired from the client, in the background it establishes a shared key encryption. This **must** be over SSL to help prevent man-in-the-middle attacks. Session length may be configurable, though smaller session length increases security.
 
-![Session Encryption Sequence Diagram](/artwork/encryptSession.svg)
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+    participant DB as Database
+
+    C->>S: POST /secure<br/>ID: MD5(Username)<br/>Key: DH Public Key<br/>Encrypt: Public Key of Prime<br/>Prime: Shared Prime
+
+    S->>S: Use prime to generate<br/>Private & Public Key<br/>with Diffie-Hellman
+
+    S->>S: Use Diffie-Hellman to<br/>pair client public key<br/>with server private to<br/>make secret
+
+    S->>DB: SAVE /sessions<br/>id: MD5(Username)<br/>secret: DH Secret
+
+    Note over DB: TTL: 5min
+
+    S->>C: (200) Server Public Key
+
+    C->>C: Use Diffie-Hellman to<br/>pair server public key<br/>with client private to<br/>make secret
+
+    Note over C: Save secret<br/>TTL: 15min
+```
 
 ### Session Authentication Sequence Diagram
 
 Before any request is fired from the client, instead of just assuming that the person with the public key of the user is the user, we authenticate that they are who they are using a challenge mechanism that encrypts a random number, encrypts with the public key and requests the client to decrypt it, set a MD5 of the value and send it back to validate they do indeed own the private key for the user. Session length may be configurable, though smaller session length increases security.
 
-![Session Authenticate Sequence Diagram](/artwork/authenticateSession.svg)
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+    participant DB as Database
+
+    Note over C,S: Identity Phase
+
+    C->>S: POST /identify<br/>ID: MD5(Username)<br/>Name: Encrypted(Username)<br/>Email: Encrypted(Email)
+
+    S->>DB: GET /sessions<br/>id: MD5(Username)
+    DB-->>S: Return Secret
+
+    S->>S: Use Diffie-Hellman Secret<br/>to Decrypt Username & Email
+
+    S->>DB: GET /user<br/>name: Username
+
+    S->>S: Generate random number<br/>Encrypt with PGP public key<br/>Encrypt again with DH Secret
+
+    S->>DB: SAVE /user<br/>challenge: 256 Random Bytes<br/>session: id
+
+    S->>C: (200) Challenge Body
+
+    Note over C,S: Challenge Phase
+
+    C->>C: Use DH to decrypt challenge body
+    C->>C: Use Private Key to decrypt challenge number
+    C->>C: Create MD5 hash of number
+    C->>C: Encrypt hash with DH
+
+    C->>S: POST /challenge<br/>Challenge: DH(MD5 Hash)<br/>ID: MD5(Username)
+
+    S->>DB: GET /sessions → Return Secret
+
+    S->>S: Use DH Secret to Decrypt
+
+    S->>S: Validate MD5 of session challenge<br/>matches Decrypted MD5 of challenge sent
+
+    S->>DB: SAVE /sessions<br/>authenticated: true<br/>TTL: 15min
+
+    S->>C: (200) Refresh Session<br/>TTL: 15min
+```
 
 ### Two-Factor Authentication Sequence Diagram
 
 Two-factor authentication may be setup on a user to help prevent unauthorized access of a user. The time period may be configured for which to ask for the authentication.
 
-![Two-Factor Authentication Sequence Diagram](/artwork/twoFactorAuthentication.svg)
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant C as Client
+    participant S as Server
+    participant DB as Database
+
+    U->>C: broker get App1
+
+    C->>S: GET /app1<br/>Name: Encrypted(User1)<br/>Email: Encrypted<br/>ID: MD5(Name)<br/>Scope: Encrypted(App1)
+
+    S->>DB: GET /sessions<br/>id: MD5(Username)
+    DB-->>S: Return Secret
+
+    S->>S: Use DH Secret to<br/>Decrypt Name & Scope
+
+    S->>S: Does user exist? ✓<br/>Does user have scope access? ✓<br/>Did they include a challenge? ✓<br/>Has user been challenged today? ✗
+
+    S->>C: (401) 2FA Challenge
+
+    C->>U: Ask for 2FA Code
+    U->>C: Time-sensitive code
+
+    C->>S: GET /app1<br/>Name: Encrypted(User1)<br/>Email: Encrypted<br/>ID: MD5(Name)<br/>Code: Encrypted(2FA Code)<br/>Scope: Encrypted(App1)
+
+    S->>DB: GET /sessions<br/>id: MD5(Username)
+    DB-->>S: Return Secret
+
+    S->>S: Use DH Secret to<br/>Decrypt Name & Scope
+
+    S->>S: Does user exist? ✓<br/>Does user have scope access? ✓<br/>Did they include a challenge? ✓<br/>Does challenge succeed? ✓
+
+    S->>DB: GET SCOPE: App1
+
+    S->>C: (200) Encrypted Body
+
+    C->>C: Decrypt App1
+
+    C->>U: Set ENV Variables
+```
 
 ## Server Setup
 
