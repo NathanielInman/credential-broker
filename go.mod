@@ -1,6 +1,6 @@
 module github.com/nate/credential-broker
 
-go 1.23.0
+go 1.24.0
 
 require (
 	github.com/ProtonMail/go-crypto v1.4.0
@@ -9,7 +9,7 @@ require (
 	github.com/mdp/qrterminal/v3 v3.2.0
 	github.com/pquerna/otp v1.4.0
 	github.com/spf13/cobra v1.8.1
-	github.com/wneessen/go-mail v0.5.2
+	github.com/wneessen/go-mail v0.7.1
 	go.etcd.io/bbolt v1.3.11
 	golang.org/x/term v0.34.0
 )
@@ -23,6 +23,6 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/text v0.29.0 // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
