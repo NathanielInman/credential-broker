@@ -3,50 +3,44 @@ name: CI
 on:
   push:
     branches: [master, main]
+    paths-ignore:
+      - '**.md'
+      - 'artwork/**'
+      - 'LICENSE'
+      - '.gitignore'
   pull_request:
     branches: [master, main]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         go-version: ['1.23', '1.24']
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./... -v
 
-      - name: Build
-        run: go build ./...
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Test
-        run: go test ./... -v
-
-  cross-compile:
+  release:
+    needs: test
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
-
-      - name: Build linux/amd64
-        run: GOOS=linux GOARCH=amd64 go build -o /dev/null .
-
-      - name: Build darwin/arm64
-        run: GOOS=darwin GOARCH=arm64 go build -o /dev/null .
-
-      - name: Build windows/amd64
-        run: GOOS=windows GOARCH=amd64 go build -o /dev/null .
+      - uses: go-semantic-release/action@v1
+        with:
+          hooks: goreleaser
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

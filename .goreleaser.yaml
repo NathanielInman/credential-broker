@@ -1,0 +1,41 @@
+version: 2
+project_name: broker
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: linux
+        goarch: arm64
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))?!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?(fix|bug)(\([[:word:]]+\))?!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+  filters:
+    exclude:
+      - '^docs:'
+      - '^chore:'
+      - '^ci:'
+      - '^style:'
