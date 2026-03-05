@@ -1,23 +1,22 @@
-# Latest Releases
+# Binaries
 built/
+broker
 
 # OSX
 .DS_Store
 
-# app specific
+# App specific keys
 id_rsa
 id_rsa.pub
 id_rsa.revocationCertificate
 
-# vim
+# Vim
 *.swp
 *.swo
 
-# node
-node_modules/
-
-# application-specific
+# Application data
 data/
+*.db
 state.json
 user.json
 broker.json

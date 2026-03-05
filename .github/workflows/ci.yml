@@ -12,53 +12,41 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20, 22]
+        go-version: ['1.23', '1.24']
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
         with:
-          version: 9
+          go-version: ${{ matrix.go-version }}
 
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'pnpm'
+      - name: Build
+        run: go build ./...
 
-      - name: Install dependencies
-        run: pnpm install
+      - name: Vet
+        run: go vet ./...
 
-      - name: Generate test keys
-        run: node tests/fixtures/generate-keys.js
+      - name: Test
+        run: go test ./... -v
 
-      - name: Run tests
-        run: pnpm test
-
-      - name: Run tests with coverage
-        run: pnpm test:coverage
-
-  lint-check:
+  cross-compile:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          version: 9
+          go-version: '1.23'
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'pnpm'
+      - name: Build linux/amd64
+        run: GOOS=linux GOARCH=amd64 go build -o /dev/null .
 
-      - name: Install dependencies
-        run: pnpm install
+      - name: Build darwin/arm64
+        run: GOOS=darwin GOARCH=arm64 go build -o /dev/null .
 
-      - name: Check CLI runs
-        run: node index.js help
+      - name: Build windows/amd64
+        run: GOOS=windows GOARCH=amd64 go build -o /dev/null .

@@ -1,6 +1,0 @@
-node_modules
-dist
-coverage
-data
-pnpm-lock.yaml
-tests/fixtures/pgp-keys
