@@ -56,7 +56,9 @@ type Request struct {
 	// vault, which unlocks with no human at all).
 	Zone    string `json:"zone"`
 	Approve string `json:"approve"`
-	Reason  string `json:"reason,omitempty"`
+	// Device is the age plugin a touch goes to: "yubikey", "se" (Touch ID).
+	Device string `json:"device,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // Message is one line from broker to the window.

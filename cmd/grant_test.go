@@ -31,6 +31,17 @@ func TestMain(m *testing.M) {
 		}
 		os.Setenv("BROKER_HOME", home)
 	}
+	// Where grants live in a grant agent (macOS), the agent this binary
+	// starts must run as broker, not as the tests.
+	keyring.AgentCommand = func() (*exec.Cmd, error) {
+		exe, err := os.Executable()
+		if err != nil {
+			return nil, err
+		}
+		cmd := exec.Command(exe, "grantd")
+		cmd.Env = append(os.Environ(), envBroker+"=1")
+		return cmd, nil
+	}
 	if !keyringtest.Isolated() {
 		// keyringtest.Main reruns the tests isolated, or runs them right
 		// here if it cannot. Either way this copy keeps off the real keyring.

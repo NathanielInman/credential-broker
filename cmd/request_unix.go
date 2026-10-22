@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package cmd
 
 import (
@@ -12,12 +14,6 @@ import (
 	"github.com/NathanielInman/credential-broker/internal/paths"
 )
 
-// harden makes this process non-dumpable, as ssh-agent does: no other
-// process of the same user may ptrace it or read its memory.
-func harden() error {
-	return unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0)
-}
-
 // newSession detaches a child into a session of its own, so killing the
 // requester's process group leaves it running.
 func newSession() *syscall.SysProcAttr { return &syscall.SysProcAttr{Setsid: true} }
@@ -28,7 +24,19 @@ func lockRequests(p paths.Paths, deadline time.Time) (func(), error) {
 	if err := paths.MkdirAll(p.Run); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(p.RequestLock(), os.O_RDWR|os.O_CREATE, paths.FileMode)
+	release, err := lockFile(p.RequestLock(), deadline)
+	if errors.Is(err, errLocked) {
+		return nil, approval.ErrTimeout
+	}
+	return release, err
+}
+
+var errLocked = errors.New("locked by another process")
+
+// lockFile takes an exclusive flock on file, waiting until deadline, and
+// returns its release.
+func lockFile(file string, deadline time.Time) (func(), error) {
+	f, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE, paths.FileMode)
 	if err != nil {
 		return nil, err
 	}
@@ -43,8 +51,8 @@ func lockRequests(p paths.Paths, deadline time.Time) (func(), error) {
 		}
 		if time.Now().After(deadline) {
 			f.Close()
-			return nil, approval.ErrTimeout
+			return nil, errLocked
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 }

@@ -84,6 +84,7 @@ func newRoot(version string) *cobra.Command {
 		newExecCmd(),
 		newRequestCmd(),
 		newApproveCmd(),
+		newGrantdCmd(),
 	)
 	return root
 }

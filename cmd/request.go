@@ -22,6 +22,7 @@ import (
 	"github.com/NathanielInman/credential-broker/internal/audit"
 	"github.com/NathanielInman/credential-broker/internal/config"
 	"github.com/NathanielInman/credential-broker/internal/paths"
+	"github.com/NathanielInman/credential-broker/internal/procinfo"
 	"github.com/NathanielInman/credential-broker/internal/vault"
 )
 
@@ -42,7 +43,7 @@ var requestChoices = []time.Duration{5 * time.Minute, 15 * time.Minute, time.Hou
 // approverEnv is the environment the approver gets: enough to find the
 // vault, the desktop, and age plugins, and nothing else of the agent's.
 var approverEnv = []string{
-	"HOME", "PATH", "LANG", "LC_ALL",
+	"HOME", "PATH", "LANG", "LC_ALL", "USER", "TMPDIR",
 	"BROKER_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR",
 	"WAYLAND_DISPLAY", "DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS", "GDK_BACKEND",
 }
@@ -239,8 +240,8 @@ func ungranted(v *vault.Vault, names []string) ([]vault.Secret, error) {
 
 // requestWindow reports why no request window can open, or nil.
 var requestWindow = func() error {
-	if os.Getenv("WAYLAND_DISPLAY") == "" && os.Getenv("DISPLAY") == "" {
-		return errors.New("no desktop session (WAYLAND_DISPLAY and DISPLAY are unset)")
+	if err := desktopSession(); err != nil {
+		return err
 	}
 	_, err := dialogPath()
 	return err
@@ -401,9 +402,9 @@ func approve(req *requestFile, e *audit.Entry) (requestResult, error) {
 		Home:     home,
 		Command:  req.Command,
 		Zone:     string(v.Config().Zone()),
-		Approve:  approveBy(v.Config()),
 		Reason:   req.Reason,
 	}
+	shown.Approve, shown.Device = approveBy(v.Config())
 	for _, s := range secrets {
 		shown.Secrets = append(shown.Secrets, approval.Secret{Name: s.Name, Description: s.Description})
 	}
@@ -491,20 +492,29 @@ func unlockApproved(sess *approval.Session, v *vault.Vault, by string) (age.Iden
 	}
 }
 
-// approveBy is what approving a request takes for cfg's vault: a click
-// when a plain unlock would open it without anyone, a touch when hardware
-// is tried first, else the passphrase.
-func approveBy(cfg *config.Config) string {
-	switch cfg.Zone() {
-	case config.ZonePlain:
-		return "click"
+// presencePlugins are the age plugins whose unlock itself needs the human
+// there: a touch or a fingerprint. Another hardware plugin may unlock with
+// nobody present (a TPM without a PIN), so approving starts with a click.
+var presencePlugins = map[string]bool{"yubikey": true, "se": true, "fido2-hmac": true}
+
+// approveBy is what approving a request takes for cfg's vault, and the
+// plugin that asks for it: a touch or fingerprint when such a plugin is
+// tried first, else the passphrase, else a click, for a vault that would
+// otherwise unlock with no human at all.
+func approveBy(cfg *config.Config) (by, device string) {
+	if cfg.Zone() == config.ZonePlain {
+		return "click", ""
 	}
 	for _, u := range cfg.Unlock {
-		if u.Zone() == config.ZoneHardware {
-			return "touch"
+		if u.Zone() != config.ZoneHardware {
+			continue
 		}
+		if !presencePlugins[u.Plugin()] {
+			return "click", u.Plugin()
+		}
+		return "touch", u.Plugin()
 	}
-	return "passphrase"
+	return "passphrase", ""
 }
 
 // durationChoices is ttl and the shorter standard durations.
@@ -557,10 +567,19 @@ func requester(pid int) (cwd string, ancestry []string, err error) {
 	if err != nil {
 		return "", nil, err
 	}
-	exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
-	if err != nil || exe != self {
+	exe, err := procinfo.Exe(pid)
+	if err != nil || !sameFile(exe, self) {
 		return "", nil, fmt.Errorf("requesting process %d is gone or is not broker", pid)
 	}
-	cwd, _ = os.Readlink(fmt.Sprintf("/proc/%d/cwd", pid))
+	cwd, _ = procinfo.Cwd(pid)
 	return cwd, audit.Ancestry(pid), nil
+}
+
+func sameFile(a, b string) bool {
+	fa, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	fb, err := os.Stat(b)
+	return err == nil && os.SameFile(fa, fb)
 }

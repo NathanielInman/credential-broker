@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package cmd
 
 import (
@@ -18,6 +20,7 @@ import (
 
 	"github.com/NathanielInman/credential-broker/internal/approval"
 	"github.com/NathanielInman/credential-broker/internal/audit"
+	"github.com/NathanielInman/credential-broker/internal/config"
 	"github.com/NathanielInman/credential-broker/internal/keyring/keyringtest"
 	"github.com/NathanielInman/credential-broker/internal/paths"
 	"github.com/NathanielInman/credential-broker/internal/vault"
@@ -411,5 +414,27 @@ func TestRequestWrongPassphraseRetries(t *testing.T) {
 	}
 	if last := msgs[len(msgs)-1]; last.Type != "done" || !last.Error || last.Text != "Wrong passphrase." {
 		t.Errorf("window ended with %+v", last)
+	}
+}
+
+func TestApproveBy(t *testing.T) {
+	hw := func(stub string) config.Unlock { return config.Unlock{Path: "/k", Identity: stub} }
+	pass := config.Unlock{Path: "/p", Recipient: "age1p", Passphrase: true}
+	plain := config.Unlock{Path: "/k", Recipient: "age1k"}
+	for _, tc := range []struct {
+		unlocks    []config.Unlock
+		by, device string
+	}{
+		{[]config.Unlock{hw("AGE-PLUGIN-YUBIKEY-1QQ")}, "touch", "yubikey"},
+		{[]config.Unlock{hw("AGE-PLUGIN-SE-1QQ"), pass}, "touch", "se"},
+		{[]config.Unlock{pass}, "passphrase", ""},
+		// A TPM may unlock with nobody there, so a click comes first.
+		{[]config.Unlock{hw("AGE-PLUGIN-TPM-1QQ")}, "click", "tpm"},
+		{[]config.Unlock{hw("AGE-PLUGIN-YUBIKEY-1QQ"), plain}, "click", ""},
+	} {
+		by, device := approveBy(&config.Config{Unlock: tc.unlocks})
+		if by != tc.by || device != tc.device {
+			t.Errorf("%+v: %q %q, want %q %q", tc.unlocks, by, device, tc.by, tc.device)
+		}
 	}
 }

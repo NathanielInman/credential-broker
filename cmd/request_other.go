@@ -1,18 +1,22 @@
-//go:build !linux
+//go:build !linux && !darwin
 
 package cmd
 
 import (
-	"errors"
 	"syscall"
+
+	"github.com/spf13/cobra"
 	"time"
 
 	"github.com/NathanielInman/credential-broker/internal/paths"
 )
 
-var errUnsupported = errors.New("requests need linux")
-
-func harden() error                    { return errUnsupported }
 func newSession() *syscall.SysProcAttr { return nil }
 
 func lockRequests(paths.Paths, time.Time) (func(), error) { return nil, errUnsupported }
+
+func lockFile(string, time.Time) (func(), error) { return nil, errUnsupported }
+
+func newGrantdCmd() *cobra.Command {
+	return &cobra.Command{Use: "grantd", Hidden: true, RunE: func(*cobra.Command, []string) error { return errUnsupported }}
+}
