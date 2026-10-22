@@ -96,10 +96,15 @@ always unshares the user namespace when unprivileged) has its own empty user
 keyring and sees no grants. `exec` must run outside such sandboxes.
 
 Default duration comes from config (`default_grant`, initially `1h`); max
-`24h` unless `--force`. `broker revoke [NAME...|--all]` unlinks keys. `ls`
-shows remaining TTL by reading key timeouts (track expiry in a companion
-`broker:expiry:<NAME>` key or the description if the kernel does not expose
-it).
+`24h` unless `--force`. Granting a public secret is a no-op with a note.
+`broker revoke NAME... | --all` unlinks keys; `rm` also drops the secret's
+grant. The kernel does not expose a key's timeout through keyctl, so each
+grant has a companion `user` key `broker:expiry:<NAME>` (Unix seconds, same
+timeout) that `ls` reads. An expired key reads as `EKEYEXPIRED` until the
+kernel garbage collects it (`kernel.keys.gc_delay`, 5 minutes), then as
+missing, so "expired" and "never granted" are only distinguishable for that
+window. If the keyring is unavailable (keyctl blocked), `ls` still lists
+secrets, shows none as granted, and says why on stderr.
 
 ## Commands
 
@@ -112,7 +117,7 @@ Human-facing (rare):
   or `--private` moves the secret, `--desc` replaces the description.
 - `broker rm NAME`
 - `broker grant NAME... [--for DUR] | --all`
-- `broker revoke [NAME...] | --all`
+- `broker revoke NAME... | --all`
 - `broker get NAME`: prints the value. Public: immediate. Private: always a
   fresh touch, a grant does not satisfy it (grants are for exec only).
 - `broker import FILE [--public]`: parse `export NAME=value` / `NAME=value`

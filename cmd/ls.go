@@ -34,9 +34,21 @@ func newLsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Without the keyring (a sandbox that blocks keyctl, say) ls
+			// still lists secrets, reporting nothing as granted.
+			kr, krErr := userKeyring()
+			if krErr != nil {
+				fmt.Fprintf(c.ErrOrStderr(), "grants not shown: %v\n", krErr)
+			}
 			entries := make([]lsEntry, 0, len(secrets))
 			for _, s := range secrets {
-				granted, expires := grantStatus(s)
+				var granted bool
+				var expires *time.Time
+				if krErr == nil {
+					if granted, expires, err = lookupGrant(kr, s.Name); err != nil {
+						return err
+					}
+				}
 				entries = append(entries, lsEntry{Secret: s, Granted: granted, Expires: expires})
 			}
 
@@ -53,8 +65,11 @@ func newLsCmd() *cobra.Command {
 			fmt.Fprintln(tw, "NAME\tTIER\tGRANT\tDESCRIPTION")
 			for _, e := range entries {
 				grant := "-"
-				if e.Granted && e.Expires != nil {
-					grant = time.Until(*e.Expires).Round(time.Second).String()
+				switch {
+				case e.Granted && e.Expires != nil:
+					grant = shortDuration(time.Until(*e.Expires).Round(time.Second))
+				case e.Granted:
+					grant = "granted"
 				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", e.Name, e.Tier, grant, e.Description)
 			}
@@ -63,11 +78,4 @@ func newLsCmd() *cobra.Command {
 	}
 	c.Flags().BoolVar(&asJSON, "json", false, "machine-readable output")
 	return c
-}
-
-// grantStatus reports whether s has a live grant and when it expires.
-// Grants live in the kernel keyring, which the grant task wires in; until
-// then nothing is ever granted.
-func grantStatus(vault.Secret) (granted bool, expires *time.Time) {
-	return false, nil
 }

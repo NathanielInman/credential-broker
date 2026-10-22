@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/NathanielInman/credential-broker/internal/agenterr"
+	"github.com/NathanielInman/credential-broker/internal/keyring"
 	"github.com/NathanielInman/credential-broker/internal/paths"
 	"github.com/NathanielInman/credential-broker/internal/vault"
 )
@@ -94,3 +95,7 @@ func openVault() (*vault.Vault, error) {
 	}
 	return vault.Open(p)
 }
+
+// userKeyring opens the kernel user keyring. Tests that cannot isolate it
+// replace this so they never touch the real one.
+var userKeyring = keyring.User

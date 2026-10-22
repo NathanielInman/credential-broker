@@ -50,8 +50,6 @@ func TestHelpListsCommands(t *testing.T) {
 
 func TestStubsNotImplemented(t *testing.T) {
 	for _, args := range [][]string{
-		{"grant", "X", "--for", "1h"},
-		{"revoke", "--all"},
 		{"get", "X"},
 		{"import", "env"},
 		{"backup", "-o", "b.age"},

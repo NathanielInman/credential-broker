@@ -99,6 +99,11 @@ func newRmCmd() *cobra.Command {
 			if err := v.Remove(args[0]); err != nil {
 				return err
 			}
+			// Drop any grant too, so exec cannot use a removed secret. Best
+			// effort: a grant left behind still expires on its own.
+			if kr, err := userKeyring(); err == nil {
+				_, _ = kr.Revoke(args[0])
+			}
 			fmt.Fprintf(c.OutOrStdout(), "removed %s\n", args[0])
 			return nil
 		},
