@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -26,7 +27,7 @@ func TestAppendRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if fi.Mode().Perm() != want {
+		if runtime.GOOS != "windows" && fi.Mode().Perm() != want {
 			t.Errorf("%s mode %v, want %v", name, fi.Mode().Perm(), want)
 		}
 	}
@@ -80,7 +81,7 @@ func TestAppendTightensMode(t *testing.T) {
 	if err := Append(file, Entry{Action: Rm, OK: true}); err != nil {
 		t.Fatal(err)
 	}
-	if fi, _ := os.Stat(file); fi.Mode().Perm() != 0o600 {
+	if fi, _ := os.Stat(file); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Errorf("mode %v, want 0600", fi.Mode().Perm())
 	}
 }

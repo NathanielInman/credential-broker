@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -62,7 +63,7 @@ func TestBackupRestore(t *testing.T) {
 	if out != "backed up 3 secrets to "+file+"\n" || stderr != "" {
 		t.Fatalf("backup: stdout %q stderr %q", out, stderr)
 	}
-	if fi, err := os.Stat(file); err != nil || fi.Mode().Perm() != 0o600 {
+	if fi, err := os.Stat(file); err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600) {
 		t.Fatalf("backup file: %v %v", fi, err)
 	}
 	before := ls(t)
@@ -205,12 +206,14 @@ func TestBackupRestoreNeedHuman(t *testing.T) {
 
 	requireTTY = defaultRequireTTY
 	_, stderr, code := runStdin(t, "", "backup", "-o", file)
-	if code != 75 || !strings.Contains(stderr, `"ask_human":"broker backup -o `+file+`"`) {
+	// The JSON escapes a Windows path's backslashes.
+	jsonFile := strings.ReplaceAll(file, `\`, `\\`)
+	if code != 75 || !strings.Contains(stderr, `"ask_human":"broker backup -o `+jsonFile+`"`) {
 		t.Errorf("backup: exit %d %s", code, stderr)
 	}
 	freshHome(t)
 	_, stderr, code = runStdin(t, "", "restore", file)
-	if code != 75 || !strings.Contains(stderr, `"ask_human":"broker restore `+file+`"`) {
+	if code != 75 || !strings.Contains(stderr, `"ask_human":"broker restore `+jsonFile+`"`) {
 		t.Errorf("restore: exit %d %s", code, stderr)
 	}
 }

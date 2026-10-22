@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -40,6 +41,9 @@ func TestResolveRelativeBrokerHome(t *testing.T) {
 }
 
 func TestResolveXDG(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("HOME and the XDG paths below are unix shapes")
+	}
 	t.Setenv("BROKER_HOME", "")
 	t.Setenv("HOME", "/home/u")
 	t.Setenv("XDG_CONFIG_HOME", "/xdg/config")
@@ -86,7 +90,7 @@ func TestEnsure(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if fi.Mode().Perm() != DirMode {
+		if runtime.GOOS != "windows" && fi.Mode().Perm() != DirMode {
 			t.Errorf("%s mode %v, want %v", d, fi.Mode().Perm(), DirMode)
 		}
 	}
@@ -108,7 +112,7 @@ func TestWriteFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fi.Mode().Perm() != FileMode {
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != FileMode {
 		t.Errorf("mode %v, want %v", fi.Mode().Perm(), FileMode)
 	}
 	entries, _ := os.ReadDir(filepath.Dir(name))
@@ -140,11 +144,11 @@ func TestWriteFileFuncFailure(t *testing.T) {
 }
 
 func TestGrantSocket(t *testing.T) {
-	p := Paths{Run: "/run/user/7/broker"}
-	if s := p.GrantSocket(); s != "/run/user/7/broker/grantd.sock" {
+	p := Paths{Run: filepath.FromSlash("/run/user/7/broker")}
+	if s := p.GrantSocket(); s != filepath.Join(p.Run, "grantd.sock") {
 		t.Errorf("GrantSocket = %q", s)
 	}
-	deep := Paths{Run: "/" + strings.Repeat("d", 120)}
+	deep := Paths{Run: filepath.FromSlash("/" + strings.Repeat("d", 120))}
 	s := deep.GrantSocket()
 	if len(s) > maxSocketPath || filepath.Dir(s) != filepath.Clean(os.TempDir()) {
 		t.Errorf("deep GrantSocket = %q", s)

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -132,7 +133,7 @@ func TestAuditLog(t *testing.T) {
 		t.Errorf("log grew from %d to %d entries", len(entries), n)
 	}
 	assertNoValues(t, home, "public-value-1", "private-value-2")
-	if fi, err := os.Stat(filepath.Join(home, "state", "log.jsonl")); err != nil || fi.Mode().Perm() != 0o600 {
+	if fi, err := os.Stat(filepath.Join(home, "state", "log.jsonl")); err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600) {
 		t.Errorf("log file: %v %v", fi, err)
 	}
 }

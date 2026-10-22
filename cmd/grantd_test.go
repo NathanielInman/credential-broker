@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ func TestGrantd(t *testing.T) {
 	if v, err := c.Read("API_TOKEN"); err != nil || string(v) != "token-value" {
 		t.Fatalf("Read = %q, %v", v, err)
 	}
-	if fi, err := os.Stat(p.GrantSocket()); err != nil || fi.Mode().Perm()&0o077 != 0 {
+	if fi, err := os.Stat(p.GrantSocket()); err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm()&0o077 != 0) {
 		t.Fatalf("socket %v, %v; want it private", fi, err)
 	}
 

@@ -352,7 +352,7 @@ func TestFileModes(t *testing.T) {
 		} else {
 			files++
 		}
-		if fi.Mode().Perm() != want {
+		if runtime.GOOS != "windows" && fi.Mode().Perm() != want {
 			t.Errorf("%s mode %v, want %v", path, fi.Mode().Perm(), want)
 		}
 		return nil

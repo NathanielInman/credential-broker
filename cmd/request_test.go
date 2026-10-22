@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -174,7 +175,8 @@ func TestRequestApproved(t *testing.T) {
 	if want := []int64{300, 900, 1800}; !equalInts(req.Choices, want) {
 		t.Errorf("choices %v, want %v", req.Choices, want)
 	}
-	if len(req.Ancestry) == 0 || req.Cwd == "" {
+	// Windows shows no directory: reading another process's needs its PEB.
+	if len(req.Ancestry) == 0 || (req.Cwd == "" && runtime.GOOS != "windows") {
 		t.Errorf("window showed no requester: ancestry %v cwd %q", req.Ancestry, req.Cwd)
 	}
 	if last := msgs[len(msgs)-1]; last.Type != "done" || last.Error || last.Text != "Granted for 30m" {
