@@ -48,22 +48,6 @@ func TestHelpListsCommands(t *testing.T) {
 	}
 }
 
-func TestStubsNotImplemented(t *testing.T) {
-	for _, args := range [][]string{
-		{"import", "env"},
-	} {
-		t.Run(args[0], func(t *testing.T) {
-			_, stderr, code := runBroker(t, args...)
-			if got := errorCode(t, stderr); got != "not_implemented" {
-				t.Errorf("error %q, want not_implemented", got)
-			}
-			if code != 70 {
-				t.Errorf("exit %d, want 70", code)
-			}
-		})
-	}
-}
-
 func TestUsageErrors(t *testing.T) {
 	for _, args := range [][]string{
 		{"nope"},

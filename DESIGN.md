@@ -121,9 +121,10 @@ Human-facing (rare):
 - `broker get NAME`: prints the value and a newline (`set --stdin` drops
   one, so `get | set` round trips). Public: immediate. Private: always a
   fresh touch, a grant does not satisfy it (grants are for exec only).
-- `broker import FILE [--public]`: parse `export NAME=value` / `NAME=value`
-  lines (quotes handled) from shell env files like `~/.zshenv`, store them,
-  print which lines can now be deleted. Never prints values.
+- `broker import FILE [--public] [--overwrite] [--dry-run]`: parse
+  `export NAME=value` / `NAME=value` lines (quotes handled) from shell env
+  files like `~/.zshenv`, store them, print which lines can now be deleted.
+  Never prints values (see below).
 - `broker backup -o FILE [--generate-passphrase] [--include-log]` /
   `broker restore FILE [--identity FILE...] [--force]` (see below)
 - `broker log [--since DUR] [--name NAME] [--json]`
@@ -181,6 +182,7 @@ useful line in the file).
   `names`, `tier`, `for`, `error`, and `cmd` are left out.
 - `ls` and `log` are not logged. Flag and argument errors cobra catches
   before a command runs are not logged; everything after is.
+- import logs the names it stored; `import --dry-run` is not logged.
 - grant logs the private secrets it grants (by name, also with `--all`);
   revoke logs the names it revoked. backup and restore log every secret
   the backup carries (tier usually `mixed`), so `--name` finds the backups
@@ -200,6 +202,43 @@ useful line in the file).
   cmd or grant's duration, and the ancestry above broker). `--since DUR`
   keeps entries newer than DUR, `--name NAME` those naming NAME, and
   `--json` prints the matching lines as written.
+
+## Import
+
+- `broker import FILE` reads FILE without running it (`internal/envfile`)
+  and never edits it. It understands the shell subset env files use for
+  plain values: an optional `export`, single quotes, double quotes (where
+  `\` escapes only `$`, `` ` ``, `"`, `\`, and newline), backslash escapes,
+  line continuations, quoted values spanning lines, a trailing `;`, and
+  trailing comments. Other statements (`export NAME` with no value,
+  commands, `alias`, and assignments by `typeset`, `declare`, `readonly`)
+  are ignored without a report, quotes and all, so a quoted string
+  spanning lines is never read as assignments.
+- An assignment is skipped and reported (line, name, reason) when its value
+  needs the shell: a variable reference, command substitution, arithmetic,
+  `$'...'`, a tilde at the start or after a `:`, `+=`, or more than one word
+  (`A=1 B=2`, arrays, `&&`). Also skipped: names that are not valid secret
+  names, values `set` would refuse (empty, too long, NUL), and names already
+  in the vault unless `--overwrite`. Nothing prompts, so values from the
+  file never need a terminal.
+- The last assignment of a name wins, as in the shell. When it is skipped,
+  earlier ones are too ("set again on line N"); when it is imported,
+  earlier plain assignments of the name are deletable with it.
+- Tiers follow `set`: new secrets are private, `--public` makes (or moves)
+  them public, and `--overwrite` otherwise keeps an existing secret's tier
+  and description.
+- Output: the imported names with tier and lines, the skipped lines, and
+  `safe to delete from FILE: lines 2-5, 11`. An imported name that a
+  statement left in FILE may still expand is listed as kept, with the lines
+  using it, and its lines are not offered for deletion. That check is
+  conservative: any `$NAME` or `${NAME}` in a skipped assignment or other
+  statement counts (comments and plain NAME=value assignments expand
+  nothing). When storing fails partway, the report covers what was stored
+  and the error follows on stderr.
+- `--dry-run` prints the same report ("would import") and stores and logs
+  nothing. A real import logs one entry naming the secrets it stored, with
+  their tier (`mixed` when `--overwrite` kept both); an import that stores
+  nothing still logs one entry without names.
 
 ## Backup and restore
 

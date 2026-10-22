@@ -96,10 +96,6 @@ func usageArgs(validate cobra.PositionalArgs) cobra.PositionalArgs {
 	}
 }
 
-func notImplemented(c *cobra.Command, _ []string) error {
-	return agenterr.New(agenterr.NotImplemented, "broker %s is not implemented yet", c.Name())
-}
-
 func openVault() (*vault.Vault, error) {
 	p, err := paths.Resolve()
 	if err != nil {
