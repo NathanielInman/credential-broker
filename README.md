@@ -8,7 +8,7 @@ A local secret store for a machine where AI agents do most of the typing. Agents
   <img src="./artwork/request-window.png" alt="broker's request window: an agent asks for GITHUB_TOKEN and DB_PASS for an hour to run ./deploy.sh, with the process chain that asked, its directory, and its stated reason, waiting for a YubiKey touch" width="460">
 </p>
 
-You touch your YubiKey, the command runs, and the kernel forgets the grant an hour later. That's the whole human side. The agent's side is two commands:
+You touch your YubiKey (or Touch ID on a Mac), the command runs, and the grant is forgotten an hour later. That's the whole human side. The agent's side is two commands:
 
 ```sh
 broker ls --json        # what secrets exist (names and descriptions, never values)
@@ -18,7 +18,7 @@ broker exec --request --reason "Deploying the grant-zone fix to the dev environm
 
 Prefer a terminal? `broker grant GITHUB_TOKEN DB_PASS --for 1h` does the same thing without the window.
 
-There's no server, no daemon, and no account. Secrets are plain [age](https://age-encryption.org) files on disk, grants live in the Linux kernel keyring with a timeout, and every read lands in an audit log with the process tree that asked for it.
+There's no server, no daemon, and no account. Secrets are plain [age](https://age-encryption.org) files on disk, grants live in memory with a timeout (the kernel keyring on Linux, a small in-memory agent on macOS), and every read lands in an audit log with the process tree that asked for it.
 
 v1 was a client/server broker for teams, with users, scopes, and PGP challenges. v2 is a from-scratch rewrite for one person and the agents working on their machine. The full spec is in [DESIGN.md](./DESIGN.md).
 
@@ -36,7 +36,7 @@ flowchart LR
     agent["Agent"] <-->|"ls, exec<br/>redacted output"| broker
     broker <-->|"env vars in<br/>output out"| child["Child process<br/>gh, curl, psql..."]
     broker <-->|"age encrypt / decrypt"| vault[("Vault<br/>age files on disk")]
-    broker <-->|"grants with a TTL"| keyring[("Kernel user keyring")]
+    broker <-->|"grants with a TTL"| keyring[("Grant store<br/>kernel keyring or grant agent")]
     broker -->|"append"| log[("Audit log")]
 ```
 
@@ -59,6 +59,8 @@ Writing a private secret only needs the tier's public key, so `set` and `import`
 ### Grants
 
 A grant is you saying "agents can use these for the next two hours." One touch unwraps the private tier key in memory, broker decrypts just the named secrets, and each one goes into the kernel user keyring with a timeout. The key itself is never cached. When the timeout hits, the kernel drops the secret; there's no daemon to forget to stop.
+
+macOS has no kernel keyring, so there the first grant starts `broker grantd`, a small agent that holds grants in memory only, drops each one on a timer, answers only your user over a private unix socket, and exits once it has held nothing for 30 seconds. Nothing granted ever touches disk, and a reboot forgets everything, same as Linux.
 
 ```mermaid
 sequenceDiagram
@@ -137,7 +139,7 @@ sequenceDiagram
     B-->>A: deploy output (redacted) and its exit status
 ```
 
-The approver holds the unwrapped private tier key, so it never runs as the agent's child. On Linux a process can read the memory of its own descendants (`kernel.yama.ptrace_scope=1`), so `request` starts the approver through `systemd-run --user`, as a child of your service manager, and the approver marks itself non-dumpable the way ssh-agent does. That also keeps the window up if the agent's shell command times out: approve anyway and the agent's next `exec` finds the grant. One window shows at a time; a second request waits behind it, and usually finds its names granted by the time it gets a turn.
+The approver holds the unwrapped private tier key, so nothing else may read its memory. On Linux a process can read the memory of its own descendants (`kernel.yama.ptrace_scope=1`), so `request` starts the approver through `systemd-run --user`, as a child of your service manager, and the approver marks itself non-dumpable the way ssh-agent does. On macOS the hardened runtime does that job (see [Install](#install)), and the approver also refuses debugger attachment. That also keeps the window up if the agent's shell command times out: approve anyway and the agent's next `exec` finds the grant. One window shows at a time; a second request waits behind it, and usually finds its names granted by the time it gets a turn.
 
 If there's no desktop session or broker-dialog isn't installed, `--request` falls back to the plain `no_grant` line above.
 
@@ -145,13 +147,7 @@ Every failure an agent can hit has a stable `error` code. The full table is in t
 
 ## Install
 
-Linux only (see [Linux and sandboxes](#linux-and-sandboxes)). You need Go to build it, plus [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) and `pcscd` for the YubiKey. The stock `age` CLI is optional but worth having for [recovery](#recovering-without-broker).
-
-```sh
-sudo pacman -S age pcsclite ccid       # or your distro's equivalent
-sudo systemctl enable --now pcscd
-cargo install age-plugin-yubikey       # or the AUR package
-```
+Linux or macOS (see [Platforms](#platforms)). You need Go to build it. The stock `age` CLI is optional but worth having for [recovery](#recovering-without-broker).
 
 Build from source (the binaries on the Releases page are still v1):
 
@@ -159,16 +155,33 @@ Build from source (the binaries on the Releases page are still v1):
 git clone https://github.com/NathanielInman/credential-broker
 cd credential-broker
 go build -o ~/.local/bin/broker .
-```
-
-The request window is a separate program, `broker-dialog`, so broker itself stays pure Go with nothing to link. It needs GTK 3 and WebKitGTK 4.1, and goes next to `broker`:
-
-```sh
-sudo pacman -S gtk3 webkit2gtk-4.1     # Debian/Ubuntu: libgtk-3-dev libwebkit2gtk-4.1-dev
 (cd broker-dialog && go build -o ~/.local/bin/broker-dialog .)
 ```
 
-It has a fixed size, which Hyprland and most tiling compositors already float. Its Wayland app id is `broker` if you want a rule anyway (`windowrulev2 = float, class:^(broker)$`).
+`broker-dialog` is the request window. It's a separate program so broker itself stays pure Go with nothing to link, and it goes next to `broker`.
+
+### Linux
+
+The window needs GTK 3 and WebKitGTK 4.1, and a YubiKey needs [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) and `pcscd`:
+
+```sh
+sudo pacman -S age gtk3 webkit2gtk-4.1 pcsclite ccid   # Debian/Ubuntu: libgtk-3-dev libwebkit2gtk-4.1-dev pcscd
+sudo systemctl enable --now pcscd
+cargo install age-plugin-yubikey                       # or the AUR package
+```
+
+The window has a fixed size, which Hyprland and most tiling compositors already float. Its Wayland app id is `broker` if you want a rule anyway (`windowrulev2 = float, class:^(broker)$`).
+
+### macOS
+
+The window uses the system's WebKit, so there's nothing to install for it. For Touch ID, get [age-plugin-se](https://github.com/remko/age-plugin-se), which keeps the key in the Mac's Secure Enclave. A YubiKey works too, with no `pcscd` needed:
+
+```sh
+brew install age age-plugin-se          # and age-plugin-yubikey for a YubiKey
+codesign --force --sign - --options runtime ~/.local/bin/broker ~/.local/bin/broker-dialog
+```
+
+The `codesign` line matters. It turns on the hardened runtime, under which no other process of yours can attach to broker or read its memory, and that's what protects the approver and the grant agent while they hold secrets. Sign again after every build.
 
 ### Agent skill
 
@@ -199,8 +212,8 @@ quadrantChart
 
 | | hardware | passphrase | plain |
 |---|---|---|---|
-| unlock identity | YubiKey 5 over PIV (`age-plugin-yubikey`) | identity file encrypted with `age -p` | `AGE-SECRET-KEY` file |
-| each grant costs | a touch | typing the passphrase | nothing |
+| unlock identity | YubiKey 5 over PIV (`age-plugin-yubikey`), or Touch ID (`age-plugin-se`) | identity file encrypted with `age -p` | `AGE-SECRET-KEY` file |
+| each grant costs | a touch or a fingerprint | typing the passphrase | nothing |
 | on disk | a stub that's useless without the key | scrypt-encrypted key | a key anything running as you can read |
 | agent fakes a terminal and runs `grant` | blocked, nobody touched | blocked, it doesn't know the passphrase | works |
 | the human secret leaks | a PIN alone opens nothing | anyone can unlock, forever | n/a |
@@ -223,6 +236,16 @@ broker init --identity ~/.config/broker/yubikey-identity.txt
 ```
 
 That file is a stub that points at the hardware, not a key. Got a spare YubiKey? Repeat `--identity` for each one and either can unlock the vault.
+
+On a Mac, Touch ID is the same zone with no extra hardware. `any-biometry` means a fingerprint and nothing else; the plugin's default also accepts your login password.
+
+```sh
+mkdir -p ~/.config/broker
+age-plugin-se keygen --access-control any-biometry -o ~/.config/broker/touchid-identity.txt
+broker init --identity ~/.config/broker/touchid-identity.txt
+```
+
+The key never leaves that Mac's Secure Enclave, so a vault wrapped only to it can't move to another machine. Keep a [backup](#backup-and-restore), or add a YubiKey as a second `--identity`.
 
 **Passphrase.** Press Enter at age's prompt and it generates a 10 word passphrase for you. Write it down.
 
@@ -343,13 +366,14 @@ It does not protect against:
 - **A fake request window.** A hostile agent can draw its own look-alike window. On a passphrase vault that phishes the passphrase. On a hardware vault there's nothing to type, but if the agent starts its own unlock at the same moment, your touch completes that unlock instead of the one you think you're approving.
 - **Public secrets.** They're not redacted, by design. Don't put anything in `public` you'd mind seeing in a transcript.
 - **Root, or anything that already owns your user.** It can read process memory, the keyring, and your terminal.
+- **An unsigned broker on macOS.** Without the hardened runtime, a debugger running as you can read the approver's or grant agent's memory. Run the `codesign` line from [Install](#install).
 - **A weak backup passphrase.** Use the generated one.
 
-## Linux and sandboxes
+## Platforms
 
-v2 is Linux only, because grants are kernel keyring entries. Other platforms compile but every command says "unsupported platform". A macOS port on top of Keychain and `age-plugin-se` is the obvious next step, but it doesn't exist yet.
+v2 runs on Linux and macOS. Windows compiles, but every command says "unsupported platform" for now.
 
-The kernel user keyring is per uid, so a grant made in your terminal is visible to agents in other sessions. It's also per **user namespace**, though, and that bites: anything running under bubblewrap or flatpak (and agent sandboxes built on them) gets its own empty user keyring and sees no grants at all.
+On Linux, grants are kernel keyring entries. The user keyring is per uid, so a grant made in your terminal is visible to agents in other sessions. It's also per **user namespace**, though, and that bites: anything running under bubblewrap or flatpak (and agent sandboxes built on them) gets its own empty user keyring and sees no grants at all.
 
 ```console
 $ bwrap --dev-bind / / broker exec GITHUB_TOKEN -- true
@@ -357,6 +381,8 @@ $ bwrap --dev-bind / / broker exec GITHUB_TOKEN -- true
 ```
 
 Granting again won't fix it. `broker exec` has to run outside the sandbox, so allow it as an unsandboxed command in your agent's config. The skill tells agents to recognize this and ask.
+
+On macOS, grants live in the grant agent described under [Grants](#grants), and a request window only opens from the desktop login session: an agent running over SSH gets the plain `no_grant` and a terminal command instead.
 
 ## Commands
 

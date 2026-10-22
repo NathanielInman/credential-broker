@@ -20,14 +20,20 @@ active grant.
 ## Binary and platform
 
 - Binary name `broker`, Go, module `github.com/NathanielInman/credential-broker`.
-- Linux only for v2 (grants use the kernel keyring). Other GOOS builds compile
-  but every command returns "unsupported platform".
+- Linux and macOS. Other GOOS builds compile but every command returns
+  "unsupported platform". The platform seams are `internal/keyring` (kernel
+  keyring, or the grant agent), `internal/procinfo` (who asked: `/proc`, or
+  sysctl and libproc), and `cmd/platform_*.go` (`harden`, `desktopSession`).
 - Libraries: `filippo.io/age` (including `filippo.io/age/plugin` client
   support for hardware identities), `golang.org/x/sys/unix` (keyctl),
-  `golang.org/x/term`, `github.com/spf13/cobra`. No cgo.
+  `golang.org/x/term`, `github.com/spf13/cobra`. No cgo on linux. On macOS
+  cgo reads a requester's executable and working directory through libproc;
+  a build without it reads the executable from `kern.procargs2` and shows no
+  directory.
 - The request window is a second program, `broker-dialog` (its own module
-  in `broker-dialog/`, cgo with GTK 3 and WebKitGTK 4.1), so `broker`
-  links nothing and `go test ./...` from the root needs no GTK.
+  in `broker-dialog/`, cgo with GTK 3 and WebKitGTK 4.1 on linux, Cocoa and
+  WKWebView on macOS), so `broker` links nothing and `go test ./...` from
+  the root needs no GTK.
 
 ## Tiers (replace v1 scopes)
 
@@ -71,8 +77,12 @@ Key consequences:
 file of one of three kinds, and each kind is a **zone** (`config.Zone`):
 
 - `hardware`: a plugin stub (`AGE-PLUGIN-...`) from `age-plugin-yubikey
-  --identity` or any other age plugin. The stub is kept in config, so
-  unlocking works without the file.
+  --identity`, `age-plugin-se keygen` (Touch ID), or any other age plugin.
+  The stub is kept in config, so unlocking works without the file. When the
+  plugin wrote its recipient in a comment above the stub (`# public key:
+  age1se1...`, `#    Recipient: age1yubikey1...`), config keeps that too and
+  init wraps to it; age-plugin-se cannot derive a recipient from a stub.
+  Otherwise the plugin derives one from the stub.
 - `passphrase`: an identity file encrypted with `age -p` (binary or
   armored). `init` asks for the passphrase through the ClientUI to read the
   recipient; config keeps the path, the recipient, and `"passphrase": true`.
@@ -132,6 +142,30 @@ missing, so "expired" and "never granted" are only distinguishable for that
 window. If the keyring is unavailable (keyctl blocked), `ls` still lists
 secrets, shows none as granted, and says why on stderr.
 
+## Grants on macOS (grant agent)
+
+macOS has no kernel keyring, so `internal/keyring` there is a client for
+`broker grantd`, a per-user agent that holds grants in memory:
+
+- The first `Add` that finds no agent starts one (`keyring.StartAgent`:
+  this executable's `grantd`, in a session of its own) and waits up to 5s
+  for its socket. Reads, lists, and revokes never start one: no agent
+  means no grants.
+- One agent per user: it takes an flock on `run/grantd.lock` (waiting 2s,
+  since an exiting agent holds it briefly), removes a stale socket, and
+  listens on `run/grantd.sock` with umask 077. A runtime directory too deep
+  for sun_path (104 bytes) gets `$TMPDIR/broker-<hash>.sock` instead.
+- One JSON request and response per connection (`add`, `read`, `lookup`,
+  `list`, `revoke`). It checks the peer's uid (`LOCAL_PEERCRED`) and
+  answers only its own user, as the kernel keyring does: any process of
+  that user can read a grant.
+- Each grant has a timer for its exact TTL; at expiry the value is zeroed
+  and dropped. With no grants for 30s the agent exits. Nothing is written
+  to disk, so a reboot forgets every grant.
+- It calls `harden` (`PT_DENY_ATTACH`); the hardened runtime (`codesign -o
+  runtime`) is what stops other processes of the user reading its memory.
+- `ErrExpired` does not exist here: an expired grant reads as not granted.
+
 ## Commands
 
 Human-facing (rare):
@@ -186,7 +220,9 @@ their desktop instead.
   it must not be the agent's descendant: under `kernel.yama.ptrace_scope=1`
   a process may ptrace its descendants. systemd-run makes it a child of the
   user's service manager; it also sets `PR_SET_DUMPABLE=0`, as ssh-agent
-  does. Being outside the agent's process group also keeps the window up
+  does. On macOS (no systemd-run) it starts with `setsid`, and the hardened
+  runtime keeps its memory private whatever its parent; it also sets
+  `PT_DENY_ATTACH`. Being outside the agent's process group also keeps the window up
   if the agent's command is killed; the grant still lands.
 - The approver checks `/proc/PID/exe` is broker before showing anything,
   and reads the requester's cwd and process chain from `/proc` itself, so
@@ -197,11 +233,17 @@ their desktop instead.
   `$XDG_RUNTIME_DIR/broker/request.lock` (or `state/` without one) until
   the deadline, then re-resolves the names, so a queued request often finds
   them granted and shows nothing.
-- What approving takes follows the vault (`approveBy`): `touch` when a
-  hardware unlock exists (unlocking starts as the window opens, so the key
-  blinks and the touch is the approval), `passphrase` (the prompt appears
-  in the window), or `click` for a plain vault, which unlocks with no human
-  and so waits for Approve first. A wrong passphrase is asked for again
+- What approving takes follows the vault (`approveBy`): `touch` when the
+  first hardware unlock is a plugin that needs a human present (yubikey,
+  se, fido2-hmac: unlocking starts as the window opens, so the key blinks
+  or Touch ID asks, and that is the approval), `passphrase` (the prompt
+  appears in the window), or `click` for a plain vault or any other
+  hardware plugin (a TPM without a PIN unlocks with nobody there), which
+  waits for Approve first. `Device` names the plugin, so the window says
+  "Touch your YubiKey" or "Confirm with Touch ID".
+- A request window needs a desktop: `WAYLAND_DISPLAY` or `DISPLAY` on
+  linux, the Aqua login session on macOS (`launchctl managername`; an ssh
+  session is Background). A wrong passphrase is asked for again
   with the error showing; other unlock failures offer Try again; three
   failures end the request. The human may pick a shorter duration (the
   asked one, and 5m, 15m, 1h, 4h below it) until the grant is written.
@@ -395,6 +437,10 @@ useful line in the file).
   the user keyring, which is per uid; a user namespace has its own, so tests
   never touch the real one and leave nothing behind even if they crash.
   Without user namespaces the keyring tests skip.
+- On macOS the same suite runs against real grant agents: each test's
+  `BROKER_HOME` has its own socket, so `keyringtest` isolates by doing
+  nothing, and `keyring.AgentCommand` starts the test binary as broker.
+  `TestGrantd` runs that path on linux too.
 - Request tests run a real `broker approve` subprocess (the test binary)
   against a fake window (the test binary again) that acts out a script
   and logs what it was shown. broker-dialog itself is checked by hand.
