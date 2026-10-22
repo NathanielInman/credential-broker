@@ -76,11 +76,24 @@ ClientUI.
 
 `broker grant NAME... [--for 2h]` (or `--all`): one touch unwraps the private
 identity, decrypts just the named secrets, and stores each value in the
-kernel user keyring as key `broker:secret:<NAME>` with `KEYCTL_SET_TIMEOUT`.
-The private identity itself is never cached. The kernel drops the key at
-expiry; no daemon. Set key permissions so any process of the same uid can
-read it (possessor and user: view/read/search), because agents run in other
-sessions than the human's terminal. Verify this across processes.
+kernel user keyring as `big_key` `broker:secret:<NAME>` with
+`KEYCTL_SET_TIMEOUT`. `big_key` rather than `user` because it holds up to
+1 MiB and keeps large payloads out of the small per-uid key quota
+(`kernel.keys.maxbytes`, 20000 bytes by default). The private identity itself
+is never cached. The kernel drops the key at expiry; no daemon. Keys are
+created in the thread keyring, given their timeout and permissions, then
+linked into the user keyring, so a crash never leaves a timeless secret
+behind and a re-grant replaces the old key atomically. Permissions are
+possessor all plus user view/read/search, so any process of the same uid can
+read the key whether or not it possesses it. The user keyring is per uid,
+not per login session, so agents in other session keyrings see the grant
+(verified: `TestCrossProcess`, `TestGrantVisibleToOtherSession`, and a manual
+check with `keyctl session -` and `setsid` against the real user keyring).
+
+Caveat: user keyrings are per user namespace. A process inside another user
+namespace (bubblewrap, flatpak, and agent sandboxes built on them; bwrap
+always unshares the user namespace when unprivileged) has its own empty user
+keyring and sees no grants. `exec` must run outside such sandboxes.
 
 Default duration comes from config (`default_grant`, initially `1h`); max
 `24h` unless `--force`. `broker revoke [NAME...|--all]` unlinks keys. `ls`
@@ -165,8 +178,12 @@ is the most useful line in the file).
 
 - `BROKER_HOME` in a temp dir plus a plain identity
   (`--insecure-plain-identity`) covers everything but the touch itself.
-- Keyring tests use a fresh session keyring (`keyctl new_session` /
-  `KEYCTL_JOIN_SESSION_KEYRING`) so they never touch the real user keyring.
+- Keyring tests rerun the test binary in a new user namespace mapping only
+  the caller's uid (`keyringtest.Main`), started from a fresh session keyring
+  (`KEYCTL_JOIN_SESSION_KEYRING`). A session keyring alone does not isolate
+  the user keyring, which is per uid; a user namespace has its own, so tests
+  never touch the real one and leave nothing behind even if they crash.
+  Without user namespaces the keyring tests skip.
 - Run Go builds and tests under
   `systemd-run --user --scope -q -p MemoryMax=4G nice -n 19 go test ./...`.
 
