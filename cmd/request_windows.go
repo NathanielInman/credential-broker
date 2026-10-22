@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
-
-	"github.com/NathanielInman/credential-broker/internal/paths"
 )
 
 // newSession starts a child in a process group of its own with a hidden
@@ -25,10 +23,19 @@ func newSession() *syscall.SysProcAttr {
 // lockFile takes an exclusive LockFileEx lock on file, waiting until
 // deadline, and returns its release.
 func lockFile(file string, deadline time.Time) (func(), error) {
-	f, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE, paths.FileMode)
+	name, err := windows.UTF16PtrFromString(file)
 	if err != nil {
 		return nil, err
 	}
+	// FILE_SHARE_DELETE, so a lock held by a running agent never blocks
+	// removing its directory, as it would not on unix.
+	h, err := windows.CreateFile(name, windows.GENERIC_READ|windows.GENERIC_WRITE,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil, windows.OPEN_ALWAYS, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		return nil, err
+	}
+	f := os.NewFile(uintptr(h), file)
 	for {
 		var ol windows.Overlapped
 		err := windows.LockFileEx(windows.Handle(f.Fd()),
