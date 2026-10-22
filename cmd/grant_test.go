@@ -50,6 +50,7 @@ func TestMain(m *testing.M) {
 		}
 	}
 	code := keyringtest.Main(m)
+	stopTestAgents()
 	if home != "" {
 		os.RemoveAll(home)
 	}

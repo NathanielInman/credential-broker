@@ -11,9 +11,10 @@ func checkPlatform() error { return nil }
 
 // harden locks other processes out of this one: its DACL lets this user,
 // and the owner (whose implicit rights would otherwise include changing
-// the DACL back), only query limited information and wait on it. Without
-// PROCESS_VM_READ nobody but an administrator with SeDebugPrivilege can
-// read its memory. Handles opened before, such as the one the starting
+// the DACL back), only query limited information, wait on it, and end it
+// (Task Manager can still stop a stuck agent; that only drops grants).
+// Without PROCESS_VM_READ nobody but an administrator with SeDebugPrivilege
+// can read its memory. Handles opened before, such as the one the starting
 // process holds, keep their access.
 func harden() error {
 	us, err := windows.GetCurrentProcessToken().GetTokenUser()
@@ -24,7 +25,7 @@ func harden() error {
 	if err != nil {
 		return err
 	}
-	const limited = windows.PROCESS_QUERY_LIMITED_INFORMATION | windows.SYNCHRONIZE
+	const limited = windows.PROCESS_QUERY_LIMITED_INFORMATION | windows.SYNCHRONIZE | windows.PROCESS_TERMINATE
 	entry := func(sid *windows.SID, kind windows.TRUSTEE_TYPE) windows.EXPLICIT_ACCESS {
 		return windows.EXPLICIT_ACCESS{
 			AccessPermissions: limited,
