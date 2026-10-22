@@ -17,5 +17,16 @@ func platformInit() {
 	}
 }
 
-// redirectStdout points fd 1 at stderr.
-func redirectStdout() error { return syscall.Dup3(2, 1, 0) }
+// protocolOut keeps the real stdout for the protocol and points fd 1 at
+// stderr, so nothing GTK, WebKit, or Cocoa prints can corrupt it.
+func protocolOut() (*os.File, error) {
+	fd, err := syscall.Dup(1)
+	if err != nil {
+		return nil, err
+	}
+	out := os.NewFile(uintptr(fd), "protocol")
+	if err := syscall.Dup3(2, 1, 0); err != nil {
+		return nil, err
+	}
+	return out, nil
+}

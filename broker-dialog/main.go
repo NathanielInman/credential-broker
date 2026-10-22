@@ -6,17 +6,11 @@
 // stdout. The page (ui.html) holds all the presentation and none of the
 // decisions, and nothing it shows is ever parsed as HTML.
 //
-// It is a separate program so broker itself stays pure Go, with no GTK or
-// WebKit to link. The window is GTK and WebKitGTK on linux (window_linux.c)
-// and Cocoa and WKWebView on macOS (window_darwin.m); both show the same
-// page.
+// It is a separate program so broker itself stays pure Go, with no GUI
+// toolkit to link. The window is GTK and WebKitGTK on linux
+// (window_linux.c), Cocoa and WKWebView on macOS (window_darwin.m), and
+// WebView2 on Windows (window_windows.go); all show the same page.
 package main
-
-/*
-#include <stdlib.h>
-#include "window.h"
-*/
-import "C"
 
 import (
 	"bufio"
@@ -25,8 +19,6 @@ import (
 	"os"
 	"runtime"
 	"sync"
-	"syscall"
-	"unsafe"
 )
 
 //go:embed ui.html
@@ -39,40 +31,45 @@ const (
 	maxMessage = 1 << 20
 )
 
+// window is the platform's request window. run blocks on the GUI thread
+// until quit or the human closes the window; the other methods are safe
+// from any goroutine except resize, which is called on the GUI thread.
+type window interface {
+	run()
+	resize(height int)
+	eval(js string)
+	quit()
+}
+
 var (
-	// proto is the real stdout. fd 1 is pointed at stderr, so nothing GTK
-	// or WebKit prints can corrupt the protocol.
+	// proto is where replies go: the real stdout, kept apart from fd 1 so
+	// nothing a GUI library prints can corrupt the protocol.
 	proto *os.File
 	send  sync.Mutex
 	// replied is set once the window has said deny, so closing it after
-	// does not say it again.
+	// does not say it again. Only the GUI thread touches it.
 	replied bool
 
 	ready     = make(chan struct{})
 	readyOnce sync.Once
+
+	win window
 )
 
 func init() {
-	// GTK must run on the main thread.
+	// GUI toolkits must run on the main thread.
 	runtime.LockOSThread()
 }
 
 func main() {
-	fd, err := syscall.Dup(1)
-	if err != nil {
-		os.Exit(1)
-	}
-	proto = os.NewFile(uintptr(fd), "protocol")
-	if err := redirectStdout(); err != nil {
+	var err error
+	if proto, err = protocolOut(); err != nil {
 		os.Exit(1)
 	}
 	platformInit()
-
-	html := C.CString(page)
-	C.window_create(html, width, height)
-	C.free(unsafe.Pointer(html))
+	win = newWindow(page, width, height)
 	go pump()
-	C.window_run()
+	win.run()
 	// The window is gone. If the human closed it, the deny is already out.
 	send.Lock()
 	proto.Close()
@@ -93,11 +90,9 @@ func pump() {
 		// The line goes in as a JS string literal for the page to parse,
 		// never as code. json.Marshal escapes everything that matters.
 		lit, _ := json.Marshal(string(line))
-		js := C.CString("broker.receive(" + string(lit) + ")")
-		C.window_eval(js)
-		C.free(unsafe.Pointer(js))
+		win.eval("broker.receive(" + string(lit) + ")")
 	}
-	C.window_quit()
+	win.quit()
 }
 
 // reply forwards one line from the page to broker.
@@ -107,9 +102,8 @@ func reply(line string) {
 	_, _ = proto.WriteString(line + "\n")
 }
 
-//export goMessage
-func goMessage(s *C.char) {
-	line := C.GoString(s)
+// onMessage handles one message from the page, on the GUI thread.
+func onMessage(line string) {
 	var m struct {
 		Type   string `json:"type"`
 		Height int    `json:"height"`
@@ -121,9 +115,9 @@ func goMessage(s *C.char) {
 	case "ready":
 		readyOnce.Do(func() { close(ready) })
 	case "size":
-		C.window_resize(C.int(m.Height))
+		win.resize(m.Height)
 	case "exit":
-		C.window_quit()
+		win.quit()
 	case "deny":
 		replied = true
 		reply(line)
@@ -132,8 +126,8 @@ func goMessage(s *C.char) {
 	}
 }
 
-//export goClosed
-func goClosed() {
+// onClosed handles the human closing the window, which is a deny.
+func onClosed() {
 	if !replied {
 		replied = true
 		reply(`{"type":"deny"}`)

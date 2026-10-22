@@ -4,9 +4,23 @@ package main
 // #cgo LDFLAGS: -framework Cocoa -framework WebKit
 import "C"
 
-import "syscall"
+import (
+	"os"
+	"syscall"
+)
 
 func platformInit() {}
 
-// redirectStdout points fd 1 at stderr.
-func redirectStdout() error { return syscall.Dup2(2, 1) }
+// protocolOut keeps the real stdout for the protocol and points fd 1 at
+// stderr, so nothing GTK, WebKit, or Cocoa prints can corrupt it.
+func protocolOut() (*os.File, error) {
+	fd, err := syscall.Dup(1)
+	if err != nil {
+		return nil, err
+	}
+	out := os.NewFile(uintptr(fd), "protocol")
+	if err := syscall.Dup2(2, 1); err != nil {
+		return nil, err
+	}
+	return out, nil
+}

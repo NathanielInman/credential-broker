@@ -90,8 +90,11 @@
 // does. Everything from broker is untrusted text as far as the page goes:
 // it is set with textContent, never parsed as HTML.
 const post = (msg) => {
+  const line = JSON.stringify(msg);
   const h = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.broker;
-  if (h) h.postMessage(JSON.stringify(msg)); else console.log("post", JSON.stringify(msg));
+  if (h) h.postMessage(line); // WebKitGTK and WKWebView
+  else if (window.brokerPost) window.brokerPost(line); // WebView2
+  else console.log("post", line);
 };
 const state = { req: null, prompt: null, status: null, done: null, picked: 0, busy: false };
 
