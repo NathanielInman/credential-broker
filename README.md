@@ -151,23 +151,62 @@ mkdir -p ~/.claude/skills
 ln -s "$PWD/skills/broker" ~/.claude/skills/broker   # from the repo root
 ```
 
+## Unlock strength
+
+The private tier key is wrapped to one or more **unlock identities**, and those decide how safe the vault really is. broker sorts them into three zones and prints the vault's zone at `init` and `restore`. Any one unlock opens the private tier, so a vault is only as strong as its weakest unlock.
+
+```mermaid
+quadrantChart
+    title Unlock zones
+    x-axis Easy --> Annoying
+    y-axis Unprotected --> Protected
+    quadrant-1 Safe but slow
+    quadrant-2 Use this
+    quadrant-3 Tests only
+    quadrant-4 Worst of both
+    Hardware: [0.2, 0.9]
+    Passphrase: [0.75, 0.6]
+    Plain: [0.12, 0.08]
+```
+
+| | hardware | passphrase | plain |
+|---|---|---|---|
+| unlock identity | YubiKey 5 over PIV (`age-plugin-yubikey`) | identity file encrypted with `age -p` | `AGE-SECRET-KEY` file |
+| each grant costs | a touch | typing the passphrase | nothing |
+| on disk | a stub that's useless without the key | scrypt-encrypted key | a key anything running as you can read |
+| agent fakes a terminal and runs `grant` | blocked, nobody touched | blocked, it doesn't know the passphrase | works |
+| the human secret leaks | a PIN alone opens nothing | anyone can unlock, forever | n/a |
+
+Hardware is the only zone where the key can't leave the device, so it's the only one where a leaked PIN isn't enough. A passphrase is the stop-gap for a machine without a YubiKey. It holds up at rest if it's long (let `age -p` generate one), but once it leaks it's done. Plain is for tests.
+
+Two things look like they belong in between and don't. A U2F-only key (older Titan keys: `fido2-token -I` shows `nocbor`) can't derive a key, so it could only be a check inside broker, and anything that reads the vault files directly walks right around a check. A touch on top of a passphrase sounds stronger but isn't, because the passphrase alone still decrypts the file. broker offers neither.
+
 ## Setup
 
-Make an age identity on the YubiKey. The plugin is interactive: pick a new PIV slot, touch policy "always" (or "cached" if you want 15 seconds of grace), and PIN policy "once".
+Pick a zone, make the identity file, and point `init` at it.
+
+**Hardware.** Make an age identity on the YubiKey. The plugin is interactive: pick a new PIV slot, touch policy "always" (or "cached" if you want 15 seconds of grace), and PIN policy "once".
 
 ```sh
 age-plugin-yubikey
 mkdir -p ~/.config/broker
 age-plugin-yubikey --identity > ~/.config/broker/yubikey-identity.txt
-```
-
-That file is a stub that points at the hardware, not a key. Then create the vault:
-
-```sh
 broker init --identity ~/.config/broker/yubikey-identity.txt
 ```
 
-Got a spare YubiKey? Repeat `--identity` for each one and either can unlock the vault. Machines without hardware can use a plain `age-keygen` key with `--insecure-plain-identity`, which is what the tests do.
+That file is a stub that points at the hardware, not a key. Got a spare YubiKey? Repeat `--identity` for each one and either can unlock the vault.
+
+**Passphrase.** Press Enter at age's prompt and it generates a 10 word passphrase for you. Write it down.
+
+```sh
+mkdir -p ~/.config/broker
+age-keygen | age -p -o ~/.config/broker/passphrase-identity.age
+broker init --identity ~/.config/broker/passphrase-identity.age
+```
+
+`init` asks for the passphrase once to read the identity, then `grant`, a private `get`, and `backup` ask every time. Keep the file: the passphrase opens nothing without it. You can add it next to a YubiKey as a spare (broker tries the hardware first and only asks for the passphrase when that fails), but remember that drops the whole vault to the passphrase zone.
+
+**Plain.** A plain `age-keygen` key with `--insecure-plain-identity`. This is what the tests use.
 
 Then store things. `set` reads the value from a hidden prompt (or stdin with `--stdin`), and new secrets are private:
 
@@ -271,6 +310,8 @@ It does not protect against:
 - **A hostile agent holding a live grant.** Any process running as your user can read a granted secret from the keyring, or run `exec` and send the value somewhere instead of printing it. Grants are short for a reason.
 - **Files the child writes.** Redaction covers the child's stdout and stderr only. If the command writes the token to a file, it's in the file.
 - **Transformed values.** The redactor matches exact bytes. A value that comes out base64'd, URL-encoded, or wrapped across two lines isn't caught. Values shorter than 6 bytes aren't redacted at all.
+- **A plain vault.** broker refuses human commands without a terminal, but `script` fakes one in a single line, so on a plain vault an agent can grant itself anything. The touch or the passphrase is what proves a human was there.
+- **A leaked passphrase.** In the passphrase zone it's all it takes, from any machine that has the identity file.
 - **Public secrets.** They're not redacted, by design. Don't put anything in `public` you'd mind seeing in a transcript.
 - **Root, or anything that already owns your user.** It can read process memory, the keyring, and your terminal.
 - **A weak backup passphrase.** Use the generated one.

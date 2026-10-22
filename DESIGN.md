@@ -64,13 +64,35 @@ Key consequences:
 ## Unlock identities
 
 `broker init --identity <file>` (repeatable). Each file is an age identity
-file: a hardware stub from `age-plugin-yubikey --identity` (touch required),
-or any other age plugin identity, or a plain `AGE-SECRET-KEY-` file. Plain
-keys are allowed only with `--insecure-plain-identity` and exist for tests and
-machines without hardware. `init` derives recipients from the identities,
-generates the two tier identities, and wraps the private one. Plugin prompts
-("touch your YubiKey") go to stderr / `/dev/tty` through the age plugin
-ClientUI.
+file of one of three kinds, and each kind is a **zone** (`config.Zone`):
+
+- `hardware`: a plugin stub (`AGE-PLUGIN-...`) from `age-plugin-yubikey
+  --identity` or any other age plugin. The stub is kept in config, so
+  unlocking works without the file.
+- `passphrase`: an identity file encrypted with `age -p` (binary or
+  armored). `init` asks for the passphrase through the ClientUI to read the
+  recipient; config keeps the path, the recipient, and `"passphrase": true`.
+  Unlocking reads the file again and asks again. The identity inside must be
+  X25519 or hybrid; a plugin stub inside is refused.
+- `plain`: an `AGE-SECRET-KEY-` file, allowed only with
+  `--insecure-plain-identity`, for tests.
+
+Any unlock opens the private tier, so the vault's zone is its weakest
+unlock's. `init` and `restore` print each unlock's zone and the vault's.
+Unlocking runs in two rounds: plain and plugin identities first (age tries
+native identities before plugins, so a plain key never prompts), then
+passphrase files, which ask only if the first round failed, so a vault with
+a YubiKey and a spare passphrase file never asks for the passphrase while
+the YubiKey works. A wrong passphrase is reported as such, not as "no
+identity matched".
+
+A U2F-only key is not a zone: it can't derive a key, so it could only be a
+check in broker's code, and the vault files are readable around it. A touch
+added to a passphrase is not one either, since the passphrase alone still
+decrypts the file. `init` derives recipients from the identities, generates
+the two tier identities, and wraps the private one. Plugin prompts ("touch
+your YubiKey") and passphrase prompts go to stderr / `/dev/tty` through the
+age plugin ClientUI.
 
 ## Grants (kernel keyring)
 
