@@ -55,7 +55,7 @@ func TestWrite(t *testing.T) {
 }
 
 func TestEveryCodeHasExitStatus(t *testing.T) {
-	for _, c := range []Code{General, Usage, Unsupported, NotImplemented, NeedsHuman, NoGrant, UnknownSecret} {
+	for _, c := range []Code{General, Usage, Unsupported, NotImplemented, NeedsHuman, NoGrant, UnknownSecret, NoVault, VaultExists} {
 		if _, ok := exitCodes[c]; !ok {
 			t.Errorf("%s has no exit status", c)
 		}
@@ -77,5 +77,11 @@ func TestRequireTTYPipe(t *testing.T) {
 	}
 	if e.ExitCode() != 75 {
 		t.Fatalf("exit %d, want 75", e.ExitCode())
+	}
+}
+
+func TestRequireTTYReader(t *testing.T) {
+	if e := From(RequireTTY(bytes.NewBufferString("x"), "broker set X")); e.Code != NeedsHuman {
+		t.Fatalf("got %v, want needs_human", e)
 	}
 }

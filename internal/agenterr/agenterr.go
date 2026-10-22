@@ -32,6 +32,10 @@ const (
 	NoGrant Code = "no_grant"
 	// UnknownSecret means a requested name is not in the vault.
 	UnknownSecret Code = "unknown_secret"
+	// NoVault means broker init has not been run.
+	NoVault Code = "no_vault"
+	// VaultExists means init would overwrite an existing vault.
+	VaultExists Code = "vault_exists"
 )
 
 // Exit statuses follow sysexits.h where one fits. exec passes the child's
@@ -41,6 +45,8 @@ var exitCodes = map[Code]int{
 	Usage:          64, // EX_USAGE
 	Unsupported:    69, // EX_UNAVAILABLE
 	NotImplemented: 70, // EX_SOFTWARE
+	NoVault:        66, // EX_NOINPUT
+	VaultExists:    73, // EX_CANTCREAT
 	NeedsHuman:     75, // EX_TEMPFAIL: retry once a human has acted
 	NoGrant:        77, // EX_NOPERM
 	UnknownSecret:  78,
@@ -91,10 +97,10 @@ func Write(w io.Writer, err error) int {
 	return e.ExitCode()
 }
 
-// RequireTTY returns a NeedsHuman error carrying askHuman unless f is a
+// RequireTTY returns a NeedsHuman error carrying askHuman unless in is a
 // terminal. Call it before any prompt so agents never block on input.
-func RequireTTY(f *os.File, askHuman string) error {
-	if term.IsTerminal(int(f.Fd())) {
+func RequireTTY(in io.Reader, askHuman string) error {
+	if f, ok := in.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
 		return nil
 	}
 	return &Error{
