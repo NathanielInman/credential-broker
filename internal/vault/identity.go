@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 
 	"filippo.io/age"
@@ -45,9 +46,15 @@ func readIdentityFile(path string, ui *plugin.ClientUI) ([]config.Unlock, []age.
 
 	var unlocks []config.Unlock
 	var ids []age.Identity
+	// noted is the recipient a plugin wrote in a comment above its stub.
+	var noted string
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	for n := 1; sc.Scan(); n++ {
 		line := strings.TrimSpace(sc.Text())
+		if m := recipientComment.FindStringSubmatch(line); m != nil {
+			noted = m[1]
+			continue
+		}
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -59,8 +66,9 @@ func readIdentityFile(path string, ui *plugin.ClientUI) ([]config.Unlock, []age.
 			if err != nil {
 				return nil, nil, fmt.Errorf("%s line %d: %w", path, n, err)
 			}
-			unlocks = append(unlocks, config.Unlock{Path: path, Identity: line})
+			unlocks = append(unlocks, config.Unlock{Path: path, Identity: line, Recipient: noted})
 			ids = append(ids, id)
+			noted = ""
 			continue
 		}
 		parsed, err := age.ParseIdentities(strings.NewReader(line))
@@ -87,6 +95,11 @@ func readIdentityFile(path string, ui *plugin.ClientUI) ([]config.Unlock, []age.
 	}
 	return unlocks, ids, nil
 }
+
+// recipientComment matches the recipient a plugin writes beside its stub:
+// "# public key: age1se1..." (age-plugin-se) or "#    Recipient: age1yubikey1..."
+// (age-plugin-yubikey).
+var recipientComment = regexp.MustCompile(`^#\s*(?i:public key|recipient):\s*(age1[0-9a-z]+)\s*$`)
 
 // isEncrypted reports whether data is an age file (binary or armored)
 // rather than an identity file.
@@ -157,12 +170,20 @@ func (p *passphraseIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 }
 
 // unlockRecipients returns the recipients to wrap the private identity to.
-// Plugin stubs are used as recipients directly (the plugin derives the
-// public key without a touch); plain and passphrase identities use their
-// stored recipient.
+// A plugin stub uses the recipient its plugin wrote beside it, or else the
+// stub itself, from which the plugin derives the public key (no touch
+// either way); plain and passphrase identities use their stored recipient.
 func unlockRecipients(unlocks []config.Unlock, ui *plugin.ClientUI) ([]age.Recipient, error) {
 	var rs []age.Recipient
 	for _, u := range unlocks {
+		if u.Zone() == config.ZoneHardware && u.Recipient != "" {
+			r, err := plugin.NewRecipient(u.Recipient, ui)
+			if err != nil {
+				return nil, fmt.Errorf("unlock recipient for %s: %w", u.Path, err)
+			}
+			rs = append(rs, r)
+			continue
+		}
 		if u.Zone() == config.ZoneHardware {
 			id, err := plugin.NewIdentity(u.Identity, ui)
 			if err != nil {

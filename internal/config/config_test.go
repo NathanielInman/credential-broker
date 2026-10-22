@@ -61,3 +61,16 @@ func TestLoadMissing(t *testing.T) {
 		t.Fatalf("got %v, want ErrNotExist", err)
 	}
 }
+
+func TestUnlockPlugin(t *testing.T) {
+	for stub, want := range map[string]string{
+		"AGE-PLUGIN-YUBIKEY-1QYQSZQGPQYQSZQGP": "yubikey",
+		"AGE-PLUGIN-SE-1QJPQZLE3SGQHKVYP75X6K": "se",
+		"AGE-PLUGIN-FIDO2-HMAC-1QQPQZQGPQYQS":  "fido2-hmac",
+		"":                                     "",
+	} {
+		if got := (Unlock{Identity: stub}).Plugin(); got != want {
+			t.Errorf("Plugin(%q) = %q, want %q", stub, got, want)
+		}
+	}
+}

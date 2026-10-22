@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/NathanielInman/credential-broker/internal/paths"
 )
@@ -26,16 +27,18 @@ type Config struct {
 	Unlock []Unlock `json:"unlock"`
 }
 
-// Unlock is one identity that can unwrap the private tier identity. Exactly
-// one of Identity and Recipient is set.
+// Unlock is one identity that can unwrap the private tier identity: a
+// plugin stub (Identity), or a plain or passphrase file (Recipient only).
 type Unlock struct {
 	// Path is the identity file given to init.
 	Path string `json:"path"`
 	// Identity is a plugin identity stub (AGE-PLUGIN-...). Stubs only point
 	// at hardware, so they are kept here and unlock works without Path.
 	Identity string `json:"identity,omitempty"`
-	// Recipient belongs to a plain or passphrase identity. The key itself
-	// is never copied: unlocking reads it from Path again.
+	// Recipient belongs to a plain or passphrase identity; the key itself
+	// is never copied, and unlocking reads it from Path again. With a
+	// plugin stub it is the recipient the plugin wrote beside the stub
+	// ("# public key: age1se1..."), for plugins that cannot derive one.
 	Recipient string `json:"recipient,omitempty"`
 	// Passphrase marks a Path that is encrypted with a passphrase (age -p).
 	Passphrase bool `json:"passphrase,omitempty"`
@@ -55,6 +58,19 @@ const (
 	// user can read it and unlock.
 	ZonePlain Zone = "plain"
 )
+
+// Plugin is the age plugin a hardware unlock uses ("yubikey", "se"), or
+// "" for any other unlock. A stub is Bech32 with the HRP
+// "AGE-PLUGIN-<NAME>-", and the data alphabet has no '1', so the last '1'
+// ends the HRP.
+func (u Unlock) Plugin() string {
+	i := strings.LastIndexByte(u.Identity, '1')
+	if u.Identity == "" || i < 0 {
+		return ""
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(u.Identity[:i], "AGE-PLUGIN-"), "-")
+	return strings.ToLower(name)
+}
 
 // zoneRank orders zones from weakest to strongest.
 var zoneRank = map[Zone]int{ZonePlain: 0, ZonePassphrase: 1, ZoneHardware: 2}

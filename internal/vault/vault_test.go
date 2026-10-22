@@ -44,6 +44,9 @@ func runTestPlugin() int {
 	p.HandleIdentity(func(data []byte) (age.Identity, error) {
 		return age.ParseX25519Identity(string(data))
 	})
+	p.HandleRecipient(func(data []byte) (age.Recipient, error) {
+		return age.ParseX25519Recipient(string(data))
+	})
 	p.HandleIdentityAsRecipient(func(data []byte) (age.Recipient, error) {
 		id, err := age.ParseX25519Identity(string(data))
 		if err != nil {
@@ -605,5 +608,36 @@ func TestPassphraseFileWithPluginRefused(t *testing.T) {
 	asked := 0
 	if _, err := Init(testPaths(t), []string{file}, InitOptions{UI: passUI("correct horse", &asked)}); err == nil {
 		t.Fatal("want error for a plugin stub inside a passphrase file")
+	}
+}
+
+func TestPluginRecipientComment(t *testing.T) {
+	installTestPlugin(t)
+	hw, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// As age-plugin-se writes it: the recipient in a comment above the stub.
+	recipient := plugin.EncodeRecipient(testPlugin, []byte(hw.Recipient().String()))
+	stub := plugin.EncodeIdentity(testPlugin, []byte(hw.String()))
+	file := writeIdentity(t, "# created: now\n# access control: any biometry\n# public key: "+recipient+"\n"+stub+"\n")
+
+	v, err := Init(testPaths(t), []string{file}, InitOptions{UI: testUI})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := v.Config().Unlock
+	if len(u) != 1 || u[0].Identity != stub || u[0].Recipient != recipient || u[0].Plugin() != testPlugin {
+		t.Fatalf("unlock entries %+v", u)
+	}
+	if _, err := v.Set("X", []byte("value"), SetOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	priv, err := v.UnlockPrivate(testUI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := v.Decrypt("X", priv); err != nil || string(got) != "value" {
+		t.Fatalf("got %q, %v", got, err)
 	}
 }
