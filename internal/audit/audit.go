@@ -8,14 +8,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/NathanielInman/credential-broker/internal/paths"
+	"github.com/NathanielInman/credential-broker/internal/procinfo"
 )
 
 type Action string
@@ -159,49 +158,6 @@ func read(r io.Reader, keep func(Entry) bool) ([]Line, int, error) {
 	return out, bad, sc.Err()
 }
 
-// maxDepth guards the ancestry walk against a cycle from reused pids.
-const maxDepth = 128
-
 // Ancestry returns the command names of pid and each of its ancestors up
-// to pid 1, read from /proc/<pid>/stat: ["broker","bash","claude",...].
-// It stops early, keeping what it has, if a process exits mid-walk. It is
-// nil where there is no /proc.
-func Ancestry(pid int) []string {
-	var chain []string
-	for depth := 0; pid > 0 && depth < maxDepth; depth++ {
-		stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-		if err != nil {
-			break
-		}
-		comm, ppid, err := parseStat(stat)
-		if err != nil {
-			break
-		}
-		chain = append(chain, comm)
-		if ppid == pid {
-			break
-		}
-		pid = ppid
-	}
-	return chain
-}
-
-// parseStat reads comm and ppid from a /proc/<pid>/stat line:
-// "pid (comm) state ppid ...". comm may itself hold spaces and
-// parentheses, so it runs to the last ')'.
-func parseStat(stat []byte) (string, int, error) {
-	open := bytes.IndexByte(stat, '(')
-	end := bytes.LastIndexByte(stat, ')')
-	if open < 0 || end < open {
-		return "", 0, fmt.Errorf("malformed stat %q", stat)
-	}
-	fields := bytes.Fields(stat[end+1:])
-	if len(fields) < 2 {
-		return "", 0, fmt.Errorf("malformed stat %q", stat)
-	}
-	ppid, err := strconv.Atoi(string(fields[1]))
-	if err != nil {
-		return "", 0, fmt.Errorf("malformed stat %q", stat)
-	}
-	return string(stat[open+1 : end]), ppid, nil
-}
+// to pid 1: ["broker","bash","claude",...]. See procinfo.Ancestry.
+func Ancestry(pid int) []string { return procinfo.Ancestry(pid) }
