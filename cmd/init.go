@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/NathanielInman/credential-broker/internal/audit"
 	"github.com/NathanielInman/credential-broker/internal/paths"
 	"github.com/NathanielInman/credential-broker/internal/vault"
 )
@@ -17,7 +18,8 @@ func newInitCmd() *cobra.Command {
 		Short:   "Create the vault, wrapped to one or more unlock identities",
 		GroupID: groupHuman,
 		Args:    usageArgs(cobra.NoArgs),
-		RunE: func(c *cobra.Command, _ []string) error {
+		RunE: func(c *cobra.Command, _ []string) (err error) {
+			defer func() { record(c, audit.Entry{Action: audit.Init}, err) }()
 			p, err := paths.Resolve()
 			if err != nil {
 				return err

@@ -53,7 +53,6 @@ func TestStubsNotImplemented(t *testing.T) {
 		{"import", "env"},
 		{"backup", "-o", "b.age"},
 		{"restore", "b.age"},
-		{"log", "--json"},
 	} {
 		t.Run(args[0], func(t *testing.T) {
 			_, stderr, code := runBroker(t, args...)

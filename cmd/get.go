@@ -4,6 +4,7 @@ import (
 	"filippo.io/age"
 	"github.com/spf13/cobra"
 
+	"github.com/NathanielInman/credential-broker/internal/audit"
 	"github.com/NathanielInman/credential-broker/internal/vault"
 )
 
@@ -16,8 +17,10 @@ func newGetCmd() *cobra.Command {
 			"grants are for exec only.",
 		GroupID: groupHuman,
 		Args:    usageArgs(cobra.ExactArgs(1)),
-		RunE: func(c *cobra.Command, args []string) error {
+		RunE: func(c *cobra.Command, args []string) (err error) {
 			name := args[0]
+			e := audit.Entry{Action: audit.Get, Names: args}
+			defer func() { record(c, e, err) }()
 			if err := vault.ValidateName(name); err != nil {
 				return err
 			}
@@ -29,6 +32,7 @@ func newGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			e.Tier = string(s.Tier)
 			var id age.Identity
 			if s.Tier == vault.Private {
 				if err := requireTTY(c.InOrStdin(), "broker get "+name); err != nil {

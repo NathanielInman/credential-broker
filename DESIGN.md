@@ -167,12 +167,36 @@ Agent-facing (frequent, no prompts ever):
 
 ## Audit log
 
-One JSON object per line: `ts`, `action` (`set|rm|grant|revoke|get|exec|import|backup|restore`),
-`names`, `tier`, `ok`, `error`, `cwd`, `cmd` (exec's child argv[0] only),
-`pid`, and `ancestry`: the process chain from `/proc/<pid>/stat` + `comm`
-up to pid 1, e.g. `["broker","bash","claude","zsh","alacritty"]`, so it shows
-which agent asked. Never log values. Log failures too (a denied `no_grant`
-is the most useful line in the file).
+One JSON object per line: `ts`, `action` (`init|set|rm|grant|revoke|get|exec|import|backup|restore`),
+`names`, `tier`, `for` (a grant's duration), `ok`, `error`, `cwd`, `cmd`
+(exec's child argv[0] only), `pid`, and `ancestry`: the process chain from
+`/proc/<pid>/stat` + `comm` up to pid 1, e.g.
+`["broker","bash","claude","zsh","alacritty"]`, so it shows which agent
+asked. Never log values. Log failures too (a denied `no_grant` is the most
+useful line in the file).
+
+- `tier` is the names' tier, `mixed` when they span both, and absent when
+  none is known (an unknown name). `error` is the agenterr code. Empty
+  `names`, `tier`, `for`, `error`, and `cmd` are left out.
+- `ls` and `log` are not logged. Flag and argument errors cobra catches
+  before a command runs are not logged; everything after is.
+- grant logs the private secrets it grants (by name, also with `--all`);
+  revoke logs the names it revoked.
+- exec logs once, before the child starts (it may run for hours): `ok`
+  means the secrets were handed to the child. The child's exit status is
+  not logged.
+- Each line is one `O_APPEND` write under an exclusive `flock`, so
+  concurrent brokers never interleave lines. The lock wait is bounded (1s)
+  so a stopped broker cannot stall the rest; after that the write goes
+  ahead unlocked. A line cut short (full disk) is skipped on read and does
+  not swallow the next one.
+- Logging is best effort: if the line cannot be written, broker prints
+  `broker: audit log not written: ...` on stderr (before any JSON error
+  line) and the command's outcome is unchanged.
+- `broker log` prints a table (time, action, result, tier, names, exec's
+  cmd or grant's duration, and the ancestry above broker). `--since DUR`
+  keeps entries newer than DUR, `--name NAME` those naming NAME, and
+  `--json` prints the matching lines as written.
 
 ## Backup and restore
 

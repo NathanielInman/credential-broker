@@ -12,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/NathanielInman/credential-broker/internal/agenterr"
+	"github.com/NathanielInman/credential-broker/internal/audit"
 	"github.com/NathanielInman/credential-broker/internal/keyring"
 	"github.com/NathanielInman/credential-broker/internal/proc"
 	"github.com/NathanielInman/credential-broker/internal/redact"
@@ -31,11 +32,18 @@ func newExecCmd() *cobra.Command {
 		RunE: func(c *cobra.Command, args []string) error {
 			dash := c.ArgsLenAtDash()
 			names, argv := args[:dash], args[dash:]
+			// The entry goes in before the child runs, which may take hours:
+			// ok means its secrets were handed out. The child's own exit
+			// status is not logged.
+			e := audit.Entry{Action: audit.Exec, Names: names, Cmd: argv[0]}
 			v, err := openVault()
 			if err != nil {
+				record(c, e, err)
 				return err
 			}
+			e.Tier = tierOf(v, names)
 			secrets, err := resolve(v, names)
+			record(c, e, err)
 			if err != nil {
 				return err
 			}

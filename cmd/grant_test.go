@@ -21,6 +21,16 @@ func TestMain(m *testing.M) {
 	if os.Getenv(envBroker) != "" {
 		os.Exit(Execute("test"))
 	}
+	// Every test sets its own BROKER_HOME; this catches any that forget,
+	// so none writes to the real vault or audit log.
+	var home string
+	if os.Getenv("BROKER_HOME") == "" {
+		var err error
+		if home, err = os.MkdirTemp("", "broker-test-"); err != nil {
+			panic(err)
+		}
+		os.Setenv("BROKER_HOME", home)
+	}
 	if !keyringtest.Isolated() {
 		// keyringtest.Main reruns the tests isolated, or runs them right
 		// here if it cannot. Either way this copy keeps off the real keyring.
@@ -28,7 +38,11 @@ func TestMain(m *testing.M) {
 			return nil, errors.New("user keyring is not isolated in tests")
 		}
 	}
-	os.Exit(keyringtest.Main(m))
+	code := keyringtest.Main(m)
+	if home != "" {
+		os.RemoveAll(home)
+	}
+	os.Exit(code)
 }
 
 // grantVault is seedVault with an isolated keyring, revoking every grant

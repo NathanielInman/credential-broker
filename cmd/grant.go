@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/NathanielInman/credential-broker/internal/agenterr"
+	"github.com/NathanielInman/credential-broker/internal/audit"
 	"github.com/NathanielInman/credential-broker/internal/config"
 	"github.com/NathanielInman/credential-broker/internal/keyring"
 	"github.com/NathanielInman/credential-broker/internal/vault"
@@ -28,7 +29,9 @@ func newGrantCmd() *cobra.Command {
 		Use:     "grant NAME... | --all",
 		Short:   "Let exec use private secrets for a while (one touch)",
 		GroupID: groupHuman,
-		RunE: func(c *cobra.Command, names []string) error {
+		RunE: func(c *cobra.Command, names []string) (err error) {
+			e := audit.Entry{Action: audit.Grant, Names: names}
+			defer func() { record(c, e, err) }()
 			if all == (len(names) > 0) {
 				return agenterr.New(agenterr.Usage, "grant takes NAME... or --all")
 			}
@@ -40,9 +43,16 @@ func newGrantCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			e.For = shortDuration(ttl)
 			secrets, err := grantable(c, v, names, all)
 			if err != nil || len(secrets) == 0 {
 				return err
+			}
+			// Log what is granted: only private secrets, and with --all,
+			// each of them by name.
+			e.Names, e.Tier = nil, string(vault.Private)
+			for _, s := range secrets {
+				e.Names = append(e.Names, s.Name)
 			}
 
 			ask := "broker grant " + strings.Join(names, " ")
@@ -164,7 +174,9 @@ func newRevokeCmd() *cobra.Command {
 		Use:     "revoke NAME... | --all",
 		Short:   "Drop grants before they expire",
 		GroupID: groupHuman,
-		RunE: func(c *cobra.Command, names []string) error {
+		RunE: func(c *cobra.Command, names []string) (err error) {
+			e := audit.Entry{Action: audit.Revoke, Names: names}
+			defer func() { record(c, e, err) }()
 			if all == (len(names) > 0) {
 				return agenterr.New(agenterr.Usage, "revoke takes NAME... or --all")
 			}
@@ -185,6 +197,7 @@ func newRevokeCmd() *cobra.Command {
 				for _, g := range grants {
 					names = append(names, g.Name)
 				}
+				e.Names = names
 			}
 
 			out := c.OutOrStdout()

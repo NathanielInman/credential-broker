@@ -10,6 +10,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/NathanielInman/credential-broker/internal/agenterr"
+	"github.com/NathanielInman/credential-broker/internal/audit"
 	"github.com/NathanielInman/credential-broker/internal/vault"
 )
 
@@ -21,8 +22,10 @@ func newSetCmd() *cobra.Command {
 		Short:   "Store a secret from a hidden prompt or stdin",
 		GroupID: groupHuman,
 		Args:    usageArgs(cobra.ExactArgs(1)),
-		RunE: func(c *cobra.Command, args []string) error {
+		RunE: func(c *cobra.Command, args []string) (err error) {
 			name := args[0]
+			e := audit.Entry{Action: audit.Set, Names: []string{name}}
+			defer func() { record(c, e, err) }()
 			if public && private {
 				return agenterr.New(agenterr.Usage, "--public and --private are exclusive")
 			}
@@ -52,6 +55,7 @@ func newSetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			e.Tier = string(s.Tier)
 			fmt.Fprintf(c.OutOrStdout(), "stored %s in the %s tier\n", s.Name, s.Tier)
 			return nil
 		},
@@ -91,11 +95,14 @@ func newRmCmd() *cobra.Command {
 		Short:   "Delete a secret",
 		GroupID: groupHuman,
 		Args:    usageArgs(cobra.ExactArgs(1)),
-		RunE: func(c *cobra.Command, args []string) error {
+		RunE: func(c *cobra.Command, args []string) (err error) {
+			e := audit.Entry{Action: audit.Rm, Names: args}
+			defer func() { record(c, e, err) }()
 			v, err := openVault()
 			if err != nil {
 				return err
 			}
+			e.Tier = tierOf(v, args)
 			if err := v.Remove(args[0]); err != nil {
 				return err
 			}
