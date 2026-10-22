@@ -237,7 +237,7 @@ broker init --identity ~/.config/broker/yubikey-identity.txt
 
 That file is a stub that points at the hardware, not a key. Got a spare YubiKey? Repeat `--identity` for each one and either can unlock the vault.
 
-On a Mac, Touch ID is the same zone with no extra hardware. `any-biometry` means a fingerprint and nothing else; the plugin's default also accepts your login password.
+On a Mac, Touch ID is the same zone with no extra hardware. `any-biometry` means a fingerprint and nothing else, so it needs one enrolled in Touch ID first; without one, keygen fails with "Authentication failure". The plugin's default, `any-biometry-or-passcode`, also accepts your login password.
 
 ```sh
 mkdir -p ~/.config/broker
