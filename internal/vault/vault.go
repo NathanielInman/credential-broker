@@ -113,33 +113,12 @@ func Init(p paths.Paths, identityFiles []string, opts InitOptions) (*Vault, erro
 	if len(identityFiles) == 0 {
 		return nil, agenterr.New(agenterr.Usage, "init needs at least one --identity FILE")
 	}
-	for _, f := range []string{p.ConfigFile(), p.PublicKey(), p.PrivateKey()} {
-		if _, err := os.Lstat(f); err == nil {
-			return nil, agenterr.New(agenterr.VaultExists, "a vault already exists (%s)", f)
-		}
+	if f := Existing(p); f != "" {
+		return nil, agenterr.New(agenterr.VaultExists, "a vault already exists (%s)", f)
 	}
-
-	var unlocks []config.Unlock
-	seen := map[config.Unlock]bool{}
-	for _, f := range identityFiles {
-		abs, err := filepath.Abs(f)
-		if err != nil {
-			return nil, err
-		}
-		us, _, err := readIdentityFile(abs, opts.UI)
-		if err != nil {
-			return nil, err
-		}
-		for _, u := range us {
-			if u.Plain() && !opts.AllowPlain {
-				return nil, agenterr.New(agenterr.Usage,
-					"%s holds a plain AGE-SECRET-KEY identity, which unlocks without a touch; pass --insecure-plain-identity to allow it", abs)
-			}
-			if !seen[u] {
-				seen[u] = true
-				unlocks = append(unlocks, u)
-			}
-		}
+	unlocks, err := loadUnlocks(identityFiles, opts.AllowPlain, opts.UI)
+	if err != nil {
+		return nil, err
 	}
 
 	pub, err := age.GenerateX25519Identity()
@@ -182,6 +161,45 @@ func Init(p paths.Paths, identityFiles []string, opts InitOptions) (*Vault, erro
 		return nil, err
 	}
 	return &Vault{paths: p, cfg: cfg}, nil
+}
+
+// Existing returns a file showing there is a vault at p (even a broken or
+// half-made one), or "" if there is none.
+func Existing(p paths.Paths) string {
+	for _, f := range []string{p.ConfigFile(), p.PublicKey(), p.PrivateKey()} {
+		if _, err := os.Lstat(f); err == nil {
+			return f
+		}
+	}
+	return ""
+}
+
+// loadUnlocks reads identityFiles into unlock entries, dropping duplicates.
+// Plain identities are refused unless allowPlain.
+func loadUnlocks(identityFiles []string, allowPlain bool, ui *plugin.ClientUI) ([]config.Unlock, error) {
+	var unlocks []config.Unlock
+	seen := map[config.Unlock]bool{}
+	for _, f := range identityFiles {
+		abs, err := filepath.Abs(f)
+		if err != nil {
+			return nil, err
+		}
+		us, _, err := readIdentityFile(abs, ui)
+		if err != nil {
+			return nil, err
+		}
+		for _, u := range us {
+			if u.Plain() && !allowPlain {
+				return nil, agenterr.New(agenterr.Usage,
+					"%s holds a plain AGE-SECRET-KEY identity, which unlocks without a touch; pass --insecure-plain-identity to allow it", abs)
+			}
+			if !seen[u] {
+				seen[u] = true
+				unlocks = append(unlocks, u)
+			}
+		}
+	}
+	return unlocks, nil
 }
 
 // UnlockPrivate unwraps the private tier identity. With a hardware unlock
