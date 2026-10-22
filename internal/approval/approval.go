@@ -197,9 +197,16 @@ func (s *Session) read(r io.Reader) {
 			s.end(ErrDenied)
 			return
 		case "value":
-			select {
-			case s.values <- rep:
-			default:
+			// Only an answer to the prompt now showing is queued, so a
+			// stale one can never crowd it out of the one-slot channel.
+			s.mu.Lock()
+			current := rep.ID == s.promptID
+			s.mu.Unlock()
+			if current {
+				select {
+				case s.values <- rep:
+				default:
+				}
 			}
 		case "for":
 			s.pick(rep.For)
