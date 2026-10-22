@@ -5,6 +5,7 @@ package cmd
 import (
 	"errors"
 	"os"
+	"syscall"
 	"testing"
 	"time"
 
@@ -45,5 +46,38 @@ func TestGrantd(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	if v, err := c.Read("API_TOKEN"); err != nil || string(v) != "token-value" {
 		t.Fatalf("Read after a second start = %q, %v", v, err)
+	}
+}
+
+// TestGrantdSignal checks a signalled agent removes its socket, as an idle
+// one does.
+func TestGrantdSignal(t *testing.T) {
+	t.Setenv("BROKER_HOME", t.TempDir())
+	p, err := paths.Resolve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd, err := keyring.AgentCommand()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for _, err := os.Stat(p.GrantSocket()); err != nil; _, err = os.Stat(p.GrantSocket()) {
+		if time.Now().After(deadline) {
+			t.Fatal("agent never listened")
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("agent exit: %v", err)
+	}
+	if _, err := os.Stat(p.GrantSocket()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("socket left behind: %v", err)
 	}
 }

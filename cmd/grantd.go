@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"os/signal"
 	"syscall"
 	"time"
 
@@ -58,6 +59,16 @@ func newGrantdCmd() *cobra.Command {
 				return err
 			}
 			defer os.Remove(sock)
+			// A signal shuts it down as cleanly as going idle does: the
+			// listener's close removes the socket.
+			sig := make(chan os.Signal, 1)
+			signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+			defer signal.Stop(sig)
+			go func() {
+				if _, ok := <-sig; ok {
+					ln.Close()
+				}
+			}()
 			return keyring.Serve(ln, grantdIdle)
 		},
 	}
