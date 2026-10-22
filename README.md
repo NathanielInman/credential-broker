@@ -2,12 +2,12 @@
 
 # Credential Broker
 
-A local secret store for a machine where AI agents do most of the typing. Agents run commands **with** your secrets and never see them. You authorize with a YubiKey touch, and the kernel forgets the grant when it expires.
+A local secret store for a machine where AI agents do most of the typing. Agents run commands **with** your secrets and never see them. When one needs a secret, a window pops up on your desktop saying who's asking and why, you touch your YubiKey, and the kernel forgets the grant when it expires.
 
 ```sh
-broker ls --json                                 # agent: what secrets exist (names, never values)
-broker exec GITHUB_TOKEN -- gh repo list         # agent: run a command with one
-broker grant GITHUB_TOKEN --for 2h               # you: one touch when the agent asks
+broker ls --json                                  # agent: what secrets exist (names, never values)
+broker exec --request GITHUB_TOKEN -- gh repo list  # agent: run a command with one, asking you if needed
+broker grant GITHUB_TOKEN --for 2h                # you, from a terminal instead of the window
 ```
 
 There's no server, no daemon, and no account. Secrets are plain [age](https://age-encryption.org) files on disk, grants live in the Linux kernel keyring with a timeout, and every read lands in an audit log with the process tree that asked for it.
@@ -100,27 +100,40 @@ user=nate pass=[REDACTED:DB_PASS]
 
 ### When there's no grant
 
-Agents never do auth. If a private secret isn't granted, `exec` refuses before running anything, exits 77, and prints one JSON line telling the agent exactly what to ask you for. Multiple missing names come back as a single ask, so it's one touch.
+Agents never do auth. If a private secret isn't granted, plain `exec` refuses before running anything, exits 77, and prints one JSON line telling the agent exactly what to ask you for.
 
 ```console
 $ broker exec GITHUB_TOKEN DB_PASS -- ./deploy.sh
 {"error":"no_grant","names":["GITHUB_TOKEN","DB_PASS"],"ask_human":"broker grant GITHUB_TOKEN DB_PASS --for 1h"}
 ```
 
+That works when you have a terminal next to the agent's. In something like T3 you never see the agent's terminal, so `exec --request` (or `broker request` on its own) asks you in a **request window** instead:
+
+![The request window](./artwork/request-window.png)
+
+Everything in the window except the yellow box is something broker worked out itself: the secrets and their descriptions, the process chain and directory (read from `/proc`, not from the agent), and the command it will run. The yellow box is the agent's `--reason`, labeled as its word. You can pick a shorter duration before approving. What approving takes depends on the [unlock zone](#unlock-strength): touch the key on a hardware vault, type the passphrase into the window on a passphrase vault, or click Approve on a plain one. Deny, Escape, or closing the window all say no, and the agent gets `denied` and is told not to ask again. Nobody answering within 2 minutes gets it `request_timeout`.
+
 ```mermaid
 sequenceDiagram
     actor H as Human
     participant A as Agent
-    participant B as broker
-    A->>B: broker exec GITHUB_TOKEN DB_PASS -- ./deploy.sh
-    B-->>A: exit 77, no_grant with ask_human
-    A->>H: please run broker grant GITHUB_TOKEN DB_PASS --for 1h
-    H->>B: broker grant GITHUB_TOKEN DB_PASS --for 1h
-    Note over H,B: one touch
-    H->>A: done
-    A->>B: broker exec GITHUB_TOKEN DB_PASS -- ./deploy.sh
+    participant B as broker request
+    participant P as broker approve
+    participant Y as YubiKey
+    A->>B: broker exec --request --reason "..." GITHUB_TOKEN -- ./deploy.sh
+    B->>P: systemd-run --user (not the agent's child)
+    P->>H: request window: names, who asked, command, reason
+    P->>Y: unwrap the private tier key
+    Y-->>H: blinks
+    H->>Y: touch
+    P->>P: grant, timeout 1h
+    P-->>B: granted
     B-->>A: deploy output (redacted) and its exit status
 ```
+
+The approver holds the unwrapped private tier key, so it never runs as the agent's child. On Linux a process can read the memory of its own descendants (`kernel.yama.ptrace_scope=1`), so `request` starts the approver through `systemd-run --user`, as a child of your service manager, and the approver marks itself non-dumpable the way ssh-agent does. That also keeps the window up if the agent's shell command times out: approve anyway and the agent's next `exec` finds the grant. One window shows at a time; a second request waits behind it, and usually finds its names granted by the time it gets a turn.
+
+If there's no desktop session or broker-dialog isn't installed, `--request` falls back to the plain `no_grant` line above.
 
 Every failure an agent can hit has a stable `error` code. The full table is in the [agent skill](./skills/broker/SKILL.md).
 
@@ -141,6 +154,15 @@ git clone https://github.com/NathanielInman/credential-broker
 cd credential-broker
 go build -o ~/.local/bin/broker .
 ```
+
+The request window is a separate program, `broker-dialog`, so broker itself stays pure Go with nothing to link. It needs GTK 3 and WebKitGTK 4.1, and goes next to `broker`:
+
+```sh
+sudo pacman -S gtk3 webkit2gtk-4.1     # Debian/Ubuntu: libgtk-3-dev libwebkit2gtk-4.1-dev
+(cd broker-dialog && go build -o ~/.local/bin/broker-dialog .)
+```
+
+It has a fixed size, which Hyprland and most tiling compositors already float. Its Wayland app id is `broker` if you want a rule anyway (`windowrulev2 = float, class:^(broker)$`).
 
 ### Agent skill
 
@@ -312,6 +334,7 @@ It does not protect against:
 - **Transformed values.** The redactor matches exact bytes. A value that comes out base64'd, URL-encoded, or wrapped across two lines isn't caught. Values shorter than 6 bytes aren't redacted at all.
 - **A plain vault.** broker refuses human commands without a terminal, but `script` fakes one in a single line, so on a plain vault an agent can grant itself anything. The touch or the passphrase is what proves a human was there.
 - **A leaked passphrase.** In the passphrase zone it's all it takes, from any machine that has the identity file.
+- **A fake request window.** A hostile agent can draw its own look-alike window. On a passphrase vault that phishes the passphrase. On a hardware vault there's nothing to type, but if the agent starts its own unlock at the same moment, your touch completes that unlock instead of the one you think you're approving.
 - **Public secrets.** They're not redacted, by design. Don't put anything in `public` you'd mind seeing in a transcript.
 - **Root, or anything that already owns your user.** It can read process memory, the keyring, and your terminal.
 - **A weak backup passphrase.** Use the generated one.
@@ -355,11 +378,14 @@ broker set NAME [--public|--private]      # Store a secret from a hidden prompt 
            [--desc TEXT] [--stdin]
 ```
 
-### Agent commands (never prompt)
+### Agent commands (never prompt in the terminal)
 
 ```sh
 broker exec NAME... -- CMD [ARGS...]      # Run CMD with secrets in its environment, redacting its output
+            [--request [--reason TEXT]]   #   asking for missing grants in the request window first
 broker ls [--json]                        # List secrets, tiers, descriptions, and grants (never values)
+broker request NAME... [--for DUR]        # Ask for grants in the request window and wait for an answer
+               [--reason TEXT] [--timeout DUR]
 ```
 
 If an agent runs something that needs a prompt or a touch (`set` without `--stdin`, `grant`, a private `get`, `backup`, `restore`), it fails at once with `needs_human` and the exact command to hand you, instead of waiting on a prompt nobody will answer.

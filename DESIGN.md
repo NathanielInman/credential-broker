@@ -11,7 +11,8 @@ active grant.
 - Nothing is ambient. Secrets live in no shell rc file and no global env.
 - Agents run commands with secrets; they do not read secrets.
 - Intent comes from a human touching a hardware key. Agents never do auth
-  ceremony; they get a structured error telling them what to ask the human.
+  ceremony: they get a structured error telling them what to ask the human,
+  or ask for them through the request window.
 - Every read is logged with which process tree asked.
 - Storage is plain `age` files, so the vault stays recoverable with the
   stock `age` CLI even if this tool disappears.
@@ -24,6 +25,9 @@ active grant.
 - Libraries: `filippo.io/age` (including `filippo.io/age/plugin` client
   support for hardware identities), `golang.org/x/sys/unix` (keyctl),
   `golang.org/x/term`, `github.com/spf13/cobra`. No cgo.
+- The request window is a second program, `broker-dialog` (its own module
+  in `broker-dialog/`, cgo with GTK 3 and WebKitGTK 4.1), so `broker`
+  links nothing and `go test ./...` from the root needs no GTK.
 
 ## Tiers (replace v1 scopes)
 
@@ -157,6 +161,65 @@ Agent-facing (frequent, no prompts ever):
   expiry. Never values.
 - `broker exec NAME... -- CMD [ARGS...]`: run CMD with the named secrets added
   to its environment. Exit code, stdin, and signals pass through.
+  `--request [--reason TEXT]` asks for missing grants first (below).
+- `broker request NAME... [--for DUR] [--reason TEXT] [--timeout 2m]`: ask
+  for grants in the request window and wait. Blocks on the human, but never
+  prompts in the terminal.
+
+## Request window
+
+An agent in T3 or any other GUI harness runs in a terminal the human never
+sees, so it can't hand them a `broker grant` to type. `request` (and
+`exec --request`, which also shows the command it will run) asks them on
+their desktop instead.
+
+- `request` (agent side) resolves the names to private ones without a live
+  grant. None: done, no window. Else it writes the request as JSON
+  (names, duration, reason, command, its own PID, a deadline) to the stdin
+  of `broker approve`, started with `systemd-run --user --wait --pipe
+  --collect` and an allowlisted environment (`approverEnv`), and reads one
+  JSON result line from its stdout. Without systemd it starts it with
+  `setsid`. No desktop (`WAYLAND_DISPLAY`/`DISPLAY` unset), no
+  broker-dialog, or an approver that never answers: the same `no_grant`
+  as plain exec, with the reason in `message`.
+- `broker approve` (hidden) holds the unwrapped private tier identity, so
+  it must not be the agent's descendant: under `kernel.yama.ptrace_scope=1`
+  a process may ptrace its descendants. systemd-run makes it a child of the
+  user's service manager; it also sets `PR_SET_DUMPABLE=0`, as ssh-agent
+  does. Being outside the agent's process group also keeps the window up
+  if the agent's command is killed; the grant still lands.
+- The approver checks `/proc/PID/exe` is broker before showing anything,
+  and reads the requester's cwd and process chain from `/proc` itself, so
+  the window shows where the request came from, not what the request
+  claims. Only `--reason` (and the command) are the agent's word, and the
+  window labels the reason as such.
+- One window at a time: the approver takes an flock on
+  `$XDG_RUNTIME_DIR/broker/request.lock` (or `state/` without one) until
+  the deadline, then re-resolves the names, so a queued request often finds
+  them granted and shows nothing.
+- What approving takes follows the vault (`approveBy`): `touch` when a
+  hardware unlock exists (unlocking starts as the window opens, so the key
+  blinks and the touch is the approval), `passphrase` (the prompt appears
+  in the window), or `click` for a plain vault, which unlocks with no human
+  and so waits for Approve first. A wrong passphrase is asked for again
+  with the error showing; other unlock failures offer Try again; three
+  failures end the request. The human may pick a shorter duration (the
+  asked one, and 5m, 15m, 1h, 4h below it) until the grant is written.
+- Outcomes: granted (exit 0, one `granted NAME for DUR (until ...)` line
+  per name, on stderr for exec), `denied` (exit 77: Deny, Escape, or
+  closing the window), `request_timeout` (exit 75, with `ask_human`).
+  The approver appends one `request` audit entry under the requester's
+  PID, cwd, and chain, with the duration and reason.
+- `internal/approval` is the protocol and session. broker-dialog only
+  carries JSON lines: broker's messages (`request`, `prompt`, `status`,
+  `done`) go to the page as a JS string literal for `JSON.parse`, the
+  page's replies (`approve`, `deny`, `value`, `for`) come back on stdout,
+  which it moves to a private fd so GTK and WebKit output can't corrupt
+  it. The page sets every string with `textContent`, has a CSP with no
+  network, and can't navigate; devtools and the context menu are off.
+  Fixed size, app id `broker`, so tiling compositors float it.
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` avoids a Wayland protocol error on
+  NVIDIA with explicit sync.
 
 ## exec behaviour
 
@@ -317,8 +380,10 @@ useful line in the file).
 - Every failure an agent can hit has a stable JSON line on stderr with an
   `error` code and, where a human must act, an `ask_human` command string.
 - `--json` on read commands for machine output; human output otherwise.
-- No command an agent runs ever blocks on a prompt: if a prompt would be
-  needed and stdin is not a TTY, fail with `{"error":"needs_human",...}`.
+- No command an agent runs ever blocks on a terminal prompt: if a prompt
+  would be needed and stdin is not a TTY, fail with
+  `{"error":"needs_human",...}`. `request` blocks on the human only through
+  the request window, up to its timeout.
 
 ## Testing
 
@@ -330,6 +395,9 @@ useful line in the file).
   the user keyring, which is per uid; a user namespace has its own, so tests
   never touch the real one and leave nothing behind even if they crash.
   Without user namespaces the keyring tests skip.
+- Request tests run a real `broker approve` subprocess (the test binary)
+  against a fake window (the test binary again) that acts out a script
+  and logs what it was shown. broker-dialog itself is checked by hand.
 - Run Go builds and tests under
   `systemd-run --user --scope -q -p MemoryMax=4G nice -n 19 go test ./...`.
 

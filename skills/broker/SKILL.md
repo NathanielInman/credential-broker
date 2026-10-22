@@ -5,23 +5,23 @@ description: Credentials through the `broker` CLI. Use whenever a task needs an 
 
 # broker
 
-`broker` holds the human's secrets. You run commands **with** a secret; you never read it. Secret names are environment variable names, and `broker exec` puts them in the child's environment. `ls` and `exec` never prompt; every other subcommand is the human's.
+`broker` holds the human's secrets. You run commands **with** a secret; you never read it. Secret names are environment variable names, and `broker exec` puts them in the child's environment. `ls`, `exec`, and `request` are yours; every other subcommand is the human's.
 
 ## Use a secret
 
 1. **Discover**: `broker ls --json` prints an array of `{"name","tier","description","granted","expires",...}`. Pick by name and description.
    - `public`: always usable.
-   - `private`: usable while `"granted": true`. If the names you need are not granted, run `broker exec A B -- true` to get one `no_grant` line asking for all of them at once (one touch for the human).
-2. **Run**: `broker exec NAME... -- CMD [ARGS...]`. A tool that reads the variable itself runs directly:
+   - `private`: usable while `"granted": true`; otherwise ask for a grant with `--request` (step 2).
+2. **Run**: `broker exec --request --reason "WHY" NAME... -- CMD [ARGS...]`. With grants live it just runs. With any missing, it opens a window on the human's desktop showing the names, CMD, and your reason, waits up to 2 minutes for them to approve, then runs. Give the shell command a timeout of at least 150 seconds. Write the reason for the human: one plain sentence on what the task needs the secret for. A tool that reads the variable itself runs directly:
 
    ```sh
-   broker exec GH_TOKEN -- gh repo list
+   broker exec --request --reason "list your repos for the audit" GH_TOKEN -- gh repo list
    ```
 
    To reference the variable in arguments, expand it inside the child with `sh -c` and single quotes:
 
    ```sh
-   broker exec GITHUB_TOKEN -- sh -c 'curl -sf -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user'
+   broker exec --request --reason "check which account the token is for" GITHUB_TOKEN -- sh -c 'curl -sf -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user'
    ```
 
    Written straight into the arguments (`-- curl -H "Authorization: Bearer $GITHUB_TOKEN" ...`), the variable expands in your own shell first, where it is empty.
@@ -44,7 +44,9 @@ If a credential the task needs is missing from `ls`, ask the human to store it (
 | exit | `error` | meaning | do |
 |---|---|---|---|
 | child's | (none) | the command ran | treat it as the command's result |
-| 77 | `no_grant` | private secret not granted, or the grant expired | stop; ask the human to run `ask_human` verbatim; retry after they confirm |
+| 77 | `no_grant` | private secret not granted, or the grant expired | without `--request`: rerun with it. With it, the `message` says there is no request window (no desktop, or broker-dialog missing): ask the human to run `ask_human` verbatim; retry after they confirm |
+| 77 | `denied` | the human turned the request down | stop; tell the human what is blocked and why; request again only if they say so |
+| 75 | `request_timeout` | nobody answered the window | tell the human the request is waiting, with `ask_human` as the terminal alternative; retry once they reply |
 | 78 | `unknown_secret` | `names` are not in the vault | recheck `broker ls --json`; if absent, ask the human to `broker set` it |
 | 75 | `needs_human` | you ran a human command (`get` private, `grant`, `set`, ...) | ask the human to run `ask_human` |
 | 66 | `no_vault` | broker is not set up | ask the human to run `ask_human` |
