@@ -1,6 +1,8 @@
 package paths
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -98,6 +100,28 @@ func TestWriteFile(t *testing.T) {
 	}
 	if fi.Mode().Perm() != FileMode {
 		t.Errorf("mode %v, want %v", fi.Mode().Perm(), FileMode)
+	}
+	entries, _ := os.ReadDir(filepath.Dir(name))
+	if len(entries) != 1 {
+		t.Errorf("temporary file left behind: %v", entries)
+	}
+}
+
+func TestWriteFileFuncFailure(t *testing.T) {
+	name := filepath.Join(t.TempDir(), "f")
+	if err := WriteFile(name, []byte("old")); err != nil {
+		t.Fatal(err)
+	}
+	boom := errors.New("boom")
+	err := WriteFileFunc(name, func(w io.Writer) error {
+		io.WriteString(w, "partial")
+		return boom
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("err %v", err)
+	}
+	if got, _ := os.ReadFile(name); string(got) != "old" {
+		t.Fatalf("failed write left %q", got)
 	}
 	entries, _ := os.ReadDir(filepath.Dir(name))
 	if len(entries) != 1 {

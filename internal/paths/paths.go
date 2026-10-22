@@ -7,6 +7,7 @@ package paths
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -93,6 +94,15 @@ func MkdirAll(dir string) error {
 // temporary file in the same directory, syncs it, and renames it over name,
 // so readers never see a partial file.
 func WriteFile(name string, data []byte) error {
+	return WriteFileFunc(name, func(w io.Writer) error {
+		_, err := w.Write(data)
+		return err
+	})
+}
+
+// WriteFileFunc is WriteFile for content too large to hold in memory: write
+// streams it into the temporary file. If write fails, name is untouched.
+func WriteFileFunc(name string, write func(io.Writer) error) error {
 	f, err := os.CreateTemp(filepath.Dir(name), "."+filepath.Base(name)+".tmp*")
 	if err != nil {
 		return err
@@ -104,7 +114,7 @@ func WriteFile(name string, data []byte) error {
 		f.Close()
 		return err
 	}
-	if _, err := f.Write(data); err != nil {
+	if err := write(f); err != nil {
 		f.Close()
 		return err
 	}
