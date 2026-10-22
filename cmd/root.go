@@ -2,6 +2,8 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"os"
 
@@ -30,10 +32,20 @@ func run(version string, args []string, stdin io.Reader, stdout, stderr io.Write
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	if err := root.Execute(); err != nil {
+		var status exitStatus
+		if errors.As(err, &status) {
+			return int(status)
+		}
 		return agenterr.Write(stderr, err)
 	}
 	return 0
 }
+
+// exitStatus is exec's child's exit status, which broker exits with
+// silently: the child has already reported whatever went wrong.
+type exitStatus int
+
+func (s exitStatus) Error() string { return fmt.Sprintf("exit status %d", int(s)) }
 
 func newRoot(version string) *cobra.Command {
 	root := &cobra.Command{

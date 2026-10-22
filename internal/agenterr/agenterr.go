@@ -36,20 +36,27 @@ const (
 	NoVault Code = "no_vault"
 	// VaultExists means init would overwrite an existing vault.
 	VaultExists Code = "vault_exists"
+	// CommandNotFound means exec could not find the command to run.
+	CommandNotFound Code = "command_not_found"
+	// CannotExec means exec found the command but could not start it.
+	CannotExec Code = "cannot_exec"
 )
 
 // Exit statuses follow sysexits.h where one fits. exec passes the child's
-// status through, so these only identify broker's own failures.
+// status through as its own, so after exec only the JSON line on stderr
+// tells broker's failures from the child's.
 var exitCodes = map[Code]int{
-	General:        1,
-	Usage:          64, // EX_USAGE
-	Unsupported:    69, // EX_UNAVAILABLE
-	NotImplemented: 70, // EX_SOFTWARE
-	NoVault:        66, // EX_NOINPUT
-	VaultExists:    73, // EX_CANTCREAT
-	NeedsHuman:     75, // EX_TEMPFAIL: retry once a human has acted
-	NoGrant:        77, // EX_NOPERM
-	UnknownSecret:  78,
+	General:         1,
+	Usage:           64, // EX_USAGE
+	Unsupported:     69, // EX_UNAVAILABLE
+	NotImplemented:  70, // EX_SOFTWARE
+	NoVault:         66, // EX_NOINPUT
+	VaultExists:     73, // EX_CANTCREAT
+	NeedsHuman:      75, // EX_TEMPFAIL: retry once a human has acted
+	NoGrant:         77, // EX_NOPERM
+	UnknownSecret:   78,
+	CannotExec:      126, // as a shell reports it
+	CommandNotFound: 127, // as a shell reports it
 }
 
 // Error is the JSON line written to stderr.

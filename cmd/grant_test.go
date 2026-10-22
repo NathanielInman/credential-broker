@@ -31,15 +31,23 @@ func TestMain(m *testing.M) {
 	os.Exit(keyringtest.Main(m))
 }
 
-// grantVault is initVault with an isolated keyring and a TTY check that
-// always passes, since the plain test identity never prompts.
+// grantVault is seedVault with an isolated keyring, revoking every grant
+// afterwards.
 func grantVault(t *testing.T) {
 	t.Helper()
 	keyringtest.Require(t)
+	seedVault(t)
+	t.Cleanup(func() { runStdin(t, "", "revoke", "--all") })
+}
+
+// seedVault is initVault with private API_TOKEN and DB_PASS and public
+// API_USER, and a TTY check that always passes, since the plain test
+// identity never prompts.
+func seedVault(t *testing.T) {
+	t.Helper()
 	initVault(t)
 	requireTTY = func(io.Reader, string) error { return nil }
 	t.Cleanup(func() { requireTTY = defaultRequireTTY })
-	t.Cleanup(func() { runStdin(t, "", "revoke", "--all") })
 	for _, s := range []struct{ name, value, flag string }{
 		{"API_TOKEN", "token-value", "--private"},
 		{"DB_PASS", "db-password", "--private"},

@@ -151,6 +151,18 @@ Agent-facing (frequent, no prompts ever):
   shorter than 6 bytes. When the stream is a TTY (a human), pass it through
   untouched so interactive tools work.
 - Never put values in argv, never write them to disk.
+- stdin goes to the child as is (a terminal stays a terminal). Broker
+  catches SIGINT, SIGQUIT, SIGTERM, SIGHUP, SIGUSR1, and SIGUSR2 so it
+  outlives the child (its output still needs redacting) and forwards them.
+  The exception is SIGINT/SIGQUIT while broker is in its terminal's
+  foreground process group: the terminal already sent them to the child,
+  and a second Ctrl-C makes some tools force quit. Signals broker started
+  out ignoring stay ignored. SIGTSTP/SIGCONT keep their defaults so job
+  control works.
+- Broker exits with the child's status, or 128+N if signal N killed it,
+  writing nothing of its own. A command that cannot be found fails with
+  `command_not_found` (exit 127), one that cannot be started with
+  `cannot_exec` (exit 126), as a shell would.
 
 ## Audit log
 
