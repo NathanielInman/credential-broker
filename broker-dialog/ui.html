@@ -1,0 +1,280 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<style>
+  :root {
+    --bg: #1b1c21; --fg: #e9e9ee; --muted: #9a9ca8; --faint: #7d808c;
+    --panel: #24262d; --line: #30323b; --button: #33353e; --button-fg: #e9e9ee;
+    --primary: #4f7ef7; --primary-fg: #fff;
+    --claim-bg: #2a261e; --claim-line: #c9a24a; --claim-fg: #d9b45c;
+    --touch-bg: #1d2a22; --touch-line: #2f4c37; --ok: #5fd38a;
+    --warn-bg: #2d2020; --warn-line: #a84a4a; --warn-fg: #ef8b8b;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fbfbfc; --fg: #1d1e22; --muted: #5f6270; --faint: #80838f;
+      --panel: #f0f1f4; --line: #dcdee4; --button: #e6e7eb; --button-fg: #1d1e22;
+      --claim-bg: #fbf4e2; --claim-line: #c9a24a; --claim-fg: #8a6716;
+      --touch-bg: #eaf7ee; --touch-line: #b9e2c6; --ok: #1f9d55;
+      --warn-bg: #fdeeee; --warn-line: #e3a1a1; --warn-fg: #b23b3b;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font: 13px/1.4 "Inter", "Noto Sans", "Cantarell", "DejaVu Sans", "Helvetica Neue", Arial, sans-serif;
+    padding: 20px 22px 18px; user-select: none; -webkit-user-select: none;
+  }
+  .mono { font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace; font-size: 12px; }
+  header { display: flex; gap: 12px; align-items: center; }
+  .icon { width: 38px; height: 38px; border-radius: 10px; background: var(--panel);
+    display: flex; align-items: center; justify-content: center; flex: none; }
+  .icon svg { width: 20px; height: 20px; stroke: var(--primary); }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; }
+  .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 16px 0 6px; }
+  .secret { display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+    background: var(--panel); border-radius: 8px; padding: 7px 10px; margin-bottom: 4px; }
+  .secret .desc { color: var(--muted); font-size: 12px; text-align: right; }
+  .grid { display: grid; grid-template-columns: 92px 1fr; gap: 6px 10px; }
+  .grid .k { color: var(--faint); }
+  .grid .v { overflow-wrap: anywhere; }
+  select { -webkit-appearance: none; appearance: none; font: inherit; color: var(--fg);
+    background: var(--panel) no-repeat right 8px center / 10px 6px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239a9ca8' stroke-width='1.5'/%3E%3C/svg%3E");
+    border: 1px solid var(--line); border-radius: 6px; padding: 3px 26px 3px 8px; }
+  select:focus { outline: none; border-color: var(--primary); }
+  option { background: var(--bg); color: var(--fg); }
+  .claim { margin-top: 14px; background: var(--claim-bg); border-left: 3px solid var(--claim-line);
+    border-radius: 6px; padding: 8px 10px; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+  .claim .who { font-size: 11px; color: var(--claim-fg); margin-bottom: 2px; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 12px; }
+  .warn { margin-top: 12px; background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-fg);
+    border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+  .action { margin-top: 16px; border-radius: 10px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); }
+  .action.touch { background: var(--touch-bg); border-color: var(--touch-line); display: flex; gap: 12px; align-items: center; }
+  .action.error { background: var(--warn-bg); border-color: var(--warn-line); }
+  .action .title { font-weight: 600; font-size: 14px; }
+  .action .hint { color: var(--muted); font-size: 12px; }
+  .action.error .title { color: var(--warn-fg); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--ok); flex: none; animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); }
+    70% { box-shadow: 0 0 0 10px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+  .spin { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--primary);
+    border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .prompt label { display: block; margin-bottom: 6px; overflow-wrap: anywhere; }
+  .row { display: flex; gap: 8px; }
+  input { flex: 1; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 7px; padding: 7px 9px; outline: none; user-select: text; -webkit-user-select: text; }
+  input:focus { border-color: var(--primary); }
+  button { font: inherit; border: 0; border-radius: 8px; padding: 7px 15px; background: var(--button); color: var(--button-fg); cursor: pointer; }
+  button.primary { background: var(--primary); color: var(--primary-fg); }
+  button:disabled { opacity: .5; cursor: default; }
+  .status { color: var(--muted); font-size: 12px; margin-top: 8px; min-height: 1em; }
+  .status.err { color: var(--warn-fg); }
+  footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .result { display: flex; gap: 10px; align-items: center; font-size: 14px; font-weight: 600; }
+  .result .mark { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 13px; background: var(--ok); flex: none; }
+  .result.bad .mark { background: var(--warn-line); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+// The window only shows what broker sends and passes back what the human
+// does. Everything from broker is untrusted text as far as the page goes:
+// it is set with textContent, never parsed as HTML.
+const post = (msg) => {
+  const h = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.broker;
+  if (h) h.postMessage(JSON.stringify(msg)); else console.log("post", JSON.stringify(msg));
+};
+const state = { req: null, prompt: null, status: null, done: null, picked: 0, busy: false };
+
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  return e;
+}
+
+function tilde(s) {
+  const home = state.req && state.req.home;
+  if (!home || !s) return s;
+  return s.split(home + "/").join("~/").replace(new RegExp("^" + home.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$"), "~");
+}
+
+function human(secs) {
+  if (secs % 3600 === 0) { const h = secs / 3600; return h + (h === 1 ? " hour" : " hours"); }
+  if (secs < 3600 && secs % 60 === 0) return (secs / 60) + " min";
+  const h = Math.floor(secs / 3600), m = Math.round((secs % 3600) / 60);
+  return (h ? h + "h " : "") + m + "m";
+}
+
+// quote shows argv the way a shell would take it back.
+function quote(argv) {
+  return argv.map((a) => /^[\w@%+=:,./-]+$/.test(a) ? a : "'" + a.split("'").join("'\\''") + "'").join(" ");
+}
+
+function until(secs) {
+  const d = new Date(Date.now() + secs * 1000);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function left() {
+  const ms = new Date(state.req.deadline) - Date.now();
+  if (ms <= 0) return "0:00";
+  const s = Math.ceil(ms / 1000);
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+const keySVG = () => {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke-width", "2"); svg.setAttribute("stroke-linecap", "round"); svg.setAttribute("stroke-linejoin", "round");
+  for (const d of ["M15.5 7.5 19 4", "m21 2-9.6 9.6", "M17 6l3 3"]) {
+    const p = document.createElementNS(ns, "path"); p.setAttribute("d", d); svg.append(p);
+  }
+  const c = document.createElementNS(ns, "circle");
+  c.setAttribute("cx", "7.5"); c.setAttribute("cy", "15.5"); c.setAttribute("r", "5.5"); svg.append(c);
+  return svg;
+};
+
+function deny() { if (!state.done) { post({ type: "deny" }); finish("Denied", true); } }
+
+function finish(text, bad) {
+  state.done = { text, bad };
+  render();
+  setTimeout(() => post({ type: "exit" }), bad ? 1400 : 1100);
+}
+
+function submit(value) {
+  if (!state.prompt || state.busy) return;
+  post({ type: "value", id: state.prompt.id, value: value });
+  state.prompt = null; state.busy = true; state.status = null;
+  render();
+}
+
+function action() {
+  const r = state.req;
+  if (state.done) {
+    return el("div", { class: "action" },
+      el("div", { class: "result" + (state.done.bad ? " bad" : "") },
+        el("span", { class: "mark" }, state.done.bad ? "✕" : "✓"), state.done.text));
+  }
+  if (state.prompt && state.prompt.yes) {
+    const p = state.prompt;
+    const answer = (yes) => { post({ type: "value", id: p.id, yes }); state.prompt = null; render(); };
+    return el("div", { class: "action prompt" }, el("label", {}, tilde(p.text)),
+      el("div", { class: "row" },
+        el("button", { class: "primary", onclick: () => answer(true) }, p.yes),
+        p.no ? el("button", { onclick: () => answer(false) }, p.no) : null));
+  }
+  if (state.prompt) {
+    const input = el("input", { type: state.prompt.secret ? "password" : "text", autocomplete: "off", spellcheck: "false" });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(input.value); });
+    setTimeout(() => input.focus(), 0);
+    return el("div", { class: "action prompt" },
+      el("label", {}, tilde(state.prompt.text).replace(/:\s*$/, "")),
+      el("div", { class: "row" }, input, el("button", { class: "primary", onclick: () => submit(input.value) }, "Approve")),
+      state.status ? el("div", { class: "status" + (state.status.error ? " err" : "") }, state.status.text) : null);
+  }
+  if (state.status && state.status.retry) {
+    return el("div", { class: "action error" },
+      el("div", { class: "title" }, state.status.text.replace(/ Approve to try again\.$/, "")),
+      el("div", { class: "row", style: "margin-top:8px" },
+        el("button", { class: "primary", onclick: () => { post({ type: "approve" }); state.status = null; state.busy = true; render(); } }, "Try again")));
+  }
+  if (r.approve === "click" && !state.busy) {
+    return el("div", { class: "action" },
+      el("div", { class: "row", style: "align-items:center;justify-content:space-between" },
+        el("div", { class: "hint" }, "Nothing else protects this vault, so this click is the check."),
+        el("button", { class: "primary", onclick: () => { post({ type: "approve" }); state.busy = true; render(); } }, "Approve")));
+  }
+  if (r.approve === "touch") {
+    return el("div", { class: "action touch" }, el("span", { class: "dot" }),
+      el("div", {}, el("div", { class: "title" }, "Touch your YubiKey to approve"),
+        el("div", { class: "hint" }, state.status ? state.status.text : "or press Deny to turn it down")));
+  }
+  return el("div", { class: "action touch" }, el("span", { class: "spin" }),
+    el("div", { class: "hint" }, state.status ? state.status.text : "Unlocking…"));
+}
+
+function render() {
+  const r = state.req;
+  const app = document.getElementById("app");
+  if (!r) { app.textContent = ""; return; }
+  const n = r.secrets.length;
+  // The nearest processes say who asked; the session plumbing past them
+  // (the compositor, login, systemd) rarely does, so it is on hover only.
+  const full = (r.ancestry || []).slice(r.ancestry && r.ancestry[0] === "broker" ? 1 : 0)
+    .filter((c, i, a) => i === 0 || c !== a[i - 1]);
+  const chain = full.length > 5 ? [...full.slice(0, 5), "\u2026"] : full;
+  const picked = state.picked || r.for;
+
+  let forView;
+  if ((r.choices || []).length > 1 && !state.done && !state.busy) {
+    forView = el("select", { onchange: (e) => { state.picked = Number(e.target.value); post({ type: "for", for: state.picked }); render(); } });
+    for (const c of [...r.choices].sort((a, b) => b - a)) {
+      const o = el("option", { value: String(c) }, human(c) + (c === r.for ? " (asked)" : ""));
+      if (c === picked) o.selected = true;
+      forView.append(o);
+    }
+    forView = el("span", {}, forView, el("span", { class: "sub" }, "  until " + until(picked)));
+  } else {
+    forView = human(picked) + ", until " + until(picked);
+  }
+
+  const grid = el("div", { class: "grid" },
+    el("div", { class: "k" }, "For"), el("div", { class: "v" }, forView),
+    el("div", { class: "k" }, "Asked by"), el("div", { class: "v mono", title: full.join(" < ") }, chain.join(" < ") || "unknown"),
+    r.cwd ? el("div", { class: "k" }, "Directory") : null, r.cwd ? el("div", { class: "v mono" }, tilde(r.cwd)) : null,
+    r.command && r.command.length ? el("div", { class: "k" }, "Will run") : null,
+    r.command && r.command.length ? el("div", { class: "v mono" }, quote(r.command)) : null);
+
+  const view = el("div", {},
+    el("header", {}, el("div", { class: "icon" }, keySVG()),
+      el("div", {}, el("h1", {}, n === 1 ? "An agent wants to use a secret" : "An agent wants to use " + n + " secrets"),
+        el("div", { class: "sub", id: "sub" }, state.done ? "broker request" : "broker request · expires in " + left()))),
+    el("div", { class: "label" }, n === 1 ? "Secret" : "Secrets"),
+    ...r.secrets.map((s) => el("div", { class: "secret" }, el("span", { class: "mono" }, s.name),
+      s.description ? el("span", { class: "desc" }, s.description) : null)),
+    el("div", { class: "label" }, "Request"), grid,
+    r.reason ? el("div", { class: "claim" }, el("div", { class: "who" }, "The agent says (unverified)"), r.reason) : null,
+    el("div", { class: "note" }, "While granted, any agent on this machine can use " + (n === 1 ? "it" : "them") + ", not just this one."),
+    r.zone === "plain" ? el("div", { class: "warn" }, "This vault is in the plain zone: its key sits unprotected on disk.") : null,
+    action(),
+    state.done ? null : el("footer", {}, el("button", { onclick: deny }, "Deny")));
+  app.replaceChildren(view);
+  requestAnimationFrame(() => post({ type: "size", height: Math.ceil(document.documentElement.scrollHeight) }));
+}
+
+window.broker = {
+  receive(line) {
+    const m = JSON.parse(line);
+    switch (m.type) {
+      case "request": state.req = m.request; break;
+      case "prompt": state.prompt = m.prompt; state.busy = false; break;
+      case "status": state.status = m; if (m.retry) state.busy = false; break;
+      case "done": state.prompt = null; finish(m.text, !!m.error); return;
+    }
+    render();
+  },
+};
+
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") deny(); });
+document.addEventListener("contextmenu", (e) => e.preventDefault());
+setInterval(() => { const s = document.getElementById("sub"); if (s && state.req && !state.done) s.textContent = "broker request · expires in " + left(); }, 1000);
+post({ type: "ready" });
+</script>
+</body>
+</html>
