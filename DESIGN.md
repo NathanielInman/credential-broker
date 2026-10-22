@@ -141,10 +141,15 @@ Agent-facing (frequent, no prompts ever):
   `{"error":"no_grant","names":["X"],"ask_human":"broker grant X --for 1h"}`.
   Unknown names: exit 78, `{"error":"unknown_secret","names":[...]}`.
 - Redaction: when the child's stdout or stderr is not a TTY (the agent case),
-  pipe it through a streaming redactor that replaces every private value with
-  `[REDACTED:NAME]`, holding back `maxlen-1` bytes so matches across read
-  boundaries are caught. Skip values shorter than 6 bytes. When the stream is
-  a TTY (a human), pass it through untouched so interactive tools work.
+  pipe it through a streaming redactor (`internal/redact`) that replaces
+  every private value with `[REDACTED:NAME]`, holding back at most
+  `maxlen-1` bytes so matches across read boundaries are caught. Only bytes
+  that could still start a value are held, so ordinary output (prompts,
+  progress lines) is not delayed; the held tail is flushed at EOF. At each
+  position the longest value wins; overlapping matches merge into one marker
+  named for the leftmost, so no byte of any occurrence leaks. Skip values
+  shorter than 6 bytes. When the stream is a TTY (a human), pass it through
+  untouched so interactive tools work.
 - Never put values in argv, never write them to disk.
 
 ## Audit log
