@@ -6,6 +6,8 @@
 package paths
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -66,12 +68,29 @@ func xdg(name, home string, fallback ...string) string {
 	return filepath.Join(append([]string{home}, fallback...)...)
 }
 
-func (p Paths) ConfigFile() string      { return filepath.Join(p.Config, "config.json") }
-func (p Paths) PublicKey() string       { return filepath.Join(p.Data, "public.key") }
-func (p Paths) PrivateKey() string      { return filepath.Join(p.Data, "private.key.age") }
-func (p Paths) SecretsDir() string      { return filepath.Join(p.Data, "secrets") }
-func (p Paths) LogFile() string         { return filepath.Join(p.State, "log.jsonl") }
-func (p Paths) RequestLock() string     { return filepath.Join(p.Run, "request.lock") }
+func (p Paths) ConfigFile() string  { return filepath.Join(p.Config, "config.json") }
+func (p Paths) PublicKey() string   { return filepath.Join(p.Data, "public.key") }
+func (p Paths) PrivateKey() string  { return filepath.Join(p.Data, "private.key.age") }
+func (p Paths) SecretsDir() string  { return filepath.Join(p.Data, "secrets") }
+func (p Paths) LogFile() string     { return filepath.Join(p.State, "log.jsonl") }
+func (p Paths) RequestLock() string { return filepath.Join(p.Run, "request.lock") }
+func (p Paths) GrantLock() string   { return filepath.Join(p.Run, "grantd.lock") }
+
+// maxSocketPath keeps a unix socket path within sun_path, which is 104
+// bytes on macOS (108 on linux), counting the NUL.
+const maxSocketPath = 100
+
+// GrantSocket is where the grant agent listens (macOS). A runtime directory
+// too deep for a socket path gets a short one in the per-user temp
+// directory instead, named for it.
+func (p Paths) GrantSocket() string {
+	s := filepath.Join(p.Run, "grantd.sock")
+	if len(s) <= maxSocketPath {
+		return s
+	}
+	sum := sha256.Sum256([]byte(p.Run))
+	return filepath.Join(os.TempDir(), "broker-"+hex.EncodeToString(sum[:8])+".sock")
+}
 func (p Paths) TierDir(t string) string { return filepath.Join(p.SecretsDir(), t) }
 
 // Ensure creates the config, data, and state directories at DirMode.

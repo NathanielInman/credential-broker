@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -135,5 +136,20 @@ func TestWriteFileFuncFailure(t *testing.T) {
 	entries, _ := os.ReadDir(filepath.Dir(name))
 	if len(entries) != 1 {
 		t.Errorf("temporary file left behind: %v", entries)
+	}
+}
+
+func TestGrantSocket(t *testing.T) {
+	p := Paths{Run: "/run/user/7/broker"}
+	if s := p.GrantSocket(); s != "/run/user/7/broker/grantd.sock" {
+		t.Errorf("GrantSocket = %q", s)
+	}
+	deep := Paths{Run: "/" + strings.Repeat("d", 120)}
+	s := deep.GrantSocket()
+	if len(s) > maxSocketPath || filepath.Dir(s) != filepath.Clean(os.TempDir()) {
+		t.Errorf("deep GrantSocket = %q", s)
+	}
+	if s != deep.GrantSocket() {
+		t.Error("GrantSocket is not stable")
 	}
 }
