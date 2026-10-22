@@ -124,6 +124,13 @@ function quote(argv) {
   return argv.map((a) => /^[\w@%+=:,./-]+$/.test(a) ? a : "'" + a.split("'").join("'\\''") + "'").join(" ");
 }
 
+// What a touch means for each age plugin that needs one.
+const touchText = {
+  yubikey: "Touch your YubiKey to approve",
+  se: "Confirm with Touch ID to approve",
+  "fido2-hmac": "Touch your security key to approve",
+};
+
 // Process names (comm, cut to 15 characters) where a desktop or login
 // session begins.
 const sessionRoots = new Set([
@@ -211,8 +218,9 @@ function action() {
         el("button", { class: "primary", onclick: () => { post({ type: "approve" }); state.busy = true; render(); } }, "Approve")));
   }
   if (r.approve === "touch") {
+    const how = touchText[r.device] || "Use your security key to approve";
     return el("div", { class: "action touch" }, el("span", { class: "dot" }),
-      el("div", {}, el("div", { class: "title" }, "Touch your YubiKey to approve"),
+      el("div", {}, el("div", { class: "title" }, how),
         el("div", { class: "hint" }, state.status ? state.status.text : "or press Deny to turn it down")));
   }
   return el("div", { class: "action touch" }, el("span", { class: "spin" }),

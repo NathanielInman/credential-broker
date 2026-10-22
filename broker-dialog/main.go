@@ -7,11 +7,12 @@
 // decisions, and nothing it shows is ever parsed as HTML.
 //
 // It is a separate program so broker itself stays pure Go, with no GTK or
-// WebKit to link.
+// WebKit to link. The window is GTK and WebKitGTK on linux (window_linux.c)
+// and Cocoa and WKWebView on macOS (window_darwin.m); both show the same
+// page.
 package main
 
 /*
-#cgo pkg-config: gtk+-3.0 webkit2gtk-4.1
 #include <stdlib.h>
 #include "window.h"
 */
@@ -62,16 +63,10 @@ func main() {
 		os.Exit(1)
 	}
 	proto = os.NewFile(uintptr(fd), "protocol")
-	if err := syscall.Dup3(2, 1, 0); err != nil {
+	if err := redirectStdout(); err != nil {
 		os.Exit(1)
 	}
-
-	// WebKit's DMA-BUF renderer trips a Wayland protocol error on NVIDIA
-	// with explicit sync ("Missing acquire timeline"). A dialog does not
-	// need it.
-	if _, ok := os.LookupEnv("WEBKIT_DISABLE_DMABUF_RENDERER"); !ok {
-		os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
-	}
+	platformInit()
 
 	html := C.CString(page)
 	C.window_create(html, width, height)
