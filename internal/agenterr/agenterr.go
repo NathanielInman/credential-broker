@@ -40,6 +40,10 @@ const (
 	CommandNotFound Code = "command_not_found"
 	// CannotExec means exec found the command but could not start it.
 	CannotExec Code = "cannot_exec"
+	// Denied means the human turned down a request. Do not ask again.
+	Denied Code = "denied"
+	// RequestTimeout means nobody answered a request in time.
+	RequestTimeout Code = "request_timeout"
 )
 
 // Exit statuses follow sysexits.h where one fits. exec passes the child's
@@ -54,6 +58,8 @@ var exitCodes = map[Code]int{
 	VaultExists:     73, // EX_CANTCREAT
 	NeedsHuman:      75, // EX_TEMPFAIL: retry once a human has acted
 	NoGrant:         77, // EX_NOPERM
+	Denied:          77, // EX_NOPERM
+	RequestTimeout:  75, // EX_TEMPFAIL
 	UnknownSecret:   78,
 	CannotExec:      126, // as a shell reports it
 	CommandNotFound: 127, // as a shell reports it

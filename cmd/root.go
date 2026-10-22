@@ -66,7 +66,7 @@ func newRoot(version string) *cobra.Command {
 	})
 	root.AddGroup(
 		&cobra.Group{ID: groupHuman, Title: "Human commands:"},
-		&cobra.Group{ID: groupAgent, Title: "Agent commands (never prompt):"},
+		&cobra.Group{ID: groupAgent, Title: "Agent commands (never prompt in the terminal):"},
 	)
 
 	root.AddCommand(
@@ -82,6 +82,8 @@ func newRoot(version string) *cobra.Command {
 		newLogCmd(),
 		newLsCmd(),
 		newExecCmd(),
+		newRequestCmd(),
+		newApproveCmd(),
 	)
 	return root
 }

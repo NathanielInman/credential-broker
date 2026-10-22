@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -20,13 +21,17 @@ import (
 )
 
 func newExecCmd() *cobra.Command {
-	return &cobra.Command{
+	var request bool
+	var reason string
+	c := &cobra.Command{
 		Use:   "exec NAME... -- CMD [ARGS...]",
 		Short: "Run CMD with secrets in its environment, redacting its output",
 		Long: "exec runs CMD with each NAME added to its environment. Public secrets\n" +
 			"come from disk; private ones need a live grant. When stdout or stderr is\n" +
 			"not a terminal, private values in it are replaced with [REDACTED:NAME].\n" +
-			"stdin, signals, and the exit status pass through.",
+			"stdin, signals, and the exit status pass through.\n\n" +
+			"With --request, missing grants are asked for in a window on the human's\n" +
+			"desktop (see broker request), showing CMD, and CMD runs once granted.",
 		GroupID: groupAgent,
 		Args:    execArgs,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -43,6 +48,16 @@ func newExecCmd() *cobra.Command {
 			}
 			e.Tier = tierOf(v, names)
 			secrets, err := resolve(v, names)
+			if request && agenterr.From(err).Code == agenterr.NoGrant {
+				var ttl time.Duration
+				if ttl, err = grantDuration(v.Config(), false, 0, false); err == nil {
+					// Grant lines go to stderr: stdout is the child's.
+					err = requestGrants(c, v, names, ttl, reason, argv, requestTimeout, c.ErrOrStderr())
+				}
+				if err == nil {
+					secrets, err = resolve(v, names)
+				}
+			}
 			record(c, e, err)
 			if err != nil {
 				return err
@@ -50,6 +65,9 @@ func newExecCmd() *cobra.Command {
 			return runChild(c, argv, secrets)
 		},
 	}
+	c.Flags().BoolVar(&request, "request", false, "ask the human for missing grants in a desktop window, then run")
+	c.Flags().StringVar(&reason, "reason", "", "with --request, why you need them, shown to the human")
+	return c
 }
 
 func execArgs(c *cobra.Command, args []string) error {

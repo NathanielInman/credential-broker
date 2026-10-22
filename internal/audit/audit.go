@@ -31,6 +31,7 @@ const (
 	Import  Action = "import"
 	Backup  Action = "backup"
 	Restore Action = "restore"
+	Request Action = "request"
 )
 
 // Entry is one line of the log.
@@ -48,7 +49,9 @@ type Entry struct {
 	Error string `json:"error,omitempty"`
 	Cwd   string `json:"cwd"`
 	// Cmd is exec's child argv[0], never its arguments.
-	Cmd      string   `json:"cmd,omitempty"`
+	Cmd string `json:"cmd,omitempty"`
+	// Reason is the agent's stated reason for a request.
+	Reason   string   `json:"reason,omitempty"`
 	PID      int      `json:"pid"`
 	Ancestry []string `json:"ancestry"`
 }
