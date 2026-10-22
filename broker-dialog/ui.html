@@ -124,6 +124,16 @@ function quote(argv) {
   return argv.map((a) => /^[\w@%+=:,./-]+$/.test(a) ? a : "'" + a.split("'").join("'\\''") + "'").join(" ");
 }
 
+// Process names (comm, cut to 15 characters) where a desktop or login
+// session begins.
+const sessionRoots = new Set([
+  "systemd", "init", "login", "agetty",
+  "Hyprland", "start-hyprland", "sway", "niri", "river", "labwc", "wayfire", "hikari", "dwl", "Xorg", "Xwayland",
+  "gnome-shell", "gnome-session-b", "gdm-wayland-ses", "gdm-x-session", "gdm-session-wor",
+  "kwin_wayland", "kwin_x11", "plasmashell", "startplasma-way", "startplasma-x11", "ksmserver", "sddm-helper",
+  "lightdm", "xfce4-session", "cinnamon-sessio", "mate-session", "i3", "bspwm", "awesome", "openbox",
+]);
+
 function until(secs) {
   const d = new Date(Date.now() + secs * 1000);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -214,11 +224,14 @@ function render() {
   const app = document.getElementById("app");
   if (!r) { app.textContent = ""; return; }
   const n = r.secrets.length;
-  // The nearest processes say who asked; the session plumbing past them
-  // (the compositor, login, systemd) rarely does, so it is on hover only.
+  // The nearest processes say who asked. The chain stops where the desktop
+  // session starts (the compositor, login, systemd), which says nothing
+  // about the request; the full chain is on hover and in the audit log.
   const full = (r.ancestry || []).slice(r.ancestry && r.ancestry[0] === "broker" ? 1 : 0)
     .filter((c, i, a) => i === 0 || c !== a[i - 1]);
-  const chain = full.length > 5 ? [...full.slice(0, 5), "\u2026"] : full;
+  const root = full.findIndex((c) => sessionRoots.has(c));
+  let chain = root > 0 ? full.slice(0, root) : full;
+  if (chain.length > 6) chain = [...chain.slice(0, 6), "\u2026"];
   const picked = state.picked || r.for;
 
   let forView;
