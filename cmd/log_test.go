@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/NathanielInman/credential-broker/internal/audit"
+	"github.com/NathanielInman/credential-broker/internal/procinfo"
 )
 
 // auditLog returns the entries broker log --json prints.
@@ -119,10 +120,10 @@ func TestAuditLog(t *testing.T) {
 	}
 
 	cwd, _ := os.Getwd()
-	comm, _ := os.ReadFile("/proc/self/comm")
+	self := procinfo.Ancestry(os.Getpid())
 	for _, e := range entries {
 		if e.PID != os.Getpid() || e.Cwd != cwd || time.Since(e.TS) > time.Minute ||
-			len(e.Ancestry) < 2 || e.Ancestry[0] != strings.TrimSpace(string(comm)) {
+			len(e.Ancestry) < 2 || len(self) == 0 || e.Ancestry[0] != self[0] {
 			t.Errorf("entry %+v", e)
 		}
 	}
