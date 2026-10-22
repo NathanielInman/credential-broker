@@ -53,7 +53,6 @@ func TestStubsNotImplemented(t *testing.T) {
 		{"import", "env"},
 		{"backup", "-o", "b.age"},
 		{"restore", "b.age"},
-		{"get", "X"},
 		{"log", "--json"},
 	} {
 		t.Run(args[0], func(t *testing.T) {

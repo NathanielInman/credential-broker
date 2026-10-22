@@ -118,7 +118,8 @@ Human-facing (rare):
 - `broker rm NAME`
 - `broker grant NAME... [--for DUR] | --all`
 - `broker revoke NAME... | --all`
-- `broker get NAME`: prints the value. Public: immediate. Private: always a
+- `broker get NAME`: prints the value and a newline (`set --stdin` drops
+  one, so `get | set` round trips). Public: immediate. Private: always a
   fresh touch, a grant does not satisfy it (grants are for exec only).
 - `broker import FILE [--public]`: parse `export NAME=value` / `NAME=value`
   lines (quotes handled) from shell env files like `~/.zshenv`, store them,
