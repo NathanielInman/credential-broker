@@ -317,7 +317,7 @@ func (v *Vault) Set(name string, value []byte, opts SetOptions) (Secret, error) 
 	if err := ValidateName(name); err != nil {
 		return Secret{}, err
 	}
-	if err := validateValue(value); err != nil {
+	if err := ValidateValue(value); err != nil {
 		return Secret{}, err
 	}
 	if opts.Description != nil && strings.ContainsAny(*opts.Description, "\r\n") {
@@ -407,7 +407,9 @@ func (v *Vault) Remove(name string) error {
 	return nil
 }
 
-func validateValue(value []byte) error {
+// ValidateValue checks that value can be stored and put in an environment
+// variable.
+func ValidateValue(value []byte) error {
 	switch {
 	case len(value) == 0:
 		return agenterr.New(agenterr.Usage, "value is empty")
