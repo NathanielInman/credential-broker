@@ -8,12 +8,16 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"filippo.io/age"
+	"filippo.io/age/armor"
 	"filippo.io/age/plugin"
 
 	"github.com/NathanielInman/credential-broker/internal/agenterr"
+	"github.com/NathanielInman/credential-broker/internal/config"
 	"github.com/NathanielInman/credential-broker/internal/paths"
 )
 
@@ -436,5 +440,170 @@ func TestUnlockWithMissingPlainFile(t *testing.T) {
 	}
 	if _, err := v.UnlockPrivate(testUI); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("got %v, want the missing file reported", err)
+	}
+}
+
+// passUI answers passphrase prompts with pass and counts them.
+func passUI(pass string, asked *int) *plugin.ClientUI {
+	ui := *TerminalUI(io.Discard)
+	ui.RequestValue = func(name, prompt string, secret bool) (string, error) {
+		*asked++
+		return pass, nil
+	}
+	return &ui
+}
+
+// passphraseIdentityFile writes an identity file encrypted with pass, like
+// age-keygen | age -p.
+func passphraseIdentityFile(t *testing.T, pass string, armored bool) (string, *age.X25519Identity) {
+	t.Helper()
+	id, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := age.NewScryptRecipient(pass)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.SetWorkFactor(10)
+	var buf bytes.Buffer
+	var out io.WriteCloser = nopCloser{&buf}
+	if armored {
+		out = armor.NewWriter(&buf)
+	}
+	w, err := age.Encrypt(out, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(w, "# created: test\n"+id.String()+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+	f := filepath.Join(t.TempDir(), "passphrase-identity.age")
+	if err := os.WriteFile(f, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return f, id
+}
+
+type nopCloser struct{ io.Writer }
+
+func (nopCloser) Close() error { return nil }
+
+func TestPassphraseIdentity(t *testing.T) {
+	for _, armored := range []bool{false, true} {
+		t.Run(map[bool]string{false: "binary", true: "armored"}[armored], func(t *testing.T) {
+			file, id := passphraseIdentityFile(t, "correct horse", armored)
+			asked := 0
+			ui := passUI("correct horse", &asked)
+
+			// No --insecure-plain-identity: a passphrase file is protected.
+			v, err := Init(testPaths(t), []string{file}, InitOptions{UI: ui})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []config.Unlock{{Path: file, Recipient: id.Recipient().String(), Passphrase: true}}
+			if u := v.Config().Unlock; !reflect.DeepEqual(u, want) {
+				t.Fatalf("unlock entries %+v, want %+v", u, want)
+			}
+			if z := v.Config().Zone(); z != config.ZonePassphrase {
+				t.Errorf("zone %s", z)
+			}
+			if asked != 1 {
+				t.Errorf("init asked %d times, want 1", asked)
+			}
+
+			// set needs no passphrase; unlocking asks once.
+			if _, err := v.Set("X", []byte("value"), SetOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			asked = 0
+			priv, err := v.UnlockPrivate(ui)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, err := v.Decrypt("X", priv); err != nil || string(got) != "value" {
+				t.Fatalf("got %q, %v", got, err)
+			}
+			if asked != 1 {
+				t.Errorf("unlock asked %d times, want 1", asked)
+			}
+		})
+	}
+}
+
+func TestPassphraseWrong(t *testing.T) {
+	file, _ := passphraseIdentityFile(t, "correct horse", false)
+	asked := 0
+	if _, err := Init(testPaths(t), []string{file}, InitOptions{UI: passUI("wrong", &asked)}); err == nil ||
+		!strings.Contains(err.Error(), "wrong passphrase") {
+		t.Fatalf("init: got %v, want wrong passphrase", err)
+	}
+
+	v, err := Init(testPaths(t), []string{file}, InitOptions{UI: passUI("correct horse", &asked)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.UnlockPrivate(passUI("wrong", &asked)); err == nil || !strings.Contains(err.Error(), "wrong passphrase") {
+		t.Fatalf("unlock: got %v, want wrong passphrase", err)
+	}
+}
+
+func TestPassphraseAfterHardware(t *testing.T) {
+	installTestPlugin(t)
+	hw, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stub := writeIdentity(t, plugin.EncodeIdentity(testPlugin, []byte(hw.String()))+"\n")
+	file, _ := passphraseIdentityFile(t, "correct horse", false)
+	asked := 0
+	ui := passUI("correct horse", &asked)
+	v, err := Init(testPaths(t), []string{stub, file}, InitOptions{UI: ui})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if z := v.Config().Zone(); z != config.ZonePassphrase {
+		t.Errorf("zone %s, want the weakest (passphrase)", z)
+	}
+
+	// With the hardware present, the passphrase is never asked for.
+	asked = 0
+	if _, err := v.UnlockPrivate(ui); err != nil {
+		t.Fatal(err)
+	}
+	if asked != 0 {
+		t.Errorf("asked for the passphrase %d times with hardware present", asked)
+	}
+
+	// Without it (the plugin is gone), the passphrase file takes over.
+	t.Setenv("PATH", t.TempDir())
+	if _, err := v.UnlockPrivate(ui); err != nil {
+		t.Fatal(err)
+	}
+	if asked != 1 {
+		t.Errorf("asked %d times without hardware, want 1", asked)
+	}
+}
+
+func TestPassphraseFileWithPluginRefused(t *testing.T) {
+	r, err := age.NewScryptRecipient("correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.SetWorkFactor(10)
+	data, err := encrypt([]byte(plugin.EncodeIdentity(testPlugin, []byte("x"))+"\n"), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := writeIdentity(t, string(data))
+	asked := 0
+	if _, err := Init(testPaths(t), []string{file}, InitOptions{UI: passUI("correct horse", &asked)}); err == nil {
+		t.Fatal("want error for a plugin stub inside a passphrase file")
 	}
 }

@@ -71,7 +71,7 @@ func TestBackupRestore(t *testing.T) {
 	home, identity := freshHome(t)
 	typePassphrases(t, testPassphrase)
 	out, _ = mustRun(t, "restore", file, "--identity", identity, "--insecure-plain-identity")
-	if !strings.HasPrefix(out, "restored 3 secrets from "+file) || !strings.Contains(out, identity+" (plain, no touch)") {
+	if !strings.HasPrefix(out, "restored 3 secrets from "+file) || !strings.Contains(out, identity+" (plain)") {
 		t.Errorf("restore output %q", out)
 	}
 	after := ls(t)

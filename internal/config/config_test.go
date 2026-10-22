@@ -17,6 +17,7 @@ func TestRoundTrip(t *testing.T) {
 		Unlock: []Unlock{
 			{Path: "/k/yubikey.txt", Identity: "AGE-PLUGIN-YUBIKEY-1XYZ"},
 			{Path: "/k/plain.txt", Recipient: "age1plain"},
+			{Path: "/k/pass.age", Recipient: "age1pass", Passphrase: true},
 		},
 	}
 	if err := want.Save(path); err != nil {
@@ -29,8 +30,28 @@ func TestRoundTrip(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
-	if got.Unlock[0].Plain() || !got.Unlock[1].Plain() {
-		t.Error("Plain() is wrong")
+	for i, want := range []Zone{ZoneHardware, ZonePlain, ZonePassphrase} {
+		if z := got.Unlock[i].Zone(); z != want {
+			t.Errorf("unlock %d: zone %s, want %s", i, z, want)
+		}
+	}
+}
+
+func TestConfigZoneIsWeakest(t *testing.T) {
+	hw := Unlock{Path: "/k/y.txt", Identity: "AGE-PLUGIN-YUBIKEY-1XYZ"}
+	pass := Unlock{Path: "/k/p.age", Recipient: "age1p", Passphrase: true}
+	plain := Unlock{Path: "/k/k.txt", Recipient: "age1k"}
+	for _, tc := range []struct {
+		unlocks []Unlock
+		want    Zone
+	}{
+		{[]Unlock{hw}, ZoneHardware},
+		{[]Unlock{hw, pass}, ZonePassphrase},
+		{[]Unlock{pass, hw, plain}, ZonePlain},
+	} {
+		if z := (&Config{Unlock: tc.unlocks}).Zone(); z != tc.want {
+			t.Errorf("%+v: zone %s, want %s", tc.unlocks, z, tc.want)
+		}
 	}
 }
 

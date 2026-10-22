@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"filippo.io/age"
+	"filippo.io/age/armor"
 	"filippo.io/age/plugin"
 
 	"github.com/NathanielInman/credential-broker/internal/config"
@@ -20,24 +21,40 @@ const maxIdentityFile = 1 << 20
 
 // readIdentityFile parses an age identity file into unlock entries, one per
 // identity line. Plugin lines (AGE-PLUGIN-...) become stubs; plain
-// AGE-SECRET-KEY lines record their recipient. Errors never quote a line,
-// since it may be a secret key.
+// AGE-SECRET-KEY lines record their recipient. A file encrypted with a
+// passphrase (age -p) is decrypted first, asking through ui, and its
+// entries are marked Passphrase. Errors never quote a line, since it may be
+// a secret key.
 func readIdentityFile(path string, ui *plugin.ClientUI) ([]config.Unlock, []age.Identity, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxIdentityFile))
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", path, err)
+	}
+	passphrase := isEncrypted(data)
+	if passphrase {
+		if data, err = decryptIdentityFile(path, data, ui); err != nil {
+			return nil, nil, err
+		}
+		defer clear(data)
+	}
 
 	var unlocks []config.Unlock
 	var ids []age.Identity
-	sc := bufio.NewScanner(io.LimitReader(f, maxIdentityFile))
+	sc := bufio.NewScanner(bytes.NewReader(data))
 	for n := 1; sc.Scan(); n++ {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		if strings.HasPrefix(line, "AGE-PLUGIN-") {
+			if passphrase {
+				return nil, nil, fmt.Errorf("%s line %d: a plugin identity inside a passphrase file is not supported", path, n)
+			}
 			id, err := plugin.NewIdentity(line, ui)
 			if err != nil {
 				return nil, nil, fmt.Errorf("%s line %d: %w", path, n, err)
@@ -59,7 +76,7 @@ func readIdentityFile(path string, ui *plugin.ClientUI) ([]config.Unlock, []age.
 		default:
 			return nil, nil, fmt.Errorf("%s line %d: unsupported identity type %T", path, n, id)
 		}
-		unlocks = append(unlocks, config.Unlock{Path: path, Recipient: recipient})
+		unlocks = append(unlocks, config.Unlock{Path: path, Recipient: recipient, Passphrase: passphrase})
 		ids = append(ids, parsed[0])
 	}
 	if err := sc.Err(); err != nil {
@@ -71,13 +88,82 @@ func readIdentityFile(path string, ui *plugin.ClientUI) ([]config.Unlock, []age.
 	return unlocks, ids, nil
 }
 
+// isEncrypted reports whether data is an age file (binary or armored)
+// rather than an identity file.
+func isEncrypted(data []byte) bool {
+	data = bytes.TrimLeft(data, " \t\r\n")
+	return bytes.HasPrefix(data, []byte("age-encryption.org/")) || bytes.HasPrefix(data, []byte(armor.Header))
+}
+
+// decryptIdentityFile asks for path's passphrase through ui and returns
+// the identity file inside. The caller clears the result.
+func decryptIdentityFile(path string, data []byte, ui *plugin.ClientUI) ([]byte, error) {
+	pass, err := ui.RequestValue("broker", fmt.Sprintf("passphrase for %s:", path), true)
+	if err != nil {
+		return nil, fmt.Errorf("%s: read passphrase: %w", path, err)
+	}
+	if pass == "" {
+		return nil, fmt.Errorf("%s: the passphrase is empty", path)
+	}
+	id, err := age.NewScryptIdentity(pass)
+	if err != nil {
+		return nil, err
+	}
+	var r io.Reader = bytes.NewReader(data)
+	if bytes.HasPrefix(bytes.TrimLeft(data, " \t\r\n"), []byte(armor.Header)) {
+		r = armor.NewReader(r)
+	}
+	dr, err := age.Decrypt(r, id)
+	if err != nil {
+		// Not wrapped: a wrong passphrase must not read as "this identity
+		// does not match", or decrypting would move on and hide it.
+		return nil, fmt.Errorf("%s: wrong passphrase, or not encrypted with one (age -p)", path)
+	}
+	out, err := io.ReadAll(io.LimitReader(dr, maxIdentityFile))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return out, nil
+}
+
+// passphraseIdentity is a passphrase-encrypted identity file. It asks for
+// the passphrase only when a stanza it could open is reached, so a vault
+// that also unlocks with hardware never prompts for it needlessly.
+type passphraseIdentity struct {
+	path string
+	ui   *plugin.ClientUI
+}
+
+func (p *passphraseIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
+	native := false
+	for _, s := range stanzas {
+		native = native || s.Type == "X25519" || s.Type == "mlkem768x25519"
+	}
+	if !native {
+		return nil, age.ErrIncorrectIdentity
+	}
+	_, ids, err := readIdentityFile(p.path, p.ui)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		key, err := id.Unwrap(stanzas)
+		if errors.Is(err, age.ErrIncorrectIdentity) {
+			continue
+		}
+		return key, err
+	}
+	return nil, fmt.Errorf("%s: %w", p.path, age.ErrIncorrectIdentity)
+}
+
 // unlockRecipients returns the recipients to wrap the private identity to.
 // Plugin stubs are used as recipients directly (the plugin derives the
-// public key without a touch); plain identities use their stored recipient.
+// public key without a touch); plain and passphrase identities use their
+// stored recipient.
 func unlockRecipients(unlocks []config.Unlock, ui *plugin.ClientUI) ([]age.Recipient, error) {
 	var rs []age.Recipient
 	for _, u := range unlocks {
-		if !u.Plain() {
+		if u.Zone() == config.ZoneHardware {
 			id, err := plugin.NewIdentity(u.Identity, ui)
 			if err != nil {
 				return nil, fmt.Errorf("unlock identity from %s: %w", u.Path, err)
@@ -97,40 +183,53 @@ func unlockRecipients(unlocks []config.Unlock, ui *plugin.ClientUI) ([]age.Recip
 	return rs, nil
 }
 
-// unlockIdentities returns the identities that can unwrap private.key.age.
-// Plain identities come first so a plain key never triggers a plugin prompt.
-// Unreadable plain identity files are skipped and returned as skipped, so a
-// missing test key does not block a working YubiKey.
-func unlockIdentities(unlocks []config.Unlock, ui *plugin.ClientUI) (ids []age.Identity, skipped error) {
+// unlockIdentities returns the identities that can unwrap private.key.age,
+// in two rounds: plain and plugin identities first (age tries plain ones
+// before any plugin, so a plain key never triggers a prompt), then
+// passphrase files, which are only worth asking for if the first round
+// fails (no hardware plugged in). Unreadable files are skipped and returned
+// as skipped, so a missing test key does not block a working YubiKey.
+func unlockIdentities(unlocks []config.Unlock, ui *plugin.ClientUI) (first, then []age.Identity, skipped error) {
 	var plugins []age.Identity
 	var errs []error
 	read := map[string]bool{}
 	for _, u := range unlocks {
-		if !u.Plain() {
+		switch u.Zone() {
+		case config.ZoneHardware:
 			id, err := plugin.NewIdentity(u.Identity, ui)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("unlock identity from %s: %w", u.Path, err))
 				continue
 			}
 			plugins = append(plugins, id)
-			continue
-		}
-		if read[u.Path] {
-			continue
-		}
-		read[u.Path] = true
-		fileUnlocks, fileIDs, err := readIdentityFile(u.Path, ui)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		for i, fu := range fileUnlocks {
-			if fu.Plain() {
-				ids = append(ids, fileIDs[i])
+		case config.ZonePassphrase:
+			if read[u.Path] {
+				continue
+			}
+			read[u.Path] = true
+			if _, err := os.Stat(u.Path); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			then = append(then, &passphraseIdentity{path: u.Path, ui: ui})
+		default:
+			if read[u.Path] {
+				continue
+			}
+			read[u.Path] = true
+			fileUnlocks, fileIDs, err := readIdentityFile(u.Path, ui)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			for i, fu := range fileUnlocks {
+				if fu.Zone() == config.ZonePlain {
+					first = append(first, fileIDs[i])
+				}
 			}
 		}
 	}
-	return append(ids, plugins...), errors.Join(errs...)
+	return append(first, plugins...), then, errors.Join(errs...)
 }
 
 // wrapPrivate encrypts the private tier identity file to the unlock

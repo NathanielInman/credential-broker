@@ -219,7 +219,7 @@ func newRestoreCmd() *cobra.Command {
 		},
 	}
 	c.Flags().StringArrayVar(&identities, "identity", nil, "wrap the private tier to this identity instead of the backup's (repeatable)")
-	c.Flags().BoolVar(&allowPlain, "insecure-plain-identity", false, "allow plain AGE-SECRET-KEY identities (tests, machines without hardware)")
+	c.Flags().BoolVar(&allowPlain, "insecure-plain-identity", false, "allow plain AGE-SECRET-KEY identities (tests only: they protect nothing)")
 	c.Flags().BoolVar(&force, "force", false, "replace an existing vault")
 	return c
 }

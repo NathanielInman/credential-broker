@@ -189,7 +189,7 @@ func loadUnlocks(identityFiles []string, allowPlain bool, ui *plugin.ClientUI) (
 			return nil, err
 		}
 		for _, u := range us {
-			if u.Plain() && !allowPlain {
+			if u.Zone() == config.ZonePlain && !allowPlain {
 				return nil, agenterr.New(agenterr.Usage,
 					"%s holds a plain AGE-SECRET-KEY identity, which unlocks without a touch; pass --insecure-plain-identity to allow it", abs)
 			}
@@ -203,21 +203,30 @@ func loadUnlocks(identityFiles []string, allowPlain bool, ui *plugin.ClientUI) (
 }
 
 // UnlockPrivate unwraps the private tier identity. With a hardware unlock
-// identity this is the touch. Never cache or persist the result.
+// identity this is the touch, and with a passphrase file the passphrase
+// prompt. Never cache or persist the result.
 func (v *Vault) UnlockPrivate(ui *plugin.ClientUI) (age.Identity, error) {
-	ids, skipped := unlockIdentities(v.cfg.Unlock, ui)
-	if len(ids) == 0 {
+	first, then, skipped := unlockIdentities(v.cfg.Unlock, ui)
+	if len(first)+len(then) == 0 {
 		return nil, fmt.Errorf("no usable unlock identity: %w", skipped)
 	}
-	data, err := decryptFile(v.paths.PrivateKey(), ids...)
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("unwrap %s: %w", v.paths.PrivateKey(), err), skipped)
+	var errs []error
+	for _, ids := range [][]age.Identity{first, then} {
+		if len(ids) == 0 {
+			continue
+		}
+		data, err := decryptFile(v.paths.PrivateKey(), ids...)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		id, err := parseTierIdentity(data, v.cfg.PrivateRecipient)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", v.paths.PrivateKey(), err)
+		}
+		return id, nil
 	}
-	id, err := parseTierIdentity(data, v.cfg.PrivateRecipient)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", v.paths.PrivateKey(), err)
-	}
-	return id, nil
+	return nil, errors.Join(fmt.Errorf("unwrap %s: %w", v.paths.PrivateKey(), errors.Join(errs...)), skipped)
 }
 
 // PublicIdentity reads the public tier identity from public.key.

@@ -34,13 +34,54 @@ type Unlock struct {
 	// Identity is a plugin identity stub (AGE-PLUGIN-...). Stubs only point
 	// at hardware, so they are kept here and unlock works without Path.
 	Identity string `json:"identity,omitempty"`
-	// Recipient belongs to a plain identity. The key itself is never
-	// copied: unlocking reads it from Path again.
+	// Recipient belongs to a plain or passphrase identity. The key itself
+	// is never copied: unlocking reads it from Path again.
 	Recipient string `json:"recipient,omitempty"`
+	// Passphrase marks a Path that is encrypted with a passphrase (age -p).
+	Passphrase bool `json:"passphrase,omitempty"`
 }
 
-// Plain reports whether u is a plain AGE-SECRET-KEY identity.
-func (u Unlock) Plain() bool { return u.Identity == "" }
+// Zone is how well an unlock identity protects the private tier.
+type Zone string
+
+const (
+	// ZoneHardware is an age plugin identity: the key stays on the device
+	// and unlocking needs it present (a touch, for a YubiKey).
+	ZoneHardware Zone = "hardware"
+	// ZonePassphrase is an identity file encrypted with a passphrase:
+	// safe at rest, but the passphrase alone unlocks it.
+	ZonePassphrase Zone = "passphrase"
+	// ZonePlain is a plain AGE-SECRET-KEY file: anything running as the
+	// user can read it and unlock.
+	ZonePlain Zone = "plain"
+)
+
+// zoneRank orders zones from weakest to strongest.
+var zoneRank = map[Zone]int{ZonePlain: 0, ZonePassphrase: 1, ZoneHardware: 2}
+
+// Zone reports how u protects the private tier.
+func (u Unlock) Zone() Zone {
+	switch {
+	case u.Identity != "":
+		return ZoneHardware
+	case u.Passphrase:
+		return ZonePassphrase
+	default:
+		return ZonePlain
+	}
+}
+
+// Zone reports the weakest zone among c's unlock identities. Any one of
+// them unwraps the private tier, so the weakest is what the vault has.
+func (c *Config) Zone() Zone {
+	weakest := ZoneHardware
+	for _, u := range c.Unlock {
+		if z := u.Zone(); zoneRank[z] < zoneRank[weakest] {
+			weakest = z
+		}
+	}
+	return weakest
+}
 
 // Load reads the config at path. A missing file returns an error matching
 // os.ErrNotExist.
