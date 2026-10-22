@@ -93,8 +93,10 @@ it).
 Human-facing (rare):
 
 - `broker init --identity FILE...`
-- `broker set NAME [--public] [--desc TEXT] [--stdin]`: value from a hidden
-  TTY prompt, or stdin with `--stdin`. Overwrites keep the tier unless told.
+- `broker set NAME [--public|--private] [--desc TEXT] [--stdin]`: value from
+  a hidden TTY prompt, or stdin with `--stdin`. New secrets default to
+  private. Overwrites keep the tier and description unless told: `--public`
+  or `--private` moves the secret, `--desc` replaces the description.
 - `broker rm NAME`
 - `broker grant NAME... [--for DUR] | --all`
 - `broker revoke [NAME...] | --all`

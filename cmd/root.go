@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/NathanielInman/credential-broker/internal/agenterr"
+	"github.com/NathanielInman/credential-broker/internal/paths"
+	"github.com/NathanielInman/credential-broker/internal/vault"
 )
 
 const (
@@ -17,12 +19,13 @@ const (
 
 // Execute runs broker with os.Args and returns the process exit status.
 func Execute(version string) int {
-	return run(version, os.Args[1:], os.Stdout, os.Stderr)
+	return run(version, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
 }
 
-func run(version string, args []string, stdout, stderr io.Writer) int {
+func run(version string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	root := newRoot(version)
 	root.SetArgs(args)
+	root.SetIn(stdin)
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	if err := root.Execute(); err != nil {
@@ -82,4 +85,12 @@ func usageArgs(validate cobra.PositionalArgs) cobra.PositionalArgs {
 
 func notImplemented(c *cobra.Command, _ []string) error {
 	return agenterr.New(agenterr.NotImplemented, "broker %s is not implemented yet", c.Name())
+}
+
+func openVault() (*vault.Vault, error) {
+	p, err := paths.Resolve()
+	if err != nil {
+		return nil, err
+	}
+	return vault.Open(p)
 }

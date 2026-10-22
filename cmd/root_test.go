@@ -7,11 +7,18 @@ import (
 	"testing"
 )
 
+// runBroker runs broker in a fresh, empty BROKER_HOME.
 func runBroker(t *testing.T, args ...string) (stdout, stderr string, code int) {
 	t.Helper()
 	t.Setenv("BROKER_HOME", t.TempDir())
+	return runStdin(t, "", args...)
+}
+
+// runStdin runs broker in the current BROKER_HOME with stdin as input.
+func runStdin(t *testing.T, stdin string, args ...string) (stdout, stderr string, code int) {
+	t.Helper()
 	var out, errOut bytes.Buffer
-	code = run("test", args, &out, &errOut)
+	code = run("test", args, strings.NewReader(stdin), &out, &errOut)
 	return out.String(), errOut.String(), code
 }
 
@@ -43,9 +50,6 @@ func TestHelpListsCommands(t *testing.T) {
 
 func TestStubsNotImplemented(t *testing.T) {
 	for _, args := range [][]string{
-		{"init", "--identity", "id.txt"},
-		{"set", "X"},
-		{"rm", "X"},
 		{"grant", "X", "--for", "1h"},
 		{"revoke", "--all"},
 		{"get", "X"},
@@ -53,7 +57,6 @@ func TestStubsNotImplemented(t *testing.T) {
 		{"backup", "-o", "b.age"},
 		{"restore", "b.age"},
 		{"log", "--json"},
-		{"ls", "--json"},
 		{"exec", "X", "--", "true"},
 	} {
 		t.Run(args[0], func(t *testing.T) {
@@ -72,6 +75,8 @@ func TestUsageErrors(t *testing.T) {
 	for _, args := range [][]string{
 		{"nope"},
 		{"set"},
+		{"set", "X", "--public", "--private"},
+		{"set", "lower"},
 		{"ls", "--bogus"},
 		{"exec", "X", "true"},
 		{"exec", "X", "--"},
