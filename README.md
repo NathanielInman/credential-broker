@@ -2,13 +2,21 @@
 
 # Credential Broker
 
-A local secret store for a machine where AI agents do most of the typing. Agents run commands **with** your secrets and never see them. When one needs a secret, a window pops up on your desktop saying who's asking and why, you touch your YubiKey, and the kernel forgets the grant when it expires.
+A local secret store for a machine where AI agents do most of the typing. Agents run commands **with** your secrets and never see them. When one needs a secret, this pops up on your desktop:
+
+<p align="center">
+  <img src="./artwork/request-window.png" alt="broker's request window: an agent asks for GITHUB_TOKEN and DB_PASS for an hour to run ./deploy.sh, with the process chain that asked, its directory, and its stated reason, waiting for a YubiKey touch" width="460">
+</p>
+
+You touch your YubiKey, the command runs, and the kernel forgets the grant an hour later. That's the whole human side. The agent's side is two commands:
 
 ```sh
-broker ls --json                                  # agent: what secrets exist (names, never values)
-broker exec --request GITHUB_TOKEN -- gh repo list  # agent: run a command with one, asking you if needed
-broker grant GITHUB_TOKEN --for 2h                # you, from a terminal instead of the window
+broker ls --json        # what secrets exist (names and descriptions, never values)
+broker exec --request --reason "Deploying the grant-zone fix to the dev environment." \
+  GITHUB_TOKEN DB_PASS -- ./deploy.sh --env dev
 ```
+
+Prefer a terminal? `broker grant GITHUB_TOKEN DB_PASS --for 1h` does the same thing without the window.
 
 There's no server, no daemon, and no account. Secrets are plain [age](https://age-encryption.org) files on disk, grants live in the Linux kernel keyring with a timeout, and every read lands in an audit log with the process tree that asked for it.
 
@@ -107,9 +115,7 @@ $ broker exec GITHUB_TOKEN DB_PASS -- ./deploy.sh
 {"error":"no_grant","names":["GITHUB_TOKEN","DB_PASS"],"ask_human":"broker grant GITHUB_TOKEN DB_PASS --for 1h"}
 ```
 
-That works when you have a terminal next to the agent's. In something like T3 you never see the agent's terminal, so `exec --request` (or `broker request` on its own) asks you in a **request window** instead:
-
-![The request window](./artwork/request-window.png)
+That works when you have a terminal next to the agent's. In something like T3 you never see the agent's terminal, so `exec --request` (or `broker request` on its own) asks you in the **request window** instead, the one at the [top of this page](#credential-broker).
 
 Everything in the window except the yellow box is something broker worked out itself: the secrets and their descriptions, the process chain and directory (read from `/proc`, not from the agent), and the command it will run. The yellow box is the agent's `--reason`, labeled as its word. You can pick a shorter duration before approving. What approving takes depends on the [unlock zone](#unlock-strength): touch the key on a hardware vault, type the passphrase into the window on a passphrase vault, or click Approve on a plain one. Deny, Escape, or closing the window all say no, and the agent gets `denied` and is told not to ask again. Nobody answering within 2 minutes gets it `request_timeout`.
 
