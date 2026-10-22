@@ -17,11 +17,14 @@ const (
 	FileMode os.FileMode = 0o600
 )
 
-// Paths holds the three broker directories.
+// Paths holds the broker directories.
 type Paths struct {
 	Config string
 	Data   string
 	State  string
+	// Run holds runtime files that die with the login session, such as
+	// the request lock: $XDG_RUNTIME_DIR/broker, else State.
+	Run string
 }
 
 // Resolve reads BROKER_HOME and the XDG variables from the environment.
@@ -34,6 +37,7 @@ func Resolve() (Paths, error) {
 			Config: filepath.Join(root, "config"),
 			Data:   filepath.Join(root, "data"),
 			State:  filepath.Join(root, "state"),
+			Run:    filepath.Join(root, "run"),
 		}, nil
 	}
 
@@ -41,11 +45,16 @@ func Resolve() (Paths, error) {
 	if err != nil {
 		return Paths{}, err
 	}
-	return Paths{
+	p := Paths{
 		Config: filepath.Join(xdg("XDG_CONFIG_HOME", home, ".config"), "broker"),
 		Data:   filepath.Join(xdg("XDG_DATA_HOME", home, ".local", "share"), "broker"),
 		State:  filepath.Join(xdg("XDG_STATE_HOME", home, ".local", "state"), "broker"),
-	}, nil
+	}
+	p.Run = p.State
+	if v := os.Getenv("XDG_RUNTIME_DIR"); filepath.IsAbs(v) {
+		p.Run = filepath.Join(v, "broker")
+	}
+	return p, nil
 }
 
 // xdg returns the named variable, or home joined with fallback when it is
@@ -62,6 +71,7 @@ func (p Paths) PublicKey() string       { return filepath.Join(p.Data, "public.k
 func (p Paths) PrivateKey() string      { return filepath.Join(p.Data, "private.key.age") }
 func (p Paths) SecretsDir() string      { return filepath.Join(p.Data, "secrets") }
 func (p Paths) LogFile() string         { return filepath.Join(p.State, "log.jsonl") }
+func (p Paths) RequestLock() string     { return filepath.Join(p.Run, "request.lock") }
 func (p Paths) TierDir(t string) string { return filepath.Join(p.SecretsDir(), t) }
 
 // Ensure creates the config, data, and state directories at DirMode.

@@ -21,6 +21,7 @@ func TestResolveBrokerHome(t *testing.T) {
 		Config: filepath.Join(root, "config"),
 		Data:   filepath.Join(root, "data"),
 		State:  filepath.Join(root, "state"),
+		Run:    filepath.Join(root, "run"),
 	}
 	if p != want {
 		t.Fatalf("got %+v, want %+v", p, want)
@@ -43,6 +44,7 @@ func TestResolveXDG(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/xdg/config")
 	t.Setenv("XDG_DATA_HOME", "relative")
 	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("XDG_RUNTIME_DIR", "/run/user/7")
 
 	p, err := Resolve()
 	if err != nil {
@@ -52,9 +54,16 @@ func TestResolveXDG(t *testing.T) {
 		Config: "/xdg/config/broker",
 		Data:   "/home/u/.local/share/broker",
 		State:  "/home/u/.local/state/broker",
+		Run:    "/run/user/7/broker",
 	}
 	if p != want {
 		t.Fatalf("got %+v, want %+v", p, want)
+	}
+
+	// Without a runtime directory, runtime files go in State.
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	if p, err := Resolve(); err != nil || p.Run != p.State {
+		t.Fatalf("Run = %q, %v; want State", p.Run, err)
 	}
 }
 
