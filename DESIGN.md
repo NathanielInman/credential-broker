@@ -20,8 +20,8 @@ active grant.
 ## Binary and platform
 
 - Binary name `broker`, Go, module `github.com/NathanielInman/credential-broker`.
-- Linux and macOS. Other GOOS builds compile but every command returns
-  "unsupported platform". The platform seams are `internal/keyring` (kernel
+- Linux, macOS, and Windows. Other GOOS builds compile but every command
+  returns "unsupported platform". The platform seams are `internal/keyring` (kernel
   keyring, or the grant agent), `internal/procinfo` (who asked: `/proc`, or
   sysctl and libproc), and `cmd/platform_*.go` (`harden`, `desktopSession`).
 - Libraries: `filippo.io/age` (including `filippo.io/age/plugin` client
@@ -32,8 +32,11 @@ active grant.
   directory.
 - The request window is a second program, `broker-dialog` (its own module
   in `broker-dialog/`, cgo with GTK 3 and WebKitGTK 4.1 on linux, Cocoa and
-  WKWebView on macOS), so `broker` links nothing and `go test ./...` from
-  the root needs no GTK.
+  WKWebView on macOS, go-webview2 (pure Go, WebView2) on Windows, behind a
+  small `window` interface), so `broker` links nothing and `go test ./...`
+  from the root needs no GTK. On Windows it is built `-H=windowsgui` and
+  posts through a bound `brokerPost` function instead of a WebKit message
+  handler; closing it by its X is told apart from quitting by a flag.
 
 ## Tiers (replace v1 scopes)
 
@@ -142,10 +145,10 @@ missing, so "expired" and "never granted" are only distinguishable for that
 window. If the keyring is unavailable (keyctl blocked), `ls` still lists
 secrets, shows none as granted, and says why on stderr.
 
-## Grants on macOS (grant agent)
+## Grants on macOS and Windows (grant agent)
 
-macOS has no kernel keyring, so `internal/keyring` there is a client for
-`broker grantd`, a per-user agent that holds grants in memory:
+macOS and Windows have no kernel keyring, so `internal/keyring` there is a
+client for `broker grantd`, a per-user agent that holds grants in memory:
 
 - The first `Add` that finds no agent starts one (`keyring.StartAgent`:
   this executable's `grantd`, in a session of its own) and waits up to 5s
@@ -156,14 +159,25 @@ macOS has no kernel keyring, so `internal/keyring` there is a client for
   listens on `run/grantd.sock` with umask 077. A runtime directory too deep
   for sun_path (104 bytes) gets `$TMPDIR/broker-<hash>.sock` instead.
 - One JSON request and response per connection (`add`, `read`, `lookup`,
-  `list`, `revoke`). It checks the peer's uid (`LOCAL_PEERCRED`) and
-  answers only its own user, as the kernel keyring does: any process of
-  that user can read a grant.
+  `list`, `revoke`). It answers only its own user, as the kernel keyring
+  does (any process of that user can read a grant): by uid
+  (`LOCAL_PEERCRED`) on macOS, and on Windows by the token SID of the
+  peer's process (`SIO_AF_UNIX_GETPEERPID`). On Windows the socket file
+  also inherits the profile directory's ACL, and the lock file is opened
+  with delete sharing so a running agent never blocks removing its
+  directory.
 - Each grant has a timer for its exact TTL; at expiry the value is zeroed
   and dropped. With no grants for 30s the agent exits. Nothing is written
   to disk, so a reboot forgets every grant.
-- It calls `harden` (`PT_DENY_ATTACH`); the hardened runtime (`codesign -o
-  runtime`) is what stops other processes of the user reading its memory.
+- It calls `harden`. On macOS that is `PT_DENY_ATTACH`, and the hardened
+  runtime (`codesign -o runtime`) is what stops other processes of the
+  user reading its memory. On Windows it sets a protected process DACL
+  granting the user and OWNER RIGHTS only query-limited-information,
+  synchronize, and terminate, so no PROCESS_VM_READ; an administrator with
+  SeDebugPrivilege still gets in, and handles opened before (the starter's)
+  keep their access. Windows starts it with CREATE_NEW_PROCESS_GROUP and
+  CREATE_NO_WINDOW, so it survives its console and the age plugins it runs
+  get no window.
 - `ErrExpired` does not exist here: an expired grant reads as not granted.
 
 ## Commands
@@ -243,7 +257,10 @@ their desktop instead.
   "Touch your YubiKey" or "Confirm with Touch ID".
 - A request window needs a desktop: `WAYLAND_DISPLAY` or `DISPLAY` on
   linux, the Aqua login session on macOS (`launchctl managername`; an ssh
-  session is Background). A wrong passphrase is asked for again
+  session is Background), and on Windows neither session 0 nor SSH.
+  Windows shows no requester directory: reading it needs the process's
+  PEB. `approverEnv` adds the Windows variables a process cannot start
+  Winsock or WebView2 without (`SYSTEMROOT`, `LOCALAPPDATA`, ...). A wrong passphrase is asked for again
   with the error showing; other unlock failures offer Try again; three
   failures end the request. The human may pick a shorter duration (the
   asked one, and 5m, 15m, 1h, 4h below it) until the grant is written.
@@ -437,10 +454,13 @@ useful line in the file).
   the user keyring, which is per uid; a user namespace has its own, so tests
   never touch the real one and leave nothing behind even if they crash.
   Without user namespaces the keyring tests skip.
-- On macOS the same suite runs against real grant agents: each test's
-  `BROKER_HOME` has its own socket, so `keyringtest` isolates by doing
-  nothing, and `keyring.AgentCommand` starts the test binary as broker.
-  `TestGrantd` runs that path on linux too.
+- On macOS and Windows the same suite runs against real grant agents: each
+  test's `BROKER_HOME` has its own socket, so `keyringtest` isolates by
+  doing nothing, and `keyring.AgentCommand` starts the test binary as
+  broker. `TestGrantd` runs that path on linux too. On Windows the cmd
+  tests end those agents at exit (`stopTestAgents`), since go test cannot
+  delete a running copy of the test binary. Unix permission bits are not
+  checked on Windows, where privacy is the profile directory's ACL.
 - Request tests run a real `broker approve` subprocess (the test binary)
   against a fake window (the test binary again) that acts out a script
   and logs what it was shown. broker-dialog itself is checked by hand.

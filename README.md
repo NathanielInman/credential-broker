@@ -18,7 +18,7 @@ broker exec --request --reason "Deploying the grant-zone fix to the dev environm
 
 Prefer a terminal? `broker grant GITHUB_TOKEN DB_PASS --for 1h` does the same thing without the window.
 
-There's no server, no daemon, and no account. Secrets are plain [age](https://age-encryption.org) files on disk, grants live in memory with a timeout (the kernel keyring on Linux, a small in-memory agent on macOS), and every read lands in an audit log with the process tree that asked for it.
+There's no server, no daemon, and no account. Secrets are plain [age](https://age-encryption.org) files on disk, grants live in memory with a timeout (the kernel keyring on Linux, a small in-memory agent on macOS and Windows), and every read lands in an audit log with the process tree that asked for it.
 
 v1 was a client/server broker for teams, with users, scopes, and PGP challenges. v2 is a from-scratch rewrite for one person and the agents working on their machine. The full spec is in [DESIGN.md](./DESIGN.md).
 
@@ -60,7 +60,7 @@ Writing a private secret only needs the tier's public key, so `set` and `import`
 
 A grant is you saying "agents can use these for the next two hours." One touch unwraps the private tier key in memory, broker decrypts just the named secrets, and each one goes into the kernel user keyring with a timeout. The key itself is never cached. When the timeout hits, the kernel drops the secret; there's no daemon to forget to stop.
 
-macOS has no kernel keyring, so there the first grant starts `broker grantd`, a small agent that holds grants in memory only, drops each one on a timer, answers only your user over a private unix socket, and exits once it has held nothing for 30 seconds. Nothing granted ever touches disk, and a reboot forgets everything, same as Linux.
+macOS and Windows have no kernel keyring, so there the first grant starts `broker grantd`, a small agent that holds grants in memory only, drops each one on a timer, answers only your user over a private unix socket, and exits once it has held nothing for 30 seconds. Nothing granted ever touches disk, and logging out or rebooting forgets everything, same as Linux.
 
 ```mermaid
 sequenceDiagram
@@ -139,7 +139,7 @@ sequenceDiagram
     B-->>A: deploy output (redacted) and its exit status
 ```
 
-The approver holds the unwrapped private tier key, so nothing else may read its memory. On Linux a process can read the memory of its own descendants (`kernel.yama.ptrace_scope=1`), so `request` starts the approver through `systemd-run --user`, as a child of your service manager, and the approver marks itself non-dumpable the way ssh-agent does. On macOS the hardened runtime does that job (see [Install](#install)), and the approver also refuses debugger attachment. That also keeps the window up if the agent's shell command times out: approve anyway and the agent's next `exec` finds the grant. One window shows at a time; a second request waits behind it, and usually finds its names granted by the time it gets a turn.
+The approver holds the unwrapped private tier key, so nothing else may read its memory. On Linux a process can read the memory of its own descendants (`kernel.yama.ptrace_scope=1`), so `request` starts the approver through `systemd-run --user`, as a child of your service manager, and the approver marks itself non-dumpable the way ssh-agent does. On macOS the hardened runtime does that job (see [Install](#install)), and the approver also refuses debugger attachment. On Windows the approver and grant agent lock their own process DACL, so other processes of yours can't open them to read memory; an administrator still can. That also keeps the window up if the agent's shell command times out: approve anyway and the agent's next `exec` finds the grant. One window shows at a time; a second request waits behind it, and usually finds its names granted by the time it gets a turn.
 
 If there's no desktop session or broker-dialog isn't installed, `--request` falls back to the plain `no_grant` line above.
 
@@ -147,7 +147,7 @@ Every failure an agent can hit has a stable `error` code. The full table is in t
 
 ## Install
 
-Linux or macOS (see [Platforms](#platforms)). You need Go to build it. The stock `age` CLI is optional but worth having for [recovery](#recovering-without-broker).
+Linux, macOS, or Windows (see [Platforms](#platforms)). You need Go to build it. The stock `age` CLI is optional but worth having for [recovery](#recovering-without-broker).
 
 Build from source (the binaries on the Releases page are still v1):
 
@@ -158,7 +158,7 @@ go build -o ~/.local/bin/broker .
 (cd broker-dialog && go build -o ~/.local/bin/broker-dialog .)
 ```
 
-`broker-dialog` is the request window. It's a separate program so broker itself stays pure Go with nothing to link, and it goes next to `broker`.
+`broker-dialog` is the request window. It's a separate program so broker itself stays pure Go with nothing to link, and it goes next to `broker`. On Windows the commands differ a little; see below.
 
 ### Linux
 
@@ -182,6 +182,19 @@ codesign --force --sign - --options runtime ~/.local/bin/broker ~/.local/bin/bro
 ```
 
 The `codesign` line matters. It turns on the hardened runtime, under which no other process of yours can attach to broker or read its memory, and that's what protects the approver and the grant agent while they hold secrets. Sign again after every build.
+
+### Windows
+
+The window uses WebView2, which ships with Windows 11 and current Windows 10, so there's nothing to install for it. Build `broker-dialog` as a GUI program so it never opens a console, and put both next to each other on your `PATH`:
+
+```powershell
+winget install GoLang.Go FiloSottile.age
+mkdir $env:USERPROFILE\.local\bin -Force
+go build -o $env:USERPROFILE\.local\bin\broker.exe .
+cd broker-dialog; go build -ldflags "-H=windowsgui" -o $env:USERPROFILE\.local\bin\broker-dialog.exe .
+```
+
+For a YubiKey, put the Windows build of [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey/releases) on your `PATH`; Windows has its smart card service built in. There's no Touch ID equivalent among age plugins on Windows, so the zones there are YubiKey, passphrase, and plain.
 
 ### Agent skill
 
@@ -371,7 +384,7 @@ It does not protect against:
 
 ## Platforms
 
-v2 runs on Linux and macOS. Windows compiles, but every command says "unsupported platform" for now.
+v2 runs on Linux, macOS, and Windows 10 (1803 or later, for AF_UNIX sockets) and 11.
 
 On Linux, grants are kernel keyring entries. The user keyring is per uid, so a grant made in your terminal is visible to agents in other sessions. It's also per **user namespace**, though, and that bites: anything running under bubblewrap or flatpak (and agent sandboxes built on them) gets its own empty user keyring and sees no grants at all.
 
@@ -382,7 +395,7 @@ $ bwrap --dev-bind / / broker exec GITHUB_TOKEN -- true
 
 Granting again won't fix it. `broker exec` has to run outside the sandbox, so allow it as an unsandboxed command in your agent's config. The skill tells agents to recognize this and ask.
 
-On macOS, grants live in the grant agent described under [Grants](#grants), and a request window only opens from the desktop login session: an agent running over SSH gets the plain `no_grant` and a terminal command instead.
+On macOS and Windows, grants live in the grant agent described under [Grants](#grants), and a request window only opens from the desktop login session: an agent running over SSH (or as a Windows service) gets the plain `no_grant` and a terminal command instead. Windows can't show the requesting process's directory, so its window leaves that line out. `exec` on Windows has no signals to forward; Ctrl+C reaches the command directly, as it reaches everything on the console.
 
 ## Commands
 
