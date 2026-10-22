@@ -1,13 +1,9 @@
-//go:build linux || darwin
-
 package cmd
 
 import (
 	"errors"
-	"net"
 	"os"
 	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -52,9 +48,7 @@ func newGrantdCmd() *cobra.Command {
 			if err := os.Remove(sock); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
-			old := syscall.Umask(0o077)
-			ln, err := net.Listen("unix", sock)
-			syscall.Umask(old)
+			ln, err := listenPrivate(sock)
 			if err != nil {
 				return err
 			}
@@ -62,7 +56,7 @@ func newGrantdCmd() *cobra.Command {
 			// A signal shuts it down as cleanly as going idle does: the
 			// listener's close removes the socket.
 			sig := make(chan os.Signal, 1)
-			signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+			signal.Notify(sig, stopSignals...)
 			defer signal.Stop(sig)
 			go func() {
 				if _, ok := <-sig; ok {

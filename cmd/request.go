@@ -44,6 +44,10 @@ var requestChoices = []time.Duration{5 * time.Minute, 15 * time.Minute, time.Hou
 // vault, the desktop, and age plugins, and nothing else of the agent's.
 var approverEnv = []string{
 	"HOME", "PATH", "LANG", "LC_ALL", "USER", "TMPDIR",
+	// Windows: a process without SystemRoot cannot start Winsock, and
+	// WebView2 keeps its data under LOCALAPPDATA.
+	"SYSTEMROOT", "WINDIR", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP",
+	"PATHEXT", "COMSPEC", "USERNAME", "USERDOMAIN", "HOMEDRIVE", "HOMEPATH", "PROGRAMDATA",
 	"BROKER_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR",
 	"WAYLAND_DISPLAY", "DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS", "GDK_BACKEND",
 }
@@ -251,8 +255,8 @@ var requestWindow = func() error {
 // PATH.
 func dialogPath() (string, error) {
 	if exe, err := os.Executable(); err == nil {
-		p := filepath.Join(filepath.Dir(exe), "broker-dialog")
-		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+		// LookPath on a path adds .exe on Windows.
+		if p, err := exec.LookPath(filepath.Join(filepath.Dir(exe), "broker-dialog")); err == nil {
 			return p, nil
 		}
 	}
@@ -557,6 +561,21 @@ func requestErr(err error) error {
 		return agenterr.New(agenterr.RequestTimeout, "nobody answered the request window in time")
 	}
 	return err
+}
+
+var errLocked = errors.New("locked by another process")
+
+// lockRequests takes the request lock, waiting until deadline for another
+// window to close, and returns its release.
+func lockRequests(p paths.Paths, deadline time.Time) (func(), error) {
+	if err := paths.MkdirAll(p.Run); err != nil {
+		return nil, err
+	}
+	release, err := lockFile(p.RequestLock(), deadline)
+	if errors.Is(err, errLocked) {
+		return nil, approval.ErrTimeout
+	}
+	return release, err
 }
 
 // requester checks that pid is a broker process and reads its working

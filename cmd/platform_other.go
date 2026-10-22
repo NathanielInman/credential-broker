@@ -1,4 +1,4 @@
-//go:build !linux && !darwin
+//go:build !linux && !darwin && !windows
 
 package cmd
 
@@ -10,7 +10,7 @@ import (
 )
 
 func checkPlatform() error {
-	return agenterr.New(agenterr.Unsupported, "broker v2 supports linux and macOS, not %s", runtime.GOOS)
+	return agenterr.New(agenterr.Unsupported, "broker v2 supports linux, macOS, and Windows, not %s", runtime.GOOS)
 }
 
 func harden() error         { return errUnsupported }

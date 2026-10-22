@@ -4,34 +4,19 @@ package cmd
 
 import (
 	"errors"
+	"net"
 	"os"
 	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
 
-	"github.com/NathanielInman/credential-broker/internal/approval"
 	"github.com/NathanielInman/credential-broker/internal/paths"
 )
 
 // newSession detaches a child into a session of its own, so killing the
 // requester's process group leaves it running.
 func newSession() *syscall.SysProcAttr { return &syscall.SysProcAttr{Setsid: true} }
-
-// lockRequests takes the request lock, waiting until deadline for another
-// window to close, and returns its release.
-func lockRequests(p paths.Paths, deadline time.Time) (func(), error) {
-	if err := paths.MkdirAll(p.Run); err != nil {
-		return nil, err
-	}
-	release, err := lockFile(p.RequestLock(), deadline)
-	if errors.Is(err, errLocked) {
-		return nil, approval.ErrTimeout
-	}
-	return release, err
-}
-
-var errLocked = errors.New("locked by another process")
 
 // lockFile takes an exclusive flock on file, waiting until deadline, and
 // returns its release.
@@ -56,3 +41,13 @@ func lockFile(file string, deadline time.Time) (func(), error) {
 		time.Sleep(50 * time.Millisecond)
 	}
 }
+
+// listenPrivate listens on a unix socket only this user can connect to.
+func listenPrivate(sock string) (net.Listener, error) {
+	old := syscall.Umask(0o077)
+	defer syscall.Umask(old)
+	return net.Listen("unix", sock)
+}
+
+// stopSignals are the signals that shut the grant agent down.
+var stopSignals = []os.Signal{syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP}

@@ -28,6 +28,18 @@ jobs:
       - run: go vet . && go build .
         working-directory: broker-dialog
 
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go vet . && go build -ldflags "-H=windowsgui" .
+        working-directory: broker-dialog
+
   dialog:
     runs-on: ubuntu-latest
     steps:

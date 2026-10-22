@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -27,7 +28,7 @@ import (
 const testPlugin = "brokertest"
 
 func TestMain(m *testing.M) {
-	if filepath.Base(os.Args[0]) == "age-plugin-"+testPlugin {
+	if strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") == "age-plugin-"+testPlugin {
 		os.Exit(runTestPlugin())
 	}
 	os.Exit(m.Run())
@@ -65,7 +66,13 @@ func installTestPlugin(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	if err := os.Symlink(exe, filepath.Join(dir, "age-plugin-"+testPlugin)); err != nil {
+	link := os.Symlink
+	name := "age-plugin-" + testPlugin
+	if runtime.GOOS == "windows" {
+		// Symlinks need privileges there; a hard link does not.
+		link, name = os.Link, name+".exe"
+	}
+	if err := link(exe, filepath.Join(dir, name)); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
