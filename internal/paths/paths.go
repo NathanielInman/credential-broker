@@ -88,3 +88,32 @@ func MkdirAll(dir string) error {
 	}
 	return nil
 }
+
+// WriteFile atomically replaces name with data at FileMode: it writes a
+// temporary file in the same directory, syncs it, and renames it over name,
+// so readers never see a partial file.
+func WriteFile(name string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(name), "."+filepath.Base(name)+".tmp*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp) // no-op once renamed
+
+	if err := f.Chmod(FileMode); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp, name)
+}

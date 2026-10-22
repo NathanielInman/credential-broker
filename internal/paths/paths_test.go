@@ -79,3 +79,28 @@ func TestEnsure(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteFile(t *testing.T) {
+	name := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(name, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteFile(name, []byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(name)
+	if err != nil || string(got) != "new" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	fi, err := os.Stat(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != FileMode {
+		t.Errorf("mode %v, want %v", fi.Mode().Perm(), FileMode)
+	}
+	entries, _ := os.ReadDir(filepath.Dir(name))
+	if len(entries) != 1 {
+		t.Errorf("temporary file left behind: %v", entries)
+	}
+}
