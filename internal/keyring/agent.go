@@ -7,7 +7,7 @@ package keyring
 // Clients talk to it over a unix socket in broker's runtime directory, one
 // JSON request and response per connection, and it answers only processes
 // of its own user. A grant is readable by any process of that user, just as
-// with the kernel keyring.
+// with the kernel keyring. macOS and Windows use it.
 
 import (
 	"bytes"
@@ -20,7 +20,6 @@ import (
 	"os/exec"
 	"sort"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -169,7 +168,7 @@ func Serve(ln net.Listener, idle time.Duration) error {
 func serveConn(s *store, conn net.Conn) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
-	if uid, err := peerUID(conn); err != nil || uid != os.Getuid() {
+	if err := peerIsUs(conn); err != nil {
 		return
 	}
 	var req agentRequest
@@ -219,8 +218,12 @@ func (c *Client) do(req agentRequest, start bool) (agentResponse, error) {
 }
 
 func (c *Client) dial() (net.Conn, error) {
+	// A missing socket, or a stale one nobody listens on, means no agent.
+	if _, err := os.Stat(c.Socket); errors.Is(err, os.ErrNotExist) {
+		return nil, errNoAgent
+	}
 	conn, err := net.DialTimeout("unix", c.Socket, 2*time.Second)
-	if err != nil && (errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED)) {
+	if err != nil && (errors.Is(err, os.ErrNotExist) || refused(err)) {
 		return nil, errNoAgent
 	}
 	return conn, err

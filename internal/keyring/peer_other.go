@@ -1,4 +1,4 @@
-//go:build !linux && !darwin
+//go:build !linux && !darwin && !windows
 
 package keyring
 
@@ -8,6 +8,8 @@ import (
 	"syscall"
 )
 
-func peerUID(net.Conn) (int, error) { return 0, errors.New("peer credentials are not supported here") }
+func peerIsUs(net.Conn) error { return errors.New("peer credentials are not supported here") }
+
+func refused(error) bool { return false }
 
 func detached() *syscall.SysProcAttr { return nil }

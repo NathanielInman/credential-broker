@@ -3,10 +3,26 @@ package keyring
 import (
 	"errors"
 	"net"
+	"os"
 	"syscall"
 
 	"golang.org/x/sys/unix"
 )
+
+// peerIsUs checks the process at the other end of conn runs as this user.
+func peerIsUs(conn net.Conn) error {
+	uid, err := peerUID(conn)
+	if err != nil {
+		return err
+	}
+	if uid != os.Getuid() {
+		return errors.New("peer is another user")
+	}
+	return nil
+}
+
+// refused reports a socket file with nobody listening.
+func refused(err error) bool { return errors.Is(err, syscall.ECONNREFUSED) }
 
 // peerUID is the uid of the process at the other end of conn.
 func peerUID(conn net.Conn) (int, error) {
