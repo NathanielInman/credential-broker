@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 
@@ -31,19 +32,24 @@ func newInitCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			out := c.OutOrStdout()
-			fmt.Fprintf(out, "created vault in %s\nprivate tier unlocks with:\n", p.Data)
-			for _, u := range v.Config().Unlock {
-				kind := "plugin"
-				if u.Plain() {
-					kind = "plain, no touch"
-				}
-				fmt.Fprintf(out, "  %s (%s)\n", u.Path, kind)
-			}
+			fmt.Fprintf(c.OutOrStdout(), "created vault in %s\n", p.Data)
+			printUnlocks(c.OutOrStdout(), v)
 			return nil
 		},
 	}
 	c.Flags().StringArrayVar(&identities, "identity", nil, "age identity file that unlocks the private tier (repeatable)")
 	c.Flags().BoolVar(&allowPlain, "insecure-plain-identity", false, "allow plain AGE-SECRET-KEY identities (tests, machines without hardware)")
 	return c
+}
+
+// printUnlocks lists the identities that unlock v's private tier.
+func printUnlocks(out io.Writer, v *vault.Vault) {
+	fmt.Fprintln(out, "private tier unlocks with:")
+	for _, u := range v.Config().Unlock {
+		kind := "plugin"
+		if u.Plain() {
+			kind = "plain, no touch"
+		}
+		fmt.Fprintf(out, "  %s (%s)\n", u.Path, kind)
+	}
 }

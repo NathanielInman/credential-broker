@@ -124,7 +124,8 @@ Human-facing (rare):
 - `broker import FILE [--public]`: parse `export NAME=value` / `NAME=value`
   lines (quotes handled) from shell env files like `~/.zshenv`, store them,
   print which lines can now be deleted. Never prints values.
-- `broker backup -o FILE` / `broker restore FILE` (see below)
+- `broker backup -o FILE [--generate-passphrase] [--include-log]` /
+  `broker restore FILE [--identity FILE...] [--force]` (see below)
 - `broker log [--since DUR] [--name NAME] [--json]`
 
 Agent-facing (frequent, no prompts ever):
@@ -181,7 +182,9 @@ useful line in the file).
 - `ls` and `log` are not logged. Flag and argument errors cobra catches
   before a command runs are not logged; everything after is.
 - grant logs the private secrets it grants (by name, also with `--all`);
-  revoke logs the names it revoked.
+  revoke logs the names it revoked. backup and restore log every secret
+  the backup carries (tier usually `mixed`), so `--name` finds the backups
+  holding a secret.
 - exec logs once, before the child starts (it may run for hours): `ok`
   means the secrets were handed to the child. The child's exit status is
   not logged.
@@ -200,18 +203,53 @@ useful line in the file).
 
 ## Backup and restore
 
-- `broker backup -o FILE`: tar of public.key, the *unwrapped* private
-  identity (needs a touch), secrets/, config.json, and optionally the log,
-  encrypted with an age scrypt passphrase recipient (scrypt must be the only
-  recipient in an age file, so this is a separate file from the vault).
-  Prompt twice. Offer `--generate-passphrase` (7 diceware words from the EFF
-  long list, embedded) and warn when a typed passphrase is under ~20 chars.
-- `broker restore FILE [--identity FILE...] [--force]`: passphrase, then
-  rewrites the vault and wraps the private identity to the given identities,
-  or to the recipients stored in the backup's config (same YubiKey travels
-  with you). Refuses to overwrite an existing vault without `--force`.
+- `broker backup -o FILE [--generate-passphrase] [--include-log]`: one
+  touch unwraps the private identity, and FILE gets the whole vault with
+  that identity *unwrapped*, encrypted to an age scrypt passphrase
+  recipient alone (scrypt must be the only recipient in an age file, so
+  this is a separate file from the vault). FILE is replaced atomically at
+  0600. The passphrase is typed twice, with a warning under 20 characters;
+  `--generate-passphrase` instead makes 7 words from the EFF large
+  wordlist (embedded, about 90 bits) and prints them on stderr. There is
+  no passphrase env var or fd: tests swap the prompt in process.
+- Format: an uncompressed tar laid out like `BROKER_HOME`, so the stock
+  tools recover it (below). `manifest.json` comes first:
+  `{"format":1,"created":...,"broker_version":...,"log":bool}`. Then
+  `config/config.json`, `data/public.key`, `data/private.key` (the
+  unwrapped private identity in age-keygen format),
+  `data/secrets/<tier>/<NAME>.age` and `.json`, and with `--include-log`
+  `state/log.jsonl`. Directories are 0700 and files 0600 in the tar.
+  Restore reads every format up to its own and refuses newer ones with a
+  clear error; a later format bumps the number and keeps reading old ones.
+- `broker restore FILE [--identity FILE...] [--insecure-plain-identity]
+  [--force]`: refuses an existing vault without `--force` (before any
+  prompt), asks for the passphrase, and wraps the private identity to the
+  `--identity` files, or to the unlock identities in the backup's config
+  (same YubiKey travels with you). Plain identities need
+  `--insecure-plain-identity`, as for init; plain ones already in the
+  backup's config do not.
+- Restore never leaves a half vault. It unpacks into a staging directory
+  beside the data directory, accepting only the entries above (no other
+  names, no `..`, no links), checks both tier keys against the config's
+  recipients, decrypts every secret, and rewraps the private identity, all
+  before touching the live vault. Then it removes config.json, swaps the
+  data directory for the staged one with one rename, and writes the new
+  config.json. A failure up to there puts the old vault back; an
+  interruption leaves no config.json (`no_vault`), and rerunning
+  `restore --force` finishes the job. The unwrapped identity never touches
+  disk.
+- The local audit log is never rewritten. A backup's log becomes
+  `log.jsonl` only when there is none (or it is empty, a fresh machine);
+  otherwise it is kept beside it as `log.restored-<backup time>.jsonl`.
+  The restore entry is then appended to the local log.
+- Replacing a vault revokes every grant: they hold the old vault's values
+  under names the restored vault reuses. Best effort, like `rm`.
 - The backup file is safe to keep anywhere (git, R2, NAS). Its strength is
   the passphrase; offline guessing has no rate limit.
+- Recovery without broker:
+  `mkdir r && age -d FILE | tar -x -C r`, then
+  `age -d -i r/data/private.key r/data/secrets/private/NAME.age` (or
+  `public.key` for the public tier).
 
 ## Errors and output for agents
 

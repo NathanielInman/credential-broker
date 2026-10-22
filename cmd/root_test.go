@@ -51,8 +51,6 @@ func TestHelpListsCommands(t *testing.T) {
 func TestStubsNotImplemented(t *testing.T) {
 	for _, args := range [][]string{
 		{"import", "env"},
-		{"backup", "-o", "b.age"},
-		{"restore", "b.age"},
 	} {
 		t.Run(args[0], func(t *testing.T) {
 			_, stderr, code := runBroker(t, args...)
