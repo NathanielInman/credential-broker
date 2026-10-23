@@ -119,4 +119,4 @@ jobs:
         run: |
           cd dist
           sha256sum * > SHA256SUMS
-          gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag --title "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" *
+          gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag --title "$GITHUB_REF_NAME" *
