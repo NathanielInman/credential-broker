@@ -55,6 +55,18 @@ static gboolean on_context_menu(WebKitWebView *v, WebKitContextMenu *m, GdkEvent
 	return TRUE;
 }
 
+// fix_size pins the window to one size with equal min and max hints. Not
+// gtk_window_set_resizable(FALSE): on Wayland that window follows its size
+// request up but never back down, so a short request kept the initial
+// height as dead space under the buttons.
+static void fix_size(int width, int height) {
+	GdkGeometry g = {
+		.min_width = width, .min_height = height,
+		.max_width = width, .max_height = height,
+	};
+	gtk_window_set_geometry_hints(GTK_WINDOW(win), NULL, &g, GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
+}
+
 void window_create(const char *html, int width, int height) {
 	// The Wayland app id, for compositor rules: Hyprland's class:^(broker)$.
 	g_set_prgname("broker");
@@ -64,7 +76,7 @@ void window_create(const char *html, int width, int height) {
 	win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_title(GTK_WINDOW(win), "broker request");
 	// A fixed size, which tiling compositors take as a dialog to float.
-	gtk_window_set_resizable(GTK_WINDOW(win), FALSE);
+	fix_size(width, height);
 	gtk_window_set_keep_above(GTK_WINDOW(win), TRUE);
 	gtk_window_set_position(GTK_WINDOW(win), GTK_WIN_POS_CENTER);
 	gtk_window_set_type_hint(GTK_WINDOW(win), GDK_WINDOW_TYPE_HINT_DIALOG);
@@ -110,6 +122,7 @@ void window_resize(int height) {
 		height = 900;
 	}
 	gtk_widget_set_size_request(GTK_WIDGET(view), win_width, height);
+	fix_size(win_width, height);
 	gtk_window_resize(GTK_WINDOW(win), win_width, height);
 }
 
