@@ -9,9 +9,13 @@ import (
 )
 
 var (
-	user32           = windows.NewLazySystemDLL("user32.dll")
-	setWindowPos     = user32.NewProc("SetWindowPos")
-	setForegroundWnd = user32.NewProc("SetForegroundWindow")
+	user32            = windows.NewLazySystemDLL("user32.dll")
+	setWindowPos      = user32.NewProc("SetWindowPos")
+	setForegroundWnd  = user32.NewProc("SetForegroundWindow")
+	getForegroundWnd  = user32.NewProc("GetForegroundWindow")
+	getWindowThreadID = user32.NewProc("GetWindowThreadProcessId")
+	attachThreadInput = user32.NewProc("AttachThreadInput")
+	bringWindowToTop  = user32.NewProc("BringWindowToTop")
 )
 
 const (
@@ -21,6 +25,33 @@ const (
 	swpShowWnd   = 0x0040
 	swpTopmostFl = swpNoSize | swpNoMove | swpShowWnd
 )
+
+// foreground gives the window the keyboard, not just the top of the stack.
+// Windows only lets the process owning the foreground window hand it on, and
+// the approver is never that process: it is started by broker, which the
+// agent started from someone else's terminal. SetForegroundWindow on its own
+// is refused there, and the window comes up topmost but unfocused, where
+// Escape and the passphrase field never see a key. Attaching to the
+// foreground window's input queue puts both threads in one input state,
+// which lifts the restriction for as long as they stay attached.
+//
+// Nothing here calls SetFocus. Activating the window is what moves the
+// keyboard into the page: WebView2 hands focus to the content from its
+// WM_ACTIVATE handler, and a SetFocus on the host window after that takes it
+// straight back out, leaving the page deaf to Escape with the window looking
+// focused.
+func foreground(hwnd uintptr) {
+	fg, _, _ := getForegroundWnd.Call()
+	me := uintptr(windows.GetCurrentThreadId())
+	if fg != 0 {
+		if other, _, _ := getWindowThreadID.Call(fg, 0); other != 0 && other != me {
+			attachThreadInput.Call(me, other, 1)
+			defer attachThreadInput.Call(me, other, 0)
+		}
+	}
+	bringWindowToTop.Call(hwnd)
+	setForegroundWnd.Call(hwnd)
+}
 
 // wv2Window is a WebView2 window. Closing it by its X ends Run the same way
 // quit does, so quitting tracks that it asked.
@@ -53,7 +84,7 @@ func newWindow(html string, width, height int) window {
 	w.SetSize(width, height, webview2.HintFixed)
 	hwnd := uintptr(w.Window())
 	setWindowPos.Call(hwnd, hwndTopmost, 0, 0, 0, 0, swpTopmostFl)
-	setForegroundWnd.Call(hwnd)
+	foreground(hwnd)
 	w.SetHtml(html)
 	return win
 }
