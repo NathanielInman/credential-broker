@@ -147,9 +147,15 @@ Every failure an agent can hit has a stable `error` code. The full table is in t
 
 ## Install
 
-Linux, macOS, or Windows (see [Platforms](#platforms)). You need Go to build it. The stock `age` CLI is optional but worth having for [recovery](#recovering-without-broker).
+Linux, macOS, or Windows (see [Platforms](#platforms)). The stock `age` CLI is optional but worth having for [recovery](#recovering-without-broker).
 
-Build from source (the binaries on the Releases page are still v1):
+Download the archive for your platform from [Releases](https://github.com/NathanielInman/credential-broker/releases/latest) and put `broker` and `broker-dialog` together on your `PATH` (`~/.local/bin` works). The Linux builds need GTK 3 and WebKitGTK 4.1 installed; the macOS build is universal and already signed with the hardened runtime. A browser download on macOS is quarantined and Gatekeeper refuses it, so clear that once:
+
+```sh
+xattr -d com.apple.quarantine broker broker-dialog
+```
+
+Or build from source with Go:
 
 ```sh
 git clone https://github.com/NathanielInman/credential-broker
@@ -181,7 +187,7 @@ brew install age age-plugin-se          # and age-plugin-yubikey for a YubiKey
 codesign --force --sign - --options runtime ~/.local/bin/broker ~/.local/bin/broker-dialog
 ```
 
-The `codesign` line matters. It turns on the hardened runtime, under which no other process of yours can attach to broker or read its memory, and that's what protects the approver and the grant agent while they hold secrets. Sign again after every build.
+The `codesign` line (for builds from source; release builds come signed) matters. It turns on the hardened runtime, under which no other process of yours can attach to broker or read its memory, and that's what protects the approver and the grant agent while they hold secrets. Sign again after every build.
 
 ### Windows
 
