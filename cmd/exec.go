@@ -48,7 +48,7 @@ func newExecCmd() *cobra.Command {
 			}
 			e.Tier = tierOf(v, names)
 			secrets, err := resolve(v, names)
-			if request && agenterr.From(err).Code == agenterr.NoGrant {
+			if request && err != nil && agenterr.From(err).Code == agenterr.NoGrant {
 				var ttl time.Duration
 				if ttl, err = grantDuration(v.Config(), false, 0, false); err == nil {
 					// Grant lines go to stderr: stdout is the child's.

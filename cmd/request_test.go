@@ -285,6 +285,23 @@ func TestExecRequest(t *testing.T) {
 	}
 }
 
+func TestExecRequestAlreadyGranted(t *testing.T) {
+	grantVault(t)
+	mustRun(t, "grant", "API_TOKEN")
+	launches := 0
+	orig := launchApprover
+	launchApprover = func(context.Context, []byte, io.Writer) ([]byte, error) {
+		launches++
+		return nil, nil
+	}
+	t.Cleanup(func() { launchApprover = orig })
+	out, stderr, code := runStdin(t, "", "exec", "--request", "--reason", "check the token",
+		"API_TOKEN", "API_USER", "--", "sh", "-c", `echo "$API_USER $API_TOKEN"`)
+	if code != 0 || out != "nate [REDACTED:API_TOKEN]\n" || launches != 0 {
+		t.Fatalf("exit %d, stdout %q, stderr %q, %d windows", code, out, stderr, launches)
+	}
+}
+
 func TestExecWithoutRequestStillFails(t *testing.T) {
 	grantVault(t)
 	useWindow(t, "approve")
