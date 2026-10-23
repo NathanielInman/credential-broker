@@ -436,3 +436,7 @@ broker request NAME... [--for DUR]        # Ask for grants in the request window
 If an agent runs something that needs a prompt or a touch (`set` without `--stdin`, `grant`, a private `get`, `backup`, `restore`), it fails at once with `needs_human` and the exact command to hand you, instead of waiting on a prompt nobody will answer.
 
 Files live under the XDG directories: `~/.config/broker`, `~/.local/share/broker`, and `~/.local/state/broker`. Set `BROKER_HOME` to put all three under one directory instead. How it all fits together (key wrapping, the keyring layout, the redactor, the backup format) is in [DESIGN.md](./DESIGN.md).
+
+## License
+
+[MIT](./LICENSE)
