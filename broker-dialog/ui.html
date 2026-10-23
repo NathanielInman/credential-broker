@@ -279,7 +279,10 @@ function render() {
     action(),
     state.done ? null : el("footer", {}, el("button", { onclick: deny }, "Deny")));
   app.replaceChildren(view);
-  requestAnimationFrame(() => post({ type: "size", height: Math.ceil(document.documentElement.scrollHeight) }));
+  // body is content-sized (height auto), so its border box is the height the
+  // window wants. documentElement.scrollHeight would be floored at the
+  // viewport, which lets the window grow but never shrink.
+  requestAnimationFrame(() => post({ type: "size", height: Math.ceil(document.body.getBoundingClientRect().height) }));
 }
 
 window.broker = {
