@@ -1,0 +1,117 @@
+name: Release
+
+# Pushing a v* tag builds broker and broker-dialog for every platform and
+# publishes them as a GitHub release whose notes are the tag's message.
+# broker-dialog links GTK on linux and Cocoa on macOS, so each platform
+# builds on its own runner. Running it by hand builds everything without
+# publishing.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Build
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          d=broker_${v}_linux_${{ matrix.arch }}
+          mkdir $d
+          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$v" -o $d/broker .
+          (cd broker-dialog && go build -trimpath -ldflags "-s -w" -o ../$d/broker-dialog .)
+          cp LICENSE README.md $d/
+          tar czf $d.tar.gz $d
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: "*.tar.gz"
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Universal binaries, signed ad hoc with the hardened runtime, which
+      # is what keeps other processes out of broker's memory.
+      - name: Build
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          d=broker_${v}_darwin_universal
+          mkdir $d
+          for arch in arm64 amd64; do
+            CGO_ENABLED=1 GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=$v" -o broker-$arch .
+            (cd broker-dialog && CGO_ENABLED=1 GOARCH=$arch go build -trimpath -ldflags "-s -w" -o ../broker-dialog-$arch .)
+          done
+          lipo -create -output $d/broker broker-arm64 broker-amd64
+          lipo -create -output $d/broker-dialog broker-dialog-arm64 broker-dialog-amd64
+          codesign --force --sign - --options runtime $d/broker $d/broker-dialog
+          cp LICENSE README.md $d/
+          tar czf $d.tar.gz $d
+      - uses: actions/upload-artifact@v4
+        with:
+          name: darwin
+          path: "*.tar.gz"
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          d=broker_${v}_windows_amd64
+          mkdir $d
+          go build -trimpath -ldflags "-s -w -X main.version=$v" -o $d/broker.exe .
+          (cd broker-dialog && go build -trimpath -ldflags "-s -w -H=windowsgui" -o ../$d/broker-dialog.exe .)
+          cp LICENSE README.md $d/
+          7z a -bd $d.zip $d > /dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: "*.zip"
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # checkout leaves the tag lightweight; the notes need its message.
+      - run: git fetch --force --depth=1 origin "+refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag --title "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" *
