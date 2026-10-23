@@ -175,7 +175,10 @@ client for `broker grantd`, a per-user agent that holds grants in memory:
   granting the user and OWNER RIGHTS only query-limited-information,
   synchronize, and terminate, so no PROCESS_VM_READ; an administrator with
   SeDebugPrivilege still gets in, and handles opened before (the starter's)
-  keep their access. Windows starts it with CREATE_NEW_PROCESS_GROUP and
+  keep their access. Terminate is there so the user can end a stuck agent,
+  dropping its grants: Task Manager's End task works, but PowerShell's
+  `Stop-Process` asks for more rights than terminate and is refused. Windows
+  starts it with CREATE_NEW_PROCESS_GROUP and
   CREATE_NO_WINDOW, so it survives its console and the age plugins it runs
   get no window.
 - `ErrExpired` does not exist here: an expired grant reads as not granted.
@@ -260,7 +263,13 @@ their desktop instead.
   session is Background), and on Windows neither session 0 nor SSH.
   Windows shows no requester directory: reading it needs the process's
   PEB. `approverEnv` adds the Windows variables a process cannot start
-  Winsock or WebView2 without (`SYSTEMROOT`, `LOCALAPPDATA`, ...). A wrong passphrase is asked for again
+  Winsock or WebView2 without (`SYSTEMROOT`, `LOCALAPPDATA`, ...). Windows
+  only lets the foreground process hand the foreground on, so the window
+  attaches to the foreground window's input queue to take the keyboard, or
+  Escape and the passphrase field would get no keys. The page reports its
+  body height and the window resizes to it either way; on linux that needs
+  equal min and max size hints, since a non-resizable GTK3 window on
+  Wayland never shrinks. A wrong passphrase is asked for again
   with the error showing; other unlock failures offer Try again; three
   failures end the request. The human may pick a shorter duration (the
   asked one, and 5m, 15m, 1h, 4h below it) until the grant is written.
