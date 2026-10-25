@@ -168,12 +168,12 @@ go build -o ~/.local/bin/broker .
 
 ### Linux
 
-The window needs GTK 3 and WebKitGTK 4.1, and a YubiKey needs [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) and `pcscd`:
+The window needs GTK 3 and WebKitGTK 4.1, and a YubiKey needs [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey), `pcscd`, and `ykman` to set it up:
 
 ```sh
-sudo pacman -S age gtk3 webkit2gtk-4.1 pcsclite ccid   # Debian/Ubuntu: libgtk-3-dev libwebkit2gtk-4.1-dev pcscd
-sudo systemctl enable --now pcscd
-cargo install age-plugin-yubikey                       # or the AUR package
+sudo pacman -S age gtk3 webkit2gtk-4.1 pcsclite ccid age-plugin-yubikey yubikey-manager
+sudo systemctl enable --now pcscd.socket
+# Debian/Ubuntu: libgtk-3-dev libwebkit2gtk-4.1-dev pcscd yubikey-manager, then cargo install age-plugin-yubikey
 ```
 
 The window has a fixed size, which Hyprland and most tiling compositors already float. Its Wayland app id is `broker` if you want a rule anyway (`windowrulev2 = float, class:^(broker)$`).
@@ -183,7 +183,7 @@ The window has a fixed size, which Hyprland and most tiling compositors already 
 The window uses the system's WebKit, so there's nothing to install for it. For Touch ID, get [age-plugin-se](https://github.com/remko/age-plugin-se), which keeps the key in the Mac's Secure Enclave. A YubiKey works too, with no `pcscd` needed:
 
 ```sh
-brew install age age-plugin-se          # and age-plugin-yubikey for a YubiKey
+brew install age age-plugin-se          # and age-plugin-yubikey ykman for a YubiKey
 codesign --force --sign - --options runtime ~/.local/bin/broker ~/.local/bin/broker-dialog
 ```
 
@@ -245,14 +245,21 @@ Two things look like they belong in between and don't. A U2F-only key (older Tit
 
 Pick a zone, make the identity file, and point `init` at it.
 
-**Hardware.** Make an age identity on the YubiKey. The plugin is interactive: pick a new PIV slot, touch policy "always" (or "cached" if you want 15 seconds of grace), and PIN policy "once".
+**Hardware.** A new YubiKey comes with the factory PIN (`123456`), PUK, and management key, so change all three first. The management key has to be TDES: keys on firmware 5.7 and newer ship with AES, which age-plugin-yubikey 0.5 can't use yet ([#92](https://github.com/str4d/age-plugin-yubikey/issues/92)), and the plugin's interactive setup dies with an error after the PIN step.
 
 ```sh
-age-plugin-yubikey
+ykman piv access change-pin
+ykman piv access change-puk
+ykman piv access change-management-key -a TDES --generate --protect
 mkdir -p ~/.config/broker
-age-plugin-yubikey --identity > ~/.config/broker/yubikey-identity.txt
+age-plugin-yubikey --generate --name broker --touch-policy always --pin-policy never \
+  > ~/.config/broker/yubikey-identity.txt
 broker init --identity ~/.config/broker/yubikey-identity.txt
 ```
+
+`--protect` keeps the new management key on the YubiKey behind your PIN, so you never have to handle it. Touch policy `always` is the point of the whole zone: every unlock needs a finger on the key, and nothing running on the machine can fake that (`cached` gives 15 seconds of grace).
+
+The PIN policy is a real choice. `once` means once per smart card session, and every request window is a new session, so you type the PIN *and* touch the key on every approval. The PIN only helps if someone gets the YubiKey and your vault files together, like a stolen laptop with the key still plugged in. Against software on the machine the touch already does the job, and a fake window can ask for a PIN as easily as the real one. I run `never` on a desktop. Both policies are fixed when the key is made, so changing your mind later means a new identity and [switching unlocks](#switching-unlocks).
 
 That file is a stub that points at the hardware, not a key. Got a spare YubiKey? Repeat `--identity` for each one and either can unlock the vault.
 
@@ -341,6 +348,26 @@ flowchart LR
     vault[("Vault<br/>wrapped to YubiKey")] -->|"broker backup (touch)"| file["broker.backup<br/>age, passphrase only"]
     file -->|"broker restore + passphrase"| newvault[("Vault on any machine<br/>wrapped to your YubiKey")]
     file -->|"age -d and tar, no broker"| plain["Plain files<br/>private.key + secrets"]
+```
+
+### Switching unlocks
+
+The same two commands move a vault you already have to new unlocks: passphrase to YubiKey, an old YubiKey to a new one, or one PIN policy to another. Make the new identity first (see [Setup](#setup)), then:
+
+```sh
+broker backup -o ~/broker.backup --generate-passphrase    # unlocks with what you have today
+broker restore ~/broker.backup --identity ~/.config/broker/yubikey-identity.txt --force
+```
+
+Those two prompts want different secrets. `backup` asks for whatever unlocks the vault now (the old passphrase, or a touch). `restore` asks for the 7 words `backup` just printed, typed exactly: lowercase, single spaces, nothing trailing. `age -d ~/broker.backup > /dev/null && echo ok` checks the words without going near the vault. Every backup prints new words, so only the latest set opens the file.
+
+The secrets and tier keys stay the same; only the wrapping on the private tier key changes. `restore` drops live grants, so agents will ask again once.
+
+Then clean up the old unlock. An old passphrase identity opens nothing in the new vault but still opens any copy of the old one, so delete it along with those copies. A replaced YubiKey identity is still sitting in its slot: `age-plugin-yubikey --list` numbers slots 1 to 20, which are the YubiKey's retired slots `82` to `95` in hex, so age's slot 1 goes with
+
+```sh
+ykman piv keys delete 82
+ykman piv certificates delete 82
 ```
 
 ### Recovering without broker
