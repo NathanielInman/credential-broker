@@ -282,6 +282,19 @@ func TestRestoreWrongPassphrase(t *testing.T) {
 	assertNoStaging(t, p)
 }
 
+func TestRestoreForgivesSpacing(t *testing.T) {
+	v, _ := seeded(t)
+	data := backup(t, v, BackupOptions{})
+	p := testPaths(t)
+	typed := "  correct  horse battery\tstaple "
+	if _, err := Restore(p, bytes.NewReader(data), func() (string, error) { return typed, nil }, RestoreOptions{UI: testUI}); err != nil {
+		t.Fatal(err)
+	}
+	if Existing(p) == "" {
+		t.Error("restore left no vault")
+	}
+}
+
 // TestRestoreBadBackups checks that a backup that fails any check leaves
 // the existing vault exactly as it was.
 func TestRestoreBadBackups(t *testing.T) {

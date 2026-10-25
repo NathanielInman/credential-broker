@@ -251,7 +251,18 @@ func Restore(p paths.Paths, r io.Reader, passphrase func() (string, error), opts
 	if err != nil {
 		return nil, err
 	}
-	ar, err := age.Decrypt(r, id)
+	ids := []age.Identity{id}
+	// Generated passphrases are words joined by single spaces, so a stray
+	// or doubled space is a typo. The passphrase as typed goes first, for
+	// one chosen with odd spacing on purpose.
+	if words := strings.Join(strings.Fields(pass), " "); words != pass && words != "" {
+		wid, err := age.NewScryptIdentity(words)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, wid)
+	}
+	ar, err := age.Decrypt(r, ids...)
 	if err != nil {
 		var nomatch *age.NoIdentityMatchError
 		if errors.As(err, &nomatch) {

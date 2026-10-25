@@ -359,7 +359,7 @@ broker backup -o ~/broker.backup --generate-passphrase    # unlocks with what yo
 broker restore ~/broker.backup --identity ~/.config/broker/yubikey-identity.txt --force
 ```
 
-Those two prompts want different secrets. `backup` asks for whatever unlocks the vault now (the old passphrase, or a touch). `restore` asks for the 7 words `backup` just printed, typed exactly: lowercase, single spaces, nothing trailing. `age -d ~/broker.backup > /dev/null && echo ok` checks the words without going near the vault. Every backup prints new words, so only the latest set opens the file.
+Those two prompts want different secrets. `backup` asks for whatever unlocks the vault now (the old passphrase, or a touch). `restore` asks for the 7 words `backup` just printed, in lowercase (it shrugs off stray or doubled spaces between them; stock `age` won't). `age -d ~/broker.backup > /dev/null && echo ok` checks the words without going near the vault. Every backup prints new words, so only the latest set opens the file.
 
 The secrets and tier keys stay the same; only the wrapping on the private tier key changes. `restore` drops live grants, so agents will ask again once.
 
