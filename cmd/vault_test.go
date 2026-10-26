@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"filippo.io/age"
@@ -96,6 +98,17 @@ func TestSetLsRm(t *testing.T) {
 		t.Fatalf("API_USER = %q, %v", val, err)
 	}
 
+	// An agent cannot delete a secret: rm needs a human at a terminal.
+	if _, stderr, code := runStdin(t, "", "rm", "API_USER"); errorCode(t, stderr) != "needs_human" || code != 75 ||
+		!strings.Contains(stderr, `"ask_human":"broker rm API_USER"`) {
+		t.Fatalf("rm without TTY: exit %d %s", code, stderr)
+	}
+	if got := ls(t); len(got) != 2 {
+		t.Fatalf("ls after refused rm = %+v", got)
+	}
+
+	requireTTY = func(io.Reader, string) error { return nil }
+	t.Cleanup(func() { requireTTY = defaultRequireTTY })
 	if _, stderr, code := runStdin(t, "", "rm", "API_USER"); code != 0 {
 		t.Fatalf("rm exit %d: %s", code, stderr)
 	}

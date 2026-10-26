@@ -229,7 +229,8 @@ Human-facing (rare):
   a hidden TTY prompt, or stdin with `--stdin`. New secrets default to
   private. Overwrites keep the tier and description unless told: `--public`
   or `--private` moves the secret, `--desc` replaces the description.
-- `broker rm NAME`
+- `broker rm NAME`: needs a terminal, with no `--stdin` way around it, so an
+  agent cannot delete secrets; also drops the secret's grant.
 - `broker grant NAME... [--for DUR] | --all`
 - `broker revoke NAME... | --all`
 - `broker get NAME`: prints the value and a newline (`set --stdin` drops

@@ -103,6 +103,11 @@ func newRmCmd() *cobra.Command {
 				return err
 			}
 			e.Tier = tierOf(v, args)
+			// Deleting is for the human, as every other change to the vault
+			// is: --stdin is no way around it here, since there is no value.
+			if err := requireTTY(c.InOrStdin(), "broker rm "+args[0]); err != nil {
+				return err
+			}
 			if err := v.Remove(args[0]); err != nil {
 				return err
 			}

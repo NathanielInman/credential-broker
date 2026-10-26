@@ -48,7 +48,7 @@ If a credential the task needs is missing from `ls`, ask the human to store it (
 | 77 | `denied` | the human turned the request down | stop; tell the human what is blocked and why; request again only if they say so |
 | 75 | `request_timeout` | nobody answered the window | tell the human the request is waiting, with `ask_human` as the terminal alternative; retry once they reply |
 | 78 | `unknown_secret` | `names` are not in the vault | recheck `broker ls --json`; if absent, ask the human to `broker set` it |
-| 75 | `needs_human` | you ran a human command (`get` private, `grant`, `set`, ...) | ask the human to run `ask_human` |
+| 75 | `needs_human` | you ran a human command (`get` private, `grant`, `set`, `rm`, ...) | ask the human to run `ask_human` |
 | 66 | `no_vault` | broker is not set up | ask the human to run `ask_human` |
 | 127, 126 | `command_not_found`, `cannot_exec` | CMD after `--` is missing or not executable | fix CMD |
 | 64 | `usage` | bad arguments (often a missing `--`) | fix the call |
