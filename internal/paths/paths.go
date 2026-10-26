@@ -80,9 +80,9 @@ func (p Paths) GrantLock() string   { return filepath.Join(p.Run, "grantd.lock")
 // bytes on macOS (108 on linux), counting the NUL.
 const maxSocketPath = 100
 
-// GrantSocket is where the grant agent listens (macOS). A runtime directory
-// too deep for a socket path gets a short one in the per-user temp
-// directory instead, named for it.
+// GrantSocket is where the grant agent listens. A runtime directory too
+// deep for a socket path gets a short one in the per-user temp directory
+// instead, named for it.
 func (p Paths) GrantSocket() string {
 	s := filepath.Join(p.Run, "grantd.sock")
 	if len(s) <= maxSocketPath {

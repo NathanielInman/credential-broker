@@ -129,10 +129,12 @@ not per login session, so agents in other session keyrings see the grant
 (verified: `TestCrossProcess`, `TestGrantVisibleToOtherSession`, and a manual
 check with `keyctl session -` and `setsid` against the real user keyring).
 
-Caveat: user keyrings are per user namespace. A process inside another user
+User keyrings are per user namespace, though. A process inside another user
 namespace (bubblewrap, flatpak, and agent sandboxes built on them; bwrap
 always unshares the user namespace when unprivileged) has its own empty user
-keyring and sees no grants. `exec` must run outside such sandboxes.
+keyring and sees no grants there. So every Linux grant also goes to the
+grant agent (next section), whose socket a sandbox can reach; see
+[Grants in sandboxes (Linux)](#grants-in-sandboxes-linux).
 
 Default duration comes from config (`default_grant`, initially `1h`); max
 `24h` unless `--force`. Granting a public secret is a no-op with a note.
@@ -145,10 +147,11 @@ missing, so "expired" and "never granted" are only distinguishable for that
 window. If the keyring is unavailable (keyctl blocked), `ls` still lists
 secrets, shows none as granted, and says why on stderr.
 
-## Grants on macOS and Windows (grant agent)
+## Grant agent
 
 macOS and Windows have no kernel keyring, so `internal/keyring` there is a
-client for `broker grantd`, a per-user agent that holds grants in memory:
+client for `broker grantd`, a per-user agent that holds grants in memory.
+Linux runs the same agent beside the kernel keyring, for sandboxes:
 
 - The first `Add` that finds no agent starts one (`keyring.StartAgent`:
   this executable's `grantd`, in a session of its own) and waits up to 5s
@@ -182,6 +185,40 @@ client for `broker grantd`, a per-user agent that holds grants in memory:
   CREATE_NO_WINDOW, so it survives its console and the age plugins it runs
   get no window.
 - `ErrExpired` does not exist here: an expired grant reads as not granted.
+
+## Grants in sandboxes (Linux)
+
+`keyring.Keyring` on Linux is the kernel user keyring with the grant agent
+beside it (`internal/keyring/store_linux.go`):
+
+- `Add` writes the kernel keyring, then the agent, with the same duration
+  (the agent's expiry trails the kernel's by under a second, since the
+  kernel counts from its current whole second). If the agent cannot take
+  the grant, the kernel grant is revoked and `Add` fails, so a sandbox never
+  misses a grant the host sees.
+- `Read` and `Lookup` try the kernel first and fall back to the agent;
+  `List` merges both by name (the kernel's expiry wins); `Revoke` clears
+  both. A kernel `ErrExpired` survives the fallback.
+- Inside a user namespace other than the initial one (`/proc/self/uid_map`
+  is not `0 0 4294967295`), broker never starts an agent: one started there
+  dies with the sandbox. It uses an agent already running, or grants in the
+  sandbox's own keyring alone. If keyctl itself is blocked there, the agent
+  is the only store. `broker approve` usually runs outside the sandbox
+  anyway (systemd-run reaches the user's service manager), so a
+  `--request` grant lands on the host.
+- A sandbox reaches the agent when it shares broker's runtime directory
+  (`$XDG_RUNTIME_DIR/broker`, or `BROKER_HOME/run`) and allows connecting
+  to a unix socket. The agent checks the peer's uid with `SO_PEERCRED`,
+  which the kernel reports in the agent's namespace, so a sandboxed agent
+  of the same user is answered and anyone else is not.
+- The agent is started by the human's `grant` or by the approver, never by
+  the agent's own process tree, and it sets `PR_SET_DUMPABLE=0` before it
+  holds anything, so other processes of the user cannot ptrace it or read
+  `/proc/PID/mem`.
+- Rejected: a grant file under `$XDG_RUNTIME_DIR` (2026-10-22). A grant is
+  the decrypted value, so that file would be plaintext any process of the
+  user can read regardless of expiry, lingering past it until something
+  cleans up.
 
 ## Commands
 
@@ -466,7 +503,10 @@ useful line in the file).
 - On macOS and Windows the same suite runs against real grant agents: each
   test's `BROKER_HOME` has its own socket, so `keyringtest` isolates by
   doing nothing, and `keyring.AgentCommand` starts the test binary as
-  broker. `TestGrantd` runs that path on linux too. On Windows the cmd
+  broker. `TestGrantd` runs that path on linux too. On linux the tests run
+  in a user namespace, so the store never starts an agent itself; the
+  `TestStore*` tests pair an isolated kernel keyring with an in-process
+  agent. On Windows the cmd
   tests end those agents at exit (`stopTestAgents`), since go test cannot
   delete a running copy of the test binary. Unix permission bits are not
   checked on Windows, where privacy is the profile directory's ACL.

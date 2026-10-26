@@ -1,13 +1,15 @@
 package keyring
 
 // The grant agent stands in for the kernel keyring where there is none
-// (macOS). It is a broker process ("broker grantd") that holds grants in
-// memory only, drops each one on a timer, and exits once it has held none
-// for a while, so nothing outlives a grant on disk and no daemon lingers.
+// (macOS, Windows), and sits beside it on Linux, where sandboxes in their
+// own user namespace cannot see the kernel's. It is a broker process
+// ("broker grantd") that holds grants in memory only, drops each one on a
+// timer, and exits once it has held none for a while, so nothing outlives
+// a grant on disk and no daemon lingers.
 // Clients talk to it over a unix socket in broker's runtime directory, one
 // JSON request and response per connection, and it answers only processes
 // of its own user. A grant is readable by any process of that user, just as
-// with the kernel keyring. macOS and Windows use it.
+// with the kernel keyring.
 
 import (
 	"bytes"

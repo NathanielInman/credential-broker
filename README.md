@@ -18,7 +18,7 @@ broker exec --request --reason "Deploying the grant-zone fix to the dev environm
 
 Prefer a terminal? `broker grant GITHUB_TOKEN DB_PASS --for 1h` does the same thing without the window.
 
-There's no server, no daemon, and no account. Secrets are plain [age](https://age-encryption.org) files on disk, grants live in memory with a timeout (the kernel keyring on Linux, a small in-memory agent on macOS and Windows), and every read lands in an audit log with the process tree that asked for it.
+There's no server, no daemon, and no account. Secrets are plain [age](https://age-encryption.org) files on disk, grants live in memory with a timeout (the kernel keyring on Linux, plus a small in-memory agent for sandboxes; that agent alone on macOS and Windows), and every read lands in an audit log with the process tree that asked for it.
 
 v1 was a client/server broker for teams, with users, scopes, and PGP challenges. v2 is a from-scratch rewrite for one person and the agents working on their machine. The full spec is in [DESIGN.md](./DESIGN.md).
 
@@ -60,7 +60,7 @@ Writing a private secret only needs the tier's public key, so `set` and `import`
 
 A grant is you saying "agents can use these for the next two hours." One touch unwraps the private tier key in memory, broker decrypts just the named secrets, and each one goes into the kernel user keyring with a timeout. The key itself is never cached. When the timeout hits, the kernel drops the secret; there's no daemon to forget to stop.
 
-macOS and Windows have no kernel keyring, so there the first grant starts `broker grantd`, a small agent that holds grants in memory only, drops each one on a timer, answers only your user over a private unix socket, and exits once it has held nothing for 30 seconds. Nothing granted ever touches disk, and logging out or rebooting forgets everything, same as Linux.
+macOS and Windows have no kernel keyring, so there the first grant starts `broker grantd`, a small agent that holds grants in memory only, drops each one on a timer, answers only your user over a private unix socket, and exits once it has held nothing for 30 seconds. Nothing granted ever touches disk, and logging out or rebooting forgets everything. On Linux every grant goes to that agent too, so agents in a sandbox can see it (see [Platforms](#platforms)).
 
 ```mermaid
 sequenceDiagram
@@ -419,16 +419,20 @@ It does not protect against:
 
 v2 runs on Linux, macOS, and Windows 10 (1803 or later, for AF_UNIX sockets) and 11.
 
-On Linux, grants are kernel keyring entries. The user keyring is per uid, so a grant made in your terminal is visible to agents in other sessions. It's also per **user namespace**, though, and that bites: anything running under bubblewrap or flatpak (and agent sandboxes built on them) gets its own empty user keyring and sees no grants at all.
+On Linux, grants are kernel keyring entries. The user keyring is per uid, so a grant made in your terminal is visible to agents in other sessions. It's also per **user namespace**, though: anything running under bubblewrap or flatpak (and agent sandboxes built on them) gets its own empty user keyring.
+
+That's why every Linux grant also goes to `broker grantd`, the same in-memory agent macOS and Windows use, and why `exec` falls back to it when the keyring has nothing. A sandbox sees your grants as long as it shares broker's runtime directory (`$XDG_RUNTIME_DIR/broker`) and lets programs connect to a unix socket:
 
 ```console
-$ bwrap --dev-bind / / broker exec GITHUB_TOKEN -- true
+$ broker grant GITHUB_TOKEN --for 1h
+$ bwrap --dev-bind / / broker exec GITHUB_TOKEN -- gh auth status    # works
+$ bwrap --dev-bind / / --tmpfs /run/user/1000/broker broker exec GITHUB_TOKEN -- true
 {"error":"no_grant","names":["GITHUB_TOKEN"],"ask_human":"broker grant GITHUB_TOKEN --for 1h"}
 ```
 
-Granting again won't fix it. `broker exec` has to run outside the sandbox, so allow it as an unsandboxed command in your agent's config. The skill tells agents to recognize this and ask.
+If your sandbox hides that directory or blocks unix sockets, either share it in the sandbox's config or let `broker exec` run unsandboxed. The skill tells agents to recognize this and ask.
 
-On macOS and Windows, grants live in the grant agent described under [Grants](#grants), and a request window only opens from the desktop login session: an agent running over SSH (or as a Windows service) gets the plain `no_grant` and a terminal command instead. Windows can't show the requesting process's directory, so its window leaves that line out. `exec` on Windows has no signals to forward; Ctrl+C reaches the command directly, as it reaches everything on the console.
+On macOS and Windows, grants live only in the grant agent described under [Grants](#grants), and a request window only opens from the desktop login session: an agent running over SSH (or as a Windows service) gets the plain `no_grant` and a terminal command instead. Windows can't show the requesting process's directory, so its window leaves that line out. `exec` on Windows has no signals to forward; Ctrl+C reaches the command directly, as it reaches everything on the console.
 
 ## Commands
 

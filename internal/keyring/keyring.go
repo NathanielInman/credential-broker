@@ -1,10 +1,12 @@
-// Package keyring holds granted secret values in the Linux kernel user
-// keyring, where exec reads them back without a touch.
+// Package keyring holds granted secret values where exec reads them back
+// without a touch: on Linux the kernel user keyring with the grant agent
+// beside it (store_linux.go), elsewhere the grant agent alone.
 //
-// Each grant is two keys in the user keyring, both with the same kernel
-// timeout: big_key "broker:secret:<NAME>" holds the value, and user key
-// "broker:expiry:<NAME>" holds the expiry as Unix seconds, because the
-// kernel does not report a key's timeout through keyctl. The kernel drops
+// In the kernel keyring each grant is two keys in the user keyring, both
+// with the same kernel timeout: big_key "broker:secret:<NAME>" holds the
+// value, and user key "broker:expiry:<NAME>" holds the expiry as Unix
+// seconds, because the kernel does not report a key's timeout through
+// keyctl. The kernel drops
 // both at expiry; there is no daemon.
 //
 // The user keyring is per uid (and per user namespace), not per login

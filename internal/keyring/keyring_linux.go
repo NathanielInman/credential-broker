@@ -31,24 +31,24 @@ const (
 	permission = posAll | usrView | usrRead | usrSearch
 )
 
-// Keyring is the calling uid's kernel user keyring.
-type Keyring struct {
+// kernel is the calling uid's kernel user keyring.
+type kernel struct {
 	ring int
 }
 
-// User returns the user keyring, creating it if the kernel has not yet.
-// Every call addresses it as KEY_SPEC_USER_KEYRING, which the caller
+// openKernel returns the user keyring, creating it if the kernel has not
+// yet. Every call addresses it as KEY_SPEC_USER_KEYRING, which the caller
 // always possesses whatever its session keyring is.
-func User() (*Keyring, error) {
+func openKernel() (*kernel, error) {
 	if _, err := unix.KeyctlGetKeyringID(unix.KEY_SPEC_USER_KEYRING, true); err != nil {
 		return nil, fmt.Errorf("kernel user keyring: %w", err)
 	}
-	return &Keyring{ring: unix.KEY_SPEC_USER_KEYRING}, nil
+	return &kernel{ring: unix.KEY_SPEC_USER_KEYRING}, nil
 }
 
 // Add grants name for ttl (rounded up to whole seconds) and returns when
 // the grant expires. An existing grant of name is replaced atomically.
-func (k *Keyring) Add(name string, value []byte, ttl time.Duration) (time.Time, error) {
+func (k *kernel) Add(name string, value []byte, ttl time.Duration) (time.Time, error) {
 	secs := int64((ttl + time.Second - 1) / time.Second)
 	if secs < 1 {
 		return time.Time{}, fmt.Errorf("grant duration %s is not positive", ttl)
@@ -73,7 +73,7 @@ func (k *Keyring) Add(name string, value []byte, ttl time.Duration) (time.Time, 
 // add creates a key in the thread keyring, sets its timeout and
 // permissions, then links it into k. Linking displaces any key with the
 // same type and description, so readers never see a gap.
-func (k *Keyring) add(typ, desc string, payload []byte, secs int64) error {
+func (k *kernel) add(typ, desc string, payload []byte, secs int64) error {
 	id, err := unix.AddKey(typ, desc, payload, unix.KEY_SPEC_THREAD_KEYRING)
 	if err != nil {
 		return keyErr(err)
@@ -99,7 +99,7 @@ func keyErr(err error) error {
 }
 
 // Read returns name's granted value, ErrNotGranted, or ErrExpired.
-func (k *Keyring) Read(name string) ([]byte, error) {
+func (k *kernel) Read(name string) ([]byte, error) {
 	id, err := k.search(secretType, secretPrefix+name)
 	if err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func (k *Keyring) Read(name string) ([]byte, error) {
 }
 
 // Lookup returns name's live grant, ErrNotGranted, or ErrExpired.
-func (k *Keyring) Lookup(name string) (Grant, error) {
+func (k *kernel) Lookup(name string) (Grant, error) {
 	if _, err := k.search(secretType, secretPrefix+name); err != nil {
 		return Grant{}, err
 	}
@@ -123,7 +123,7 @@ func (k *Keyring) Lookup(name string) (Grant, error) {
 	return g, nil
 }
 
-func (k *Keyring) search(typ, desc string) (int, error) {
+func (k *kernel) search(typ, desc string) (int, error) {
 	id, err := unix.KeyctlSearch(k.ring, typ, desc, 0)
 	switch {
 	case err == nil:
@@ -159,7 +159,7 @@ func readKey(id int) ([]byte, error) {
 }
 
 // List returns every live grant in k, in keyring order.
-func (k *Keyring) List() ([]Grant, error) {
+func (k *kernel) List() ([]Grant, error) {
 	links, err := k.links()
 	if err != nil {
 		return nil, err
@@ -185,7 +185,7 @@ func (k *Keyring) List() ([]Grant, error) {
 // Revoke unlinks name's keys and reports whether a live grant was dropped.
 // Expired keys cannot be described, so they stay until the kernel collects
 // them; a later Add still displaces them.
-func (k *Keyring) Revoke(name string) (bool, error) {
+func (k *kernel) Revoke(name string) (bool, error) {
 	_, err := k.Lookup(name)
 	live := err == nil
 	if err != nil && !errors.Is(err, ErrNotGranted) && !errors.Is(err, ErrExpired) {
@@ -213,7 +213,7 @@ type link struct {
 }
 
 // links lists the keys linked from k, skipping any it cannot describe.
-func (k *Keyring) links() ([]link, error) {
+func (k *kernel) links() ([]link, error) {
 	ids, err := readKey(k.ring)
 	if err != nil {
 		return nil, fmt.Errorf("read user keyring: %w", err)

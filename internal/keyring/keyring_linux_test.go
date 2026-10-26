@@ -34,7 +34,7 @@ func runHelper(args []string) int {
 		return 1
 	}
 	fmt.Println(session)
-	k, err := User()
+	k, err := openKernel()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -88,10 +88,10 @@ func helper(t *testing.T, args ...string) (session int, value string) {
 	return session, rest
 }
 
-func testKeyring(t *testing.T) *Keyring {
+func testKeyring(t *testing.T) *kernel {
 	t.Helper()
 	keyringtest.Require(t)
-	k, err := User()
+	k, err := openKernel()
 	if err != nil {
 		t.Fatal(err)
 	}
