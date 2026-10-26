@@ -176,6 +176,12 @@ sudo systemctl enable --now pcscd.socket
 # Debian/Ubuntu: libgtk-3-dev libwebkit2gtk-4.1-dev pcscd yubikey-manager, then cargo install age-plugin-yubikey
 ```
 
+On Arch, `packaging/aur/credential-broker-bin` packages the release build (both binaries, GTK and WebKitGTK as dependencies, the YubiKey tools as optional ones). Until it's on the AUR, install it from a clone:
+
+```sh
+cd packaging/aur/credential-broker-bin && makepkg -si
+```
+
 The window has a fixed size, which Hyprland and most tiling compositors already float. Its Wayland app id is `broker` if you want a rule anyway (`windowrulev2 = float, class:^(broker)$`).
 
 ### macOS

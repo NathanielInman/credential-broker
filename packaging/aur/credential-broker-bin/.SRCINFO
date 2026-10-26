@@ -1,0 +1,27 @@
+pkgbase = credential-broker-bin
+	pkgdesc = Local secret store for AI agents: agents run commands with secrets without seeing them
+	pkgver = 2.0.1
+	pkgrel = 1
+	url = https://github.com/NathanielInman/credential-broker
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	depends = glibc
+	depends = glib2
+	depends = gtk3
+	depends = webkit2gtk-4.1
+	optdepends = age: recover secrets without broker
+	optdepends = age-plugin-yubikey: unlock with a YubiKey
+	optdepends = pcsclite: talk to a YubiKey (enable pcscd.socket)
+	optdepends = ccid: smart card driver for a YubiKey
+	optdepends = yubikey-manager: set up a YubiKey
+	provides = credential-broker
+	conflicts = credential-broker
+	options = !debug
+	options = !strip
+	source_x86_64 = https://github.com/NathanielInman/credential-broker/releases/download/v2.0.1/broker_2.0.1_linux_amd64.tar.gz
+	sha256sums_x86_64 = 548547ddca18290991971dd426b3278d57425e42df2047756e134a652d51b4a1
+	source_aarch64 = https://github.com/NathanielInman/credential-broker/releases/download/v2.0.1/broker_2.0.1_linux_arm64.tar.gz
+	sha256sums_aarch64 = cd76170212c7e4b01e1bdf006817ff16683cf0652d27e4cdb00f6f353d888625
+
+pkgname = credential-broker-bin

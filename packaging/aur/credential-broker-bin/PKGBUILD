@@ -1,0 +1,30 @@
+# Maintainer: Nathaniel Inman <nate@theoestudio.com>
+pkgname=credential-broker-bin
+pkgver=2.0.1
+pkgrel=1
+pkgdesc='Local secret store for AI agents: agents run commands with secrets without seeing them'
+arch=('x86_64' 'aarch64')
+url='https://github.com/NathanielInman/credential-broker'
+license=('MIT')
+depends=('glibc' 'glib2' 'gtk3' 'webkit2gtk-4.1')
+optdepends=('age: recover secrets without broker'
+            'age-plugin-yubikey: unlock with a YubiKey'
+            'pcsclite: talk to a YubiKey (enable pcscd.socket)'
+            'ccid: smart card driver for a YubiKey'
+            'yubikey-manager: set up a YubiKey')
+provides=('credential-broker')
+conflicts=('credential-broker')
+options=('!debug' '!strip')
+source_x86_64=("$url/releases/download/v$pkgver/broker_${pkgver}_linux_amd64.tar.gz")
+source_aarch64=("$url/releases/download/v$pkgver/broker_${pkgver}_linux_arm64.tar.gz")
+sha256sums_x86_64=('548547ddca18290991971dd426b3278d57425e42df2047756e134a652d51b4a1')
+sha256sums_aarch64=('cd76170212c7e4b01e1bdf006817ff16683cf0652d27e4cdb00f6f353d888625')
+
+package() {
+  local dir=broker_${pkgver}_linux_amd64
+  [[ $CARCH == aarch64 ]] && dir=broker_${pkgver}_linux_arm64
+  cd "$dir"
+  install -Dm755 broker broker-dialog -t "$pkgdir/usr/bin/"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
