@@ -74,7 +74,12 @@ func (p Paths) PrivateKey() string  { return filepath.Join(p.Data, "private.key.
 func (p Paths) SecretsDir() string  { return filepath.Join(p.Data, "secrets") }
 func (p Paths) LogFile() string     { return filepath.Join(p.State, "log.jsonl") }
 func (p Paths) RequestLock() string { return filepath.Join(p.Run, "request.lock") }
-func (p Paths) GrantLock() string   { return filepath.Join(p.Run, "grantd.lock") }
+
+// VAPIDKey is the key phone notifications are signed with. It sits beside
+// the config, not in the data directory, so a restore keeps it and the
+// phones' subscriptions stay valid.
+func (p Paths) VAPIDKey() string  { return filepath.Join(p.Config, "vapid.key") }
+func (p Paths) GrantLock() string { return filepath.Join(p.Run, "grantd.lock") }
 
 // maxSocketPath keeps a unix socket path within sun_path, which is 104
 // bytes on macOS (108 on linux), counting the NUL.

@@ -141,7 +141,30 @@ sequenceDiagram
 
 The approver holds the unwrapped private tier key, so nothing else may read its memory. On Linux a process can read the memory of its own descendants (`kernel.yama.ptrace_scope=1`), so `request` starts the approver through `systemd-run --user`, as a child of your service manager, and the approver marks itself non-dumpable the way ssh-agent does. On macOS the hardened runtime does that job (see [Install](#install)), and the approver also refuses debugger attachment. On Windows the approver and grant agent lock their own process DACL, so other processes of yours can't open them to read memory; an administrator still can. That also keeps the window up if the agent's shell command times out: approve anyway and the agent's next `exec` finds the grant. One window shows at a time; a second request waits behind it, and usually finds its names granted by the time it gets a turn.
 
-If there's no desktop session or broker-dialog isn't installed, `--request` falls back to the plain `no_grant` line above.
+If there's no desktop session or broker-dialog isn't installed, and no phone is enrolled (next section), `--request` falls back to the plain `no_grant` line above.
+
+### Approving from your phone
+
+If you drive agents from your phone (T3 on the couch, say), the request window is on a screen you can't see. Enroll the phone and every request also shows up there, with a notification, and you approve it with a YubiKey plugged into the phone.
+
+```sh
+broker phone enroll --name pixel --origin https://broker.example.com:8443 \
+  --cert ~/.local/share/lego/certificates/broker.example.com.crt \
+  --key ~/.local/share/lego/certificates/broker.example.com.key
+```
+
+`--origin` has to be a name your phone resolves to this machine on your network, with a real certificate for it: WebAuthn won't run on a bare IP or a self-signed cert. A LAN DNS record plus a Let's Encrypt cert through a DNS-01 challenge does it, and the name never has to resolve publicly. broker remembers the origin and cert paths, so later enrollments only need `--name`.
+
+`enroll` prints a link and a QR code. Open it on the phone with the YubiKey plugged in, tap **Use security key**, touch the key when it blinks, and allow notifications. Then plug the key back into the PC and touch it once more there, which adds the phone's key to the vault. A test notification confirms it worked.
+
+From then on, `--request` shows the request in the window and on the phone. broker serves the phone page from this machine only while a request is open. The page shows the same things the window does, and approving asks the key for one touch. Whichever answers first wins, the window or the phone, and with no desktop session the phone alone is enough. The notification on your lock screen only says how many secrets an agent wants; the names and the command are on the page.
+
+How it works: the phone's key never signs anything. At enrollment the page makes a WebAuthn credential on the key and asks for its PRF output (FIDO2 `hmac-secret`) on a random salt. That output derives an ordinary age X25519 key, and the vault's private tier key gets wrapped to it, next to your other unlocks. Approving asks the key for the same output again, which takes a touch. The page sends it back over TLS, and broker checks it against that phone's recipient before it gets anywhere near the vault. It's the hardware zone: without the key in hand there's nothing to send. It's built for Chrome on Android. Safari handed back the wrong PRF output for USB keys as of early 2026 ([WebKit bug 311099](https://bugs.webkit.org/show_bug.cgi?id=311099)).
+
+```sh
+broker phone ls          # enrolled phones, and whether notifications are on
+broker phone rm pixel    # rewraps the vault without that phone's key (one touch)
+```
 
 Every failure an agent can hit has a stable `error` code. The full table is in the [agent skill](./skills/broker/SKILL.md).
 
@@ -237,7 +260,7 @@ quadrantChart
 
 | | hardware | passphrase | plain |
 |---|---|---|---|
-| unlock identity | YubiKey 5 over PIV (`age-plugin-yubikey`), or Touch ID (`age-plugin-se`) | identity file encrypted with `age -p` | `AGE-SECRET-KEY` file |
+| unlock identity | YubiKey 5 over PIV (`age-plugin-yubikey`), Touch ID (`age-plugin-se`), or a security key on an [enrolled phone](#approving-from-your-phone) | identity file encrypted with `age -p` | `AGE-SECRET-KEY` file |
 | each grant costs | a touch or a fingerprint | typing the passphrase | nothing |
 | on disk | a stub that's useless without the key | scrypt-encrypted key | a key anything running as you can read |
 | agent fakes a terminal and runs `grant` | blocked, nobody touched | blocked, it doesn't know the passphrase | works |
@@ -416,6 +439,7 @@ It does not protect against:
 - **A plain vault.** broker refuses human commands without a terminal, but `script` fakes one in a single line, so on a plain vault an agent can grant itself anything. The touch or the passphrase is what proves a human was there.
 - **A leaked passphrase.** In the passphrase zone it's all it takes, from any machine that has the identity file.
 - **A fake request window.** A hostile agent can draw its own look-alike window. On a passphrase vault that phishes the passphrase. On a hardware vault there's nothing to type, but if the agent starts its own unlock at the same moment, your touch completes that unlock instead of the one you think you're approving.
+- **Someone holding the phone page's TLS key.** The page's certificate key is a file your user can read. Something running as you that grabs it, and the page's port while broker isn't listening, can serve its own page, and the touch you give it hands over the phone's unlock key. That's the fake window again, on another screen. Other devices on your network can't do this: they don't have the key, and every API call needs the token only your phone holds.
 - **Public secrets.** They're not redacted, by design. Don't put anything in `public` you'd mind seeing in a transcript.
 - **Root, or anything that already owns your user.** It can read process memory, the keyring, and your terminal.
 - **An unsigned broker on macOS.** Without the hardened runtime, a debugger running as you can read the approver's or grant agent's memory. Run the `codesign` line from [Install](#install).
@@ -458,6 +482,10 @@ broker init --identity FILE...            # Create the vault, wrapped to one or 
             [--insecure-plain-identity]
 broker log [--since DUR] [--name NAME]    # Show the audit log
            [--json]
+broker phone enroll [--name NAME]         # Approve requests from a phone, with a key plugged into it
+             [--origin URL --cert FILE --key FILE] [--listen ADDR]
+broker phone ls                           # List enrolled phones
+broker phone rm NAME                      # Remove a phone's unlock (one touch)
 broker restore FILE [--identity FILE...]  # Rebuild the vault from a backup
                [--insecure-plain-identity] [--force]
 broker revoke NAME... | --all             # Drop grants before they expire

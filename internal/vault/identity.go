@@ -176,6 +176,14 @@ func (p *passphraseIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 func unlockRecipients(unlocks []config.Unlock, ui *plugin.ClientUI) ([]age.Recipient, error) {
 	var rs []age.Recipient
 	for _, u := range unlocks {
+		if u.Phone != nil {
+			r, err := age.ParseX25519Recipient(u.Recipient)
+			if err != nil {
+				return nil, fmt.Errorf("unlock recipient for %s: %w", u.Label(), err)
+			}
+			rs = append(rs, r)
+			continue
+		}
 		if u.Zone() == config.ZoneHardware && u.Recipient != "" {
 			r, err := plugin.NewRecipient(u.Recipient, ui)
 			if err != nil {
@@ -210,11 +218,15 @@ func unlockRecipients(unlocks []config.Unlock, ui *plugin.ClientUI) ([]age.Recip
 // passphrase files, which are only worth asking for if the first round
 // fails (no hardware plugged in). Unreadable files are skipped and returned
 // as skipped, so a missing test key does not block a working YubiKey.
+// Phone keys are left out: they only unlock through the phone page.
 func unlockIdentities(unlocks []config.Unlock, ui *plugin.ClientUI) (first, then []age.Identity, skipped error) {
 	var plugins []age.Identity
 	var errs []error
 	read := map[string]bool{}
 	for _, u := range unlocks {
+		if u.Phone != nil {
+			continue
+		}
 		switch u.Zone() {
 		case config.ZoneHardware:
 			id, err := plugin.NewIdentity(u.Identity, ui)

@@ -12,7 +12,7 @@ description: Credentials through the `broker` CLI. Use whenever a task needs an 
 1. **Discover**: `broker ls --json` prints an array of `{"name","tier","description","granted","expires",...}`. Pick by name and description.
    - `public`: always usable.
    - `private`: usable while `"granted": true`; otherwise ask for a grant with `--request` (step 2).
-2. **Run**: `broker exec --request --reason "WHY" NAME... -- CMD [ARGS...]`. With grants live it just runs. With any missing, it opens a window on the human's desktop showing the names, CMD, and your reason, waits up to 2 minutes for them to approve, then runs. Give the shell command a timeout of at least 150 seconds. Write the reason for the human: one plain sentence on what the task needs the secret for. A tool that reads the variable itself runs directly:
+2. **Run**: `broker exec --request --reason "WHY" NAME... -- CMD [ARGS...]`. With grants live it just runs. With any missing, it shows the names, CMD, and your reason in a window on the human's desktop and on their phone if one is enrolled, waits up to 2 minutes for them to approve, then runs. Give the shell command a timeout of at least 150 seconds. Write the reason for the human: one plain sentence on what the task needs the secret for. A tool that reads the variable itself runs directly:
 
    ```sh
    broker exec --request --reason "list your repos for the audit" GH_TOKEN -- gh repo list
@@ -44,7 +44,7 @@ If a credential the task needs is missing from `ls`, ask the human to store it (
 | exit | `error` | meaning | do |
 |---|---|---|---|
 | child's | (none) | the command ran | treat it as the command's result |
-| 77 | `no_grant` | private secret not granted, or the grant expired | without `--request`: rerun with it. With it, the `message` says there is no request window (no desktop, or broker-dialog missing): ask the human to run `ask_human` verbatim; retry after they confirm |
+| 77 | `no_grant` | private secret not granted, or the grant expired | without `--request`: rerun with it. With it, the `message` says there is no request window (no desktop or broker-dialog missing, and no phone enrolled): ask the human to run `ask_human` verbatim; retry after they confirm |
 | 77 | `denied` | the human turned the request down | stop; tell the human what is blocked and why; request again only if they say so |
 | 75 | `request_timeout` | nobody answered the window | tell the human the request is waiting, with `ask_human` as the terminal alternative; retry once they reply |
 | 78 | `unknown_secret` | `names` are not in the vault | recheck `broker ls --json`; if absent, ask the human to `broker set` it |

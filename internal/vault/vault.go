@@ -229,6 +229,44 @@ func (v *Vault) UnlockPrivate(ui *plugin.ClientUI) (age.Identity, error) {
 	return nil, errors.Join(fmt.Errorf("unwrap %s: %w", v.paths.PrivateKey(), errors.Join(errs...)), skipped)
 }
 
+// UnlockWith unwraps the private tier identity with id, an unlock
+// identity found some other way than UnlockPrivate (a phone's key). Never
+// cache or persist the result.
+func (v *Vault) UnlockWith(id age.Identity) (age.Identity, error) {
+	data, err := decryptFile(v.paths.PrivateKey(), id)
+	if err != nil {
+		return nil, fmt.Errorf("unwrap %s: %w", v.paths.PrivateKey(), err)
+	}
+	priv, err := parseTierIdentity(data, v.cfg.PrivateRecipient)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", v.paths.PrivateKey(), err)
+	}
+	return priv, nil
+}
+
+// SetUnlocks wraps the private tier identity, private (from UnlockPrivate
+// or UnlockWith), to unlocks instead and saves them in the config. The
+// file goes first: if the config is never written, the file only has an
+// extra recipient, or lacks one the config still lists.
+func (v *Vault) SetUnlocks(unlocks []config.Unlock, private age.Identity, ui *plugin.ClientUI) error {
+	if len(unlocks) == 0 {
+		return errors.New("the vault needs at least one unlock identity")
+	}
+	priv, ok := private.(*age.X25519Identity)
+	if !ok || priv.Recipient().String() != v.cfg.PrivateRecipient {
+		return errors.New("not the private tier identity")
+	}
+	wrapped, err := wrapPrivate(identityFile(priv, Private), unlocks, ui)
+	if err != nil {
+		return err
+	}
+	if err := paths.WriteFile(v.paths.PrivateKey(), wrapped); err != nil {
+		return err
+	}
+	v.cfg.Unlock = unlocks
+	return v.cfg.Save(v.paths.ConfigFile())
+}
+
 // PublicIdentity reads the public tier identity from public.key.
 func (v *Vault) PublicIdentity() (age.Identity, error) {
 	data, err := os.ReadFile(v.paths.PublicKey())

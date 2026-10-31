@@ -31,6 +31,9 @@ const (
 	Backup  Action = "backup"
 	Restore Action = "restore"
 	Request Action = "request"
+	// PhoneEnroll and PhoneRm add and remove a phone's unlock.
+	PhoneEnroll Action = "phone-enroll"
+	PhoneRm     Action = "phone-rm"
 )
 
 // Entry is one line of the log.

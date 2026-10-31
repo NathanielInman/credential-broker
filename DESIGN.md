@@ -26,7 +26,8 @@ active grant.
   sysctl and libproc), and `cmd/platform_*.go` (`harden`, `desktopSession`).
 - Libraries: `filippo.io/age` (including `filippo.io/age/plugin` client
   support for hardware identities), `golang.org/x/sys/unix` (keyctl),
-  `golang.org/x/term`, `github.com/spf13/cobra`. No cgo on linux. On macOS
+  `golang.org/x/term`, `github.com/spf13/cobra`, `rsc.io/qr` (the
+  enrollment link's QR code). No cgo on linux. On macOS
   cgo reads a requester's executable and working directory through libproc;
   a build without it reads the executable from `kern.procargs2` and shows no
   directory.
@@ -56,6 +57,7 @@ so agents can discover what it is for.
 
 ```
 $XDG_CONFIG_HOME/broker/config.json     # unlock identity paths/stubs, recipients, defaults
+$XDG_CONFIG_HOME/broker/vapid.key       # signs phone notifications (Web Push VAPID, 0600)
 $XDG_DATA_HOME/broker/public.key        # age X25519 identity for the public tier (0600)
 $XDG_DATA_HOME/broker/private.key.age   # age X25519 identity for the private tier,
                                         #   encrypted to the unlock recipients (hardware)
@@ -93,6 +95,12 @@ file of one of three kinds, and each kind is a **zone** (`config.Zone`):
   X25519 or hybrid; a plugin stub inside is refused.
 - `plain`: an `AGE-SECRET-KEY-` file, allowed only with
   `--insecure-plain-identity`, for tests.
+
+A fourth kind comes only from `broker phone enroll`, never from a file: a
+**phone key** (`Unlock.Phone`), in the hardware zone. Its recipient is the
+X25519 key a security key's WebAuthn PRF output derives (see
+[Phone page](#phone-page)). Local unlocking skips it; only the phone page
+can answer for it.
 
 Any unlock opens the private tier, so the vault's zone is its weakest
 unlock's. `init` and `restore` print each unlock's zone and the vault's.
@@ -327,6 +335,66 @@ their desktop instead.
   `WEBKIT_DISABLE_DMABUF_RENDERER=1` avoids a Wayland protocol error on
   NVIDIA with explicit sync.
 
+## Phone page
+
+A human driving agents from a phone (T3 on the couch) cannot see the
+request window. `internal/phone` serves the same request on an HTTPS page
+on the local network, and a security key plugged into the phone approves
+it.
+
+- The key never signs for broker. Enrollment makes a non-discoverable
+  WebAuthn credential (UV discouraged, so touch only) and evaluates the
+  PRF extension (CTAP `hmac-secret`) on a random 32-byte salt. HKDF-SHA256
+  over that output (info `broker phone unlock v1`) is an X25519 scalar,
+  turned into an ordinary age identity through its Bech32 text form, since
+  age has no raw-bytes constructor. The private tier is wrapped to its
+  recipient beside the other unlocks (`Vault.SetUnlocks`, file before
+  config), so the vault stays plain age. Approving evaluates PRF again,
+  which takes a touch, and the page posts the output back over TLS.
+- The server derives the identity and compares its recipient with the one
+  enrolled for the phone that sent it before anything reaches the vault;
+  a wrong key gets 403. The approver then unwraps with it
+  (`Vault.UnlockWith`).
+- Config: `phone` holds the page (`origin`, `listen`, `cert`, `key`), and
+  each phone unlock holds its name, credential ID, salt, the SHA-256 of
+  its page token, and its push subscription. The relying party ID is the
+  origin's host, so changing the origin means enrolling again. The cert
+  and key are read at every start, so a renewed certificate needs nothing.
+- The page listens only while an approver or `enroll` runs, on `listen`.
+  The approver starts it beside the window when a phone is enrolled
+  (`approval.Remote`: the page gets every message the window gets, its
+  `deny` and `for` replies count like the window's, and the page going
+  away is not a deny). `unlockApproved` waits on the window's unlock and
+  the phone at once; the first to unlock wins, and the phone's chosen
+  duration is applied with its unlock so reply order cannot change it.
+  With no desktop the phone alone is enough, so `requestWindow` passes
+  when a phone is enrolled. On `Finish` the page gets up to 2s to fetch
+  the outcome before it stops.
+- API: the page polls `GET /api/poll?after=N` (long poll, 25s) and posts
+  `/api/reply` and `/api/unlock`. Every call carries the phone's token as a
+  bearer token (kept in the page's localStorage, which has no 400-day cap
+  as cookies do), and writes must carry the page's `Origin`. Enrollment
+  uses a one-time token in the link's fragment, which the browser never
+  sends, and the page drops it from the address bar. Responses carry a CSP
+  allowing only the origin, `frame-ancestors 'none'`, and `no-store`.
+- Notifications are Web Push (`internal/webpush`): RFC 8291 aes128gcm to
+  the subscription's keys, signed with a VAPID key (RFC 8292) kept beside
+  the config so a restore does not orphan the subscriptions. The push
+  service (Google's, for Chrome) sees only ciphertext, and the payload
+  only says how many secrets are wanted, since it shows on the lock
+  screen. TTL is the request's deadline, `Urgency: high`, `Topic` so a
+  newer request replaces a waiting one. A tap opens the page's own origin,
+  never a URL from the payload. The service worker caches the page so a
+  late tap says nothing is pending instead of showing a browser error.
+- `enroll` and `phone rm` need a terminal, like every command that changes
+  the vault, and unlock with the vault's own unlock (a touch). `rm`
+  refuses to remove the last unlock.
+- Threat: the page's TLS key is a file the user can read. Something running
+  as the user that takes it and the port can serve a look-alike page and
+  receive the PRF output from a touch meant for a real request: the fake
+  window again, inside this design's threat model. Other devices on the
+  network have neither the TLS key nor a phone token.
+
 ## exec behaviour
 
 - Resolve each NAME: public from disk, private from the keyring. Any private
@@ -360,7 +428,7 @@ their desktop instead.
 
 ## Audit log
 
-One JSON object per line: `ts`, `action` (`init|set|rm|grant|revoke|get|exec|import|backup|restore`),
+One JSON object per line: `ts`, `action` (`init|set|rm|grant|revoke|get|exec|import|backup|restore|request|phone-enroll|phone-rm`),
 `names`, `tier`, `for` (a grant's duration), `ok`, `error`, `cwd`, `cmd`
 (exec's child argv[0] only), `pid`, and `ancestry`: the process chain from
 `/proc/<pid>/stat` + `comm` up to pid 1, e.g.

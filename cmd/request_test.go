@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -41,8 +42,13 @@ func init() {
 	if os.Getenv(envBeWindow) != "" {
 		os.Exit(fakeWindow())
 	}
-	// An approver started by a test shows its window with the script.
+	// An approver started by a test shows its window with the script,
+	// and without one never opens a real window on the desktop.
+	if os.Getenv(envBroker) != "" && os.Getenv(envWindow) == "" {
+		desktopWindow = func() error { return errors.New("no window in this test") }
+	}
 	if os.Getenv(envBroker) != "" && os.Getenv(envWindow) != "" {
+		desktopWindow = func() error { return nil }
 		dialogCommand = func() (*exec.Cmd, error) {
 			exe, err := os.Executable()
 			if err != nil {
@@ -114,7 +120,7 @@ func useWindow(t *testing.T, script string) string {
 	t.Setenv(envWindow, script)
 	t.Setenv(envWindowLog, log)
 	origWindow, origLaunch := requestWindow, launchApprover
-	requestWindow = func() error { return nil }
+	requestWindow = func(*config.Config) error { return nil }
 	launchApprover = func(ctx context.Context, req []byte, stderr io.Writer) ([]byte, error) {
 		exe, err := os.Executable()
 		if err != nil {
@@ -263,7 +269,7 @@ func TestRequestUnknownName(t *testing.T) {
 func TestRequestWithoutWindow(t *testing.T) {
 	grantVault(t)
 	orig := requestWindow
-	requestWindow = func() error { return os.ErrNotExist }
+	requestWindow = func(*config.Config) error { return os.ErrNotExist }
 	t.Cleanup(func() { requestWindow = orig })
 	_, stderr, code := runStdin(t, "", "request", "API_TOKEN")
 	if code != 77 || errorCode(t, stderr) != "no_grant" || !strings.Contains(stderr, `"ask_human":"broker grant API_TOKEN --for 1h"`) {

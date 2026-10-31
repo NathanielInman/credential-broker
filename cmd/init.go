@@ -57,7 +57,7 @@ func printUnlocks(out io.Writer, v *vault.Vault) {
 	cfg := v.Config()
 	fmt.Fprintln(out, "private tier unlocks with:")
 	for _, u := range cfg.Unlock {
-		fmt.Fprintf(out, "  %s (%s)\n", u.Path, u.Zone())
+		fmt.Fprintf(out, "  %s (%s)\n", u.Label(), u.Zone())
 	}
 	z := cfg.Zone()
 	fmt.Fprintf(out, "protection: %s, %s\n", z, zoneNotes[z])

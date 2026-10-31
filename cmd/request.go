@@ -22,6 +22,7 @@ import (
 	"github.com/NathanielInman/credential-broker/internal/audit"
 	"github.com/NathanielInman/credential-broker/internal/config"
 	"github.com/NathanielInman/credential-broker/internal/paths"
+	"github.com/NathanielInman/credential-broker/internal/phone"
 	"github.com/NathanielInman/credential-broker/internal/procinfo"
 	"github.com/NathanielInman/credential-broker/internal/vault"
 )
@@ -137,7 +138,7 @@ func requestGrants(c *cobra.Command, v *vault.Vault, names []string, ttl time.Du
 	if timeout <= 0 {
 		return agenterr.New(agenterr.Usage, "--timeout %s is not positive", timeout)
 	}
-	if err := requestWindow(); err != nil {
+	if err := requestWindow(v.Config()); err != nil {
 		return noWindow(err)
 	}
 
@@ -242,8 +243,19 @@ func ungranted(v *vault.Vault, names []string) ([]vault.Secret, error) {
 	return missing, nil
 }
 
-// requestWindow reports why no request window can open, or nil.
-var requestWindow = func() error {
+// requestWindow reports why a request cannot be shown anywhere, or nil:
+// it needs the desktop window or an enrolled phone.
+var requestWindow = func(cfg *config.Config) error {
+	err := desktopWindow()
+	if err != nil && cfg.Phone != nil && len(cfg.Phones()) > 0 {
+		return nil
+	}
+	return err
+}
+
+// desktopWindow reports why no request window can open on the desktop,
+// or nil. The approver asks too, since a request may go to a phone alone.
+var desktopWindow = func() error {
 	if err := desktopSession(); err != nil {
 		return err
 	}
@@ -337,7 +349,7 @@ func newApproveCmd() *cobra.Command {
 			if len(req.Command) > 0 {
 				e.Cmd = req.Command[0]
 			}
-			res, err := approve(&req, &e)
+			res, err := approve(&req, &e, c.ErrOrStderr())
 			if err != nil {
 				ae := agenterr.From(err)
 				res = requestResult{Error: string(ae.Code), Message: ae.Message}
@@ -352,9 +364,10 @@ func newApproveCmd() *cobra.Command {
 	}
 }
 
-// approve shows req in the request window and grants what the human
-// approves. It fills in e for the audit log as it learns more.
-func approve(req *requestFile, e *audit.Entry) (requestResult, error) {
+// approve shows req in the request window, on enrolled phones, or both,
+// and grants what the human approves. It fills in e for the audit log as
+// it learns more.
+func approve(req *requestFile, e *audit.Entry, stderr io.Writer) (requestResult, error) {
 	var res requestResult
 	ttl := time.Duration(req.For) * time.Second
 	if ttl <= 0 || ttl > maxGrant {
@@ -392,9 +405,24 @@ func approve(req *requestFile, e *audit.Entry) (requestResult, error) {
 		e.Names = append(e.Names, s.Name)
 	}
 
-	dialog, err := dialogCommand()
-	if err != nil {
-		return res, err
+	// The window needs the desktop; the phone page needs an enrolled
+	// phone. Either will do, and with both, whichever approves first wins.
+	var page *phone.Server
+	if cfg := v.Config(); cfg.Phone != nil && len(cfg.Phones()) > 0 {
+		if page, err = phone.StartRequest(*cfg.Phone, cfg.Unlock); err != nil {
+			fmt.Fprintf(stderr, "broker: phone page: %v\n", err)
+			page = nil
+		} else {
+			defer page.Close()
+		}
+	}
+	var dialog *exec.Cmd
+	if werr := desktopWindow(); werr == nil {
+		if dialog, err = dialogCommand(); err != nil && page == nil {
+			return res, err
+		}
+	} else if page == nil {
+		return res, werr
 	}
 	home, _ := os.UserHomeDir()
 	shown := approval.Request{
@@ -412,12 +440,20 @@ func approve(req *requestFile, e *audit.Entry) (requestResult, error) {
 	for _, s := range secrets {
 		shown.Secrets = append(shown.Secrets, approval.Secret{Name: s.Name, Description: s.Description})
 	}
-	sess, err := approval.Start(dialog, shown)
+	var remotes []approval.Remote
+	var phoneUnlocks <-chan phone.Unlock
+	if page != nil {
+		remotes, phoneUnlocks = append(remotes, page), page.Unlocks()
+	}
+	sess, err := approval.Start(dialog, shown, remotes...)
 	if err != nil {
 		return res, err
 	}
+	if page != nil {
+		go notifyPhones(p, v.Config(), len(secrets), req.Deadline, stderr)
+	}
 
-	id, err := unlockApproved(sess, v, shown.Approve)
+	id, err := unlockApproved(sess, v, shown.Approve, dialog != nil, phoneUnlocks)
 	if err != nil {
 		sess.Finish(finishText(err), true)
 		return res, requestErr(err)
@@ -448,50 +484,71 @@ func approve(req *requestFile, e *audit.Entry) (requestResult, error) {
 }
 
 // unlockApproved waits for what approving takes and returns the private
-// tier identity. With hardware the touch is the approval and unlocking
-// starts at once, as it does with a passphrase, whose prompt appears in
-// the window; a plain vault unlocks with no human at all, so it waits for
-// Approve first. A failed unlock can be retried from the window.
-func unlockApproved(sess *approval.Session, v *vault.Vault, by string) (age.Identity, error) {
-	if by == "click" {
-		if err := sess.WaitApprove(); err != nil {
-			return nil, err
-		}
+// tier identity. In the window, with hardware the touch is the approval
+// and unlocking starts at once, as it does with a passphrase, whose prompt
+// appears in the window; a plain vault unlocks with no human at all, so
+// it waits for Approve first. A failed unlock can be retried from the
+// window. All along, a phone's key (fromPhone, already checked against
+// its recipient) may answer instead; without a window it is the only way.
+func unlockApproved(sess *approval.Session, v *vault.Vault, by string, window bool, fromPhone <-chan phone.Unlock) (age.Identity, error) {
+	type unlocked struct {
+		id  age.Identity
+		err error
 	}
-	for attempt := 1; ; attempt++ {
-		type unlocked struct {
-			id  age.Identity
-			err error
-		}
+	// local is the unlock running for the window, nil while none is.
+	var local chan unlocked
+	start := func() {
 		ch := make(chan unlocked, 1)
 		go func() {
 			id, err := v.UnlockPrivate(sess.UI())
 			ch <- unlocked{id, err}
 		}()
-		var u unlocked
+		local = ch
+	}
+	waitApprove := window && by == "click"
+	if window && !waitApprove {
+		start()
+	}
+	for attempt := 0; ; {
+		var approved <-chan struct{}
+		if waitApprove {
+			approved = sess.Approved()
+		}
 		select {
-		case u = <-ch:
+		case u := <-local:
+			local = nil
+			if u.err == nil {
+				return u.id, nil
+			}
+			if attempt++; attempt == unlockAttempts {
+				return nil, u.err
+			}
+			// A mistyped passphrase is simply asked for again, with the
+			// error under the field; anything else (an unplugged key)
+			// waits for the human to fix it and press Try again.
+			if wrongPassphrase(u.err) {
+				sess.Status(unlockFailure(u.err), true, false)
+				start()
+				continue
+			}
+			sess.Status(unlockFailure(u.err)+" Approve to try again.", true, true)
+			waitApprove = true
+		case <-approved:
+			waitApprove = false
+			start()
+		case pu := <-fromPhone:
+			// The duration the phone showed is the one approved, whatever
+			// order its replies arrived in.
+			sess.Pick(pu.For)
+			id, err := v.UnlockWith(pu.Identity)
+			if err == nil {
+				return id, nil
+			}
+			sess.Status("The key on phone "+pu.Phone+" did not unlock the vault: "+err.Error(), true, false)
 		case <-sess.Done():
 			// A plugin may still be waiting on a touch; the approver exits
 			// right after, which ends it.
 			return nil, sess.Err()
-		}
-		if u.err == nil {
-			return u.id, nil
-		}
-		if attempt == unlockAttempts {
-			return nil, u.err
-		}
-		// A mistyped passphrase is simply asked for again, with the error
-		// under the field; anything else (an unplugged key) waits for the
-		// human to fix it and press Try again.
-		if wrongPassphrase(u.err) {
-			sess.Status(unlockFailure(u.err), true, false)
-			continue
-		}
-		sess.Status(unlockFailure(u.err)+" Approve to try again.", true, true)
-		if err := sess.WaitApprove(); err != nil {
-			return nil, err
 		}
 	}
 }
@@ -510,7 +567,8 @@ func approveBy(cfg *config.Config) (by, device string) {
 		return "click", ""
 	}
 	for _, u := range cfg.Unlock {
-		if u.Zone() != config.ZoneHardware {
+		// A phone's key only answers on the phone, never in the window.
+		if u.Zone() != config.ZoneHardware || u.Phone != nil {
 			continue
 		}
 		if !presencePlugins[u.Plugin()] {
