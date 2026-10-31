@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -339,5 +340,17 @@ func TestPhoneDeny(t *testing.T) {
 	}
 	if e := <-reqDone; !strings.Contains(e, `"error":"denied"`) {
 		t.Fatalf("request stderr %q", e)
+	}
+}
+
+func TestUnlockHint(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "yubikey-identity.txt")
+	os.WriteFile(file, []byte("#       Serial: 39616611, Slot: 2\n#    Recipient: age1yubikey1q\nAGE-PLUGIN-YUBIKEY-1QQQ\n"), 0o600)
+	cfg := &config.Config{Unlock: []config.Unlock{{Path: file, Identity: "AGE-PLUGIN-YUBIKEY-1QQQ"}}}
+	if h := unlockHint(cfg); !strings.Contains(h, "serial 39616611") || !strings.Contains(h, "a different key can stay in the phone") {
+		t.Fatalf("hint %q", h)
+	}
+	if h := unlockHint(&config.Config{Unlock: []config.Unlock{{Path: "/no/such/file", Passphrase: true}}}); strings.Contains(h, "serial") {
+		t.Fatalf("hint without a YubiKey %q", h)
 	}
 }

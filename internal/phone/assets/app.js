@@ -88,7 +88,7 @@ async function enroll() {
       el("li", {}, "Plug your YubiKey into this phone."),
       el("li", {}, "Tap Use security key and touch the key each time it blinks (once or twice)."),
       el("li", {}, "Allow notifications, so requests reach you."),
-      el("li", {}, "Finish on the PC: move the YubiKey back there, press Enter in the terminal, and touch it.")));
+      el("li", {}, "Finish on the PC: follow the terminal there to unlock the vault with its own key.")));
     if (st.error) kids.push(errorBox(st.error));
     if (st.step === "start" || st.step === "key") {
       kids.push(el("div", { class: "buttons" },
@@ -102,7 +102,7 @@ async function enroll() {
     } else if (st.step === "pc") {
       kids.push(el("div", { class: "action touch" }, el("span", { class: "dot" }),
         el("div", {}, el("div", { class: "title" }, "Now finish on the PC"),
-          el("div", { class: "hint" }, "Unplug the YubiKey from this phone, plug it into the PC, press Enter in the terminal there, and touch the key."))));
+          el("div", { class: "hint" }, "The terminal there says which YubiKey unlocks the vault. If it is the one in this phone, move it to the PC; otherwise leave this one here. Then press Enter there and touch the PC's key."))));
     } else if (st.step === "done") {
       kids.push(result("This phone is enrolled", false));
       kids.push(el("div", { class: "note" }, st.pushNote || "A test notification is on its way."));

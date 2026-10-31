@@ -189,10 +189,12 @@ func enrollPhone(c *cobra.Command, v *vault.Vault, name string, page config.Phon
 	// earlier, so it runs after this) gives it time to fetch the answer.
 	defer func() { srv.Finish(err) }()
 
-	// The key the phone used is often the one that unlocks the vault, so
-	// it has to come back first.
-	fmt.Fprintln(out, "\nGot the phone's key. Now unlock the vault here to add it:")
-	fmt.Fprintln(out, "plug the YubiKey you unlock with into this machine (unplug it from the phone first), then press Enter.")
+	// With one YubiKey, the key the phone used is the one that unlocks the
+	// vault and has to come back first; with two, the phone's key stays
+	// put. Naming the vault's key by serial settles which.
+	fmt.Fprintln(out, "\nGot the phone's key. Now unlock the vault on this machine to add it.")
+	fmt.Fprintln(out, unlockHint(v.Config()))
+	fmt.Fprintln(out, "Then press Enter.")
 	lines := readLines(c.InOrStdin())
 	ui := vault.TerminalUI(errOut)
 	var priv age.Identity
@@ -202,14 +204,14 @@ func enrollPhone(c *cobra.Command, v *vault.Vault, name string, page config.Phon
 		case <-ctx.Done():
 			return errors.New("stopped before the vault was unlocked; the phone was not added")
 		}
-		fmt.Fprintln(out, "Touch the YubiKey when it blinks.")
+		fmt.Fprintln(out, "Unlocking: touch the YubiKey in this machine when it blinks, or type the passphrase if asked.")
 		if priv, err = v.UnlockPrivate(ui); err == nil {
 			break
 		}
 		if attempt == unlockAttempts {
 			return err
 		}
-		fmt.Fprintf(errOut, "could not unlock: %v\nCheck the YubiKey is plugged into this machine and press Enter to try again (Ctrl-C to stop).\n", err)
+		fmt.Fprintf(errOut, "could not unlock: %v\n%s\nPress Enter to try again (Ctrl-C to stop).\n", err, unlockHint(v.Config()))
 	}
 	cfg := v.Config()
 	unlocks := append(slices.Clone(cfg.Unlock), config.Unlock{
@@ -240,6 +242,38 @@ func enrollPhone(c *cobra.Command, v *vault.Vault, name string, page config.Phon
 	}
 	printUnlocks(out, v)
 	return nil
+}
+
+// yubikeySerial finds the serial age-plugin-yubikey wrote in a comment
+// above the stub ("#       Serial: 39616611, Slot: 2").
+var yubikeySerial = regexp.MustCompile(`(?m)^#\s*Serial:\s*(\d+)`)
+
+// unlockHint tells the human which key unlocks the vault here, by serial
+// when the YubiKey identity file says, since with two keys around "the
+// YubiKey" could be either.
+func unlockHint(cfg *config.Config) string {
+	var serials []string
+	for _, u := range cfg.Unlock {
+		if u.Plugin() != "yubikey" || u.Path == "" {
+			continue
+		}
+		data, err := os.ReadFile(u.Path)
+		if err != nil {
+			continue
+		}
+		if m := yubikeySerial.FindSubmatch(data); m != nil && !slices.Contains(serials, string(m[1])) {
+			serials = append(serials, string(m[1]))
+		}
+	}
+	switch len(serials) {
+	case 0:
+		return "Have the YubiKey (or passphrase) that unlocks this vault ready. If the phone just used that same key, move it to this machine now."
+	case 1:
+		return "Plug in the YubiKey that unlocks this vault, serial " + serials[0] + " (ykman list shows it). " +
+			"If the phone just used that same key, move it to this machine now; a different key can stay in the phone."
+	}
+	return "Plug in a YubiKey that unlocks this vault (serial " + strings.Join(serials, " or ") + "; ykman list shows it). " +
+		"If the phone just used that key, move it to this machine now; a different key can stay in the phone."
 }
 
 // readLines delivers each line read from r, and keeps delivering once r
