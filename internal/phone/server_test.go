@@ -3,6 +3,7 @@ package phone
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -222,6 +223,20 @@ func TestEnroll(t *testing.T) {
 	// The link works once.
 	if code, _ := c.do("POST", "/api/enroll", body); code != http.StatusUnauthorized {
 		t.Fatalf("second enroll: %d", code)
+	}
+
+	// The phone then waits on the PC with its new token, and hears the
+	// outcome; nobody else can ask.
+	if code, _ := c.do("GET", "/api/enroll/result", nil); code != http.StatusUnauthorized {
+		t.Fatalf("result with the enrollment token: %d", code)
+	}
+	c.token = out["token"].(string)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		s.Finish(errors.New("could not unlock: no YubiKey"))
+	}()
+	if code, res := c.do("GET", "/api/enroll/result", nil); code != 200 || res["done"] != true || res["error"] != "could not unlock: no YubiKey" {
+		t.Fatalf("result: %d %v", code, res)
 	}
 }
 

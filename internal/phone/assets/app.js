@@ -88,7 +88,7 @@ async function enroll() {
       el("li", {}, "Plug your YubiKey into this phone."),
       el("li", {}, "Tap Use security key and touch the key each time it blinks (once or twice)."),
       el("li", {}, "Allow notifications, so requests reach you."),
-      el("li", {}, "Finish on the PC: touch the YubiKey there when broker asks.")));
+      el("li", {}, "Finish on the PC: move the YubiKey back there, press Enter in the terminal, and touch it.")));
     if (st.error) kids.push(errorBox(st.error));
     if (st.step === "start" || st.step === "key") {
       kids.push(el("div", { class: "buttons" },
@@ -99,10 +99,16 @@ async function enroll() {
         el("button", { onclick: () => { st.pushNote = "Notifications are off: open this page yourself when an agent asks."; send(); } }, "Skip")));
     } else if (st.step === "sending") {
       kids.push(waiting("Saving…"));
+    } else if (st.step === "pc") {
+      kids.push(el("div", { class: "action touch" }, el("span", { class: "dot" }),
+        el("div", {}, el("div", { class: "title" }, "Now finish on the PC"),
+          el("div", { class: "hint" }, "Unplug the YubiKey from this phone, plug it into the PC, press Enter in the terminal there, and touch the key."))));
     } else if (st.step === "done") {
       kids.push(result("This phone is enrolled", false));
-      kids.push(el("div", { class: "note" }, "Now finish on the PC: plug the YubiKey back in there and touch it when broker asks. " +
-        (st.pushNote || "A test notification arrives once that is done.")));
+      kids.push(el("div", { class: "note" }, st.pushNote || "A test notification is on its way."));
+    } else if (st.step === "failed") {
+      kids.push(errorBox("Enrolling failed on the PC: " + st.failure));
+      kids.push(el("div", { class: "note" }, "Nothing was added. Run broker phone enroll again."));
     }
     app.replaceChildren(...kids);
   };
@@ -174,13 +180,34 @@ async function enroll() {
     st.step = "sending"; render();
     try {
       const r = await call("POST", { credential: st.cred, prf: st.prf, push: st.push });
-      localStorage.setItem(TOKEN, r.token);
       st.prf = null;
-      st.step = "done";
+      st.step = "pc"; render();
+      await waitForPC(r.token);
     } catch (e) {
       st.step = "start"; st.error = why(e);
     }
     render();
+  }
+
+  // The phone's part is half of enrolling: the PC still has to unlock the
+  // vault and wrap it to this key. Only then is the token worth keeping.
+  async function waitForPC(phoneToken) {
+    for (;;) {
+      let data;
+      try {
+        const res = await fetch("/api/enroll/result", { headers: { Authorization: "Bearer " + phoneToken }, cache: "no-store" });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+      } catch (e) {
+        st.step = "failed"; st.failure = "lost touch with the PC (" + why(e) + "). Check the terminal there.";
+        return;
+      }
+      if (!data.done) continue;
+      if (data.error) { st.step = "failed"; st.failure = data.error; return; }
+      localStorage.setItem(TOKEN, phoneToken);
+      st.step = "done";
+      return;
+    }
   }
 
   render();

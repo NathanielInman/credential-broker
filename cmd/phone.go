@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -19,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"filippo.io/age"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"rsc.io/qr"
@@ -151,7 +153,7 @@ func phoneSettings(c *cobra.Command, saved *config.PhonePage, flags config.Phone
 	return page, nil
 }
 
-func enrollPhone(c *cobra.Command, v *vault.Vault, name string, page config.PhonePage) error {
+func enrollPhone(c *cobra.Command, v *vault.Vault, name string, page config.PhonePage) (err error) {
 	out, errOut := c.OutOrStdout(), c.ErrOrStderr()
 	key, err := vapidKey(v.Paths())
 	if err != nil {
@@ -183,13 +185,31 @@ func enrollPhone(c *cobra.Command, v *vault.Vault, name string, page config.Phon
 	case <-ctx.Done():
 		return errors.New("stopped before the phone enrolled")
 	}
-	srv.Close()
+	// The page waits to hear how the rest goes here; Close (deferred
+	// earlier, so it runs after this) gives it time to fetch the answer.
+	defer func() { srv.Finish(err) }()
 
-	fmt.Fprintln(out, "\nGot the phone's key. Plug the YubiKey you unlock with back into this machine and touch it to add the phone.")
+	// The key the phone used is often the one that unlocks the vault, so
+	// it has to come back first.
+	fmt.Fprintln(out, "\nGot the phone's key. Now unlock the vault here to add it:")
+	fmt.Fprintln(out, "plug the YubiKey you unlock with into this machine (unplug it from the phone first), then press Enter.")
+	lines := readLines(c.InOrStdin())
 	ui := vault.TerminalUI(errOut)
-	priv, err := v.UnlockPrivate(ui)
-	if err != nil {
-		return err
+	var priv age.Identity
+	for attempt := 1; ; attempt++ {
+		select {
+		case <-lines:
+		case <-ctx.Done():
+			return errors.New("stopped before the vault was unlocked; the phone was not added")
+		}
+		fmt.Fprintln(out, "Touch the YubiKey when it blinks.")
+		if priv, err = v.UnlockPrivate(ui); err == nil {
+			break
+		}
+		if attempt == unlockAttempts {
+			return err
+		}
+		fmt.Fprintf(errOut, "could not unlock: %v\nCheck the YubiKey is plugged into this machine and press Enter to try again (Ctrl-C to stop).\n", err)
 	}
 	cfg := v.Config()
 	unlocks := append(slices.Clone(cfg.Unlock), config.Unlock{
@@ -220,6 +240,23 @@ func enrollPhone(c *cobra.Command, v *vault.Vault, name string, page config.Phon
 	}
 	printUnlocks(out, v)
 	return nil
+}
+
+// readLines delivers each line read from r, and keeps delivering once r
+// ends, so a closed stdin never blocks.
+func readLines(r io.Reader) <-chan struct{} {
+	ch := make(chan struct{})
+	go func() {
+		br := bufio.NewReader(r)
+		for {
+			if _, err := br.ReadString('\n'); err != nil {
+				close(ch)
+				return
+			}
+			ch <- struct{}{}
+		}
+	}()
+	return ch
 }
 
 // printQR draws text as a QR code with half blocks, two rows per line,

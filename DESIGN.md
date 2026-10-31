@@ -387,7 +387,12 @@ it.
   never a URL from the payload. The service worker caches the page so a
   late tap says nothing is pending instead of showing a browser error.
 - `enroll` and `phone rm` need a terminal, like every command that changes
-  the vault, and unlock with the vault's own unlock (a touch). `rm`
+  the vault, and unlock with the vault's own unlock (a touch). The key
+  the phone used is often that same YubiKey, so after the phone's part
+  `enroll` waits for Enter before unlocking, and offers a retry if the
+  unlock fails. The page keeps its new token only once the PC says the
+  vault is wrapped (`GET /api/enroll/result`, authorized by that token),
+  so it never claims an enrollment the PC did not finish. `rm`
   refuses to remove the last unlock.
 - Threat: the page's TLS key is a file the user can read. Something running
   as the user that takes it and the port can serve a look-alike page and

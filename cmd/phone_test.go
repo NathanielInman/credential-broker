@@ -152,11 +152,15 @@ func TestPhoneEnrollRequestRm(t *testing.T) {
 	if err != nil || code != 200 {
 		t.Fatalf("enroll: %d %v %v", code, res, err)
 	}
+	// From now on the phone shows the token enrolling gave it, first to
+	// hear that the PC side worked.
+	ph.token = res["token"].(string)
+	if code, res, err := ph.call("GET", "/api/enroll/result", nil); err != nil || code != 200 || res["done"] != true || res["error"] != "" {
+		t.Fatalf("enroll result: %d %v %v", code, res, err)
+	}
 	if code := <-done; code != 0 {
 		t.Fatalf("enroll exit %d: %s", code, stderr.String())
 	}
-	// From now on the phone shows the token enrolling gave it.
-	ph.token = res["token"].(string)
 	<-readAll
 	if s := out.String(); !strings.Contains(s, "enrolled phone pixel") || !strings.Contains(s, "sent a test notification") ||
 		!strings.Contains(s, "phone pixel (hardware)") {

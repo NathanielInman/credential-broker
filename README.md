@@ -155,7 +155,7 @@ broker phone enroll --name pixel --origin https://broker.example.com:8443 \
 
 `--origin` has to be a name your phone resolves to this machine on your network, with a real certificate for it: WebAuthn won't run on a bare IP or a self-signed cert. A LAN DNS record plus a Let's Encrypt cert through a DNS-01 challenge does it, and the name never has to resolve publicly. broker remembers the origin and cert paths, so later enrollments only need `--name`.
 
-`enroll` prints a link and a QR code. Open it on the phone with the YubiKey plugged in, tap **Use security key**, touch the key when it blinks, and allow notifications. Then plug the key back into the PC and touch it once more there, which adds the phone's key to the vault. A test notification confirms it worked.
+`enroll` prints a link and a QR code. Open it on the phone with the YubiKey plugged in, tap **Use security key**, touch the key when it blinks, and allow notifications. Then move the key back to the PC, press Enter in the terminal, and touch it there, which adds the phone's key to the vault. The phone page waits for that and says whether it worked, and a test notification follows.
 
 From then on, `--request` shows the request in the window and on the phone. broker serves the phone page from this machine only while a request is open. The page shows the same things the window does, and approving asks the key for one touch. Whichever answers first wins, the window or the phone, and with no desktop session the phone alone is enough. The notification on your lock screen only says how many secrets an agent wants; the names and the command are on the page.
 

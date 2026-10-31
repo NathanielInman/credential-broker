@@ -111,6 +111,14 @@ type enrollment struct {
 	userID []byte
 	done   chan Enrollment
 	used   bool
+	// phone is the SHA-256 of the token the enrolled phone got, which it
+	// shows to learn how the PC side went.
+	phone string
+	// finished is set by Finish, with failure the error if any, and told
+	// once the page has fetched it.
+	finished bool
+	failure  string
+	told     bool
 }
 
 // Origin checks page's settings and returns the relying party ID (the
@@ -206,6 +214,21 @@ func (s *Server) EnrollURL() string { return s.origin + "/enroll#" + s.enroll.to
 // Enrolled delivers the phone's answer once it has enrolled.
 func (s *Server) Enrolled() <-chan Enrollment { return s.enroll.done }
 
+// Finish tells the enrolling page how the PC side went: err is why the
+// vault was not wrapped to the phone's key, or nil once it is.
+func (s *Server) Finish(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.enroll == nil || s.enroll.finished {
+		return
+	}
+	s.enroll.finished = true
+	if err != nil {
+		s.enroll.failure = err.Error()
+	}
+	s.wakeLocked()
+}
+
 // Unlocks delivers each phone's checked answer to the request.
 func (s *Server) Unlocks() <-chan Unlock { return s.unlocks }
 
@@ -243,7 +266,7 @@ func (s *Server) Close() {
 	if polled {
 		for end := time.Now().Add(drainWait); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
 			s.mu.Lock()
-			caught := s.delivered >= len(s.msgs)
+			caught := s.delivered >= len(s.msgs) && (s.enroll == nil || !s.enroll.finished || s.enroll.told)
 			s.mu.Unlock()
 			if caught {
 				break
@@ -267,6 +290,7 @@ func (s *Server) routes() http.Handler {
 	if s.enroll != nil {
 		mux.HandleFunc("GET /api/enroll", s.enrollOptions)
 		mux.HandleFunc("POST /api/enroll", s.enrollFinish)
+		mux.HandleFunc("GET /api/enroll/result", s.enrollResult)
 	} else {
 		mux.HandleFunc("GET /api/poll", s.poll)
 		mux.HandleFunc("POST /api/reply", s.reply)
@@ -544,9 +568,45 @@ func (s *Server) enrollFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.enroll.used = true
+	s.enroll.phone = TokenHash(token)
 	s.mu.Unlock()
 	s.enroll.done <- Enrollment{Credential: body.Credential, Identity: id, Token: TokenHash(token), Push: body.Push}
 	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+}
+
+// enrollResult tells the enrolled phone how the PC side went, waiting up
+// to pollWait for it: the phone's part is only half of enrolling.
+func (s *Server) enrollResult(w http.ResponseWriter, r *http.Request) {
+	tok := bearer(r)
+	timeout := time.NewTimer(pollWait)
+	defer timeout.Stop()
+	for {
+		s.mu.Lock()
+		en := s.enroll
+		if en.phone == "" || tok == "" || subtle.ConstantTimeCompare([]byte(TokenHash(tok)), []byte(en.phone)) != 1 {
+			s.mu.Unlock()
+			fail(w, http.StatusUnauthorized, "this phone has not enrolled here")
+			return
+		}
+		s.polled = true
+		if en.finished {
+			en.told = true
+			res := map[string]any{"done": true, "error": en.failure}
+			s.mu.Unlock()
+			writeJSON(w, http.StatusOK, res)
+			return
+		}
+		wake := s.wake
+		s.mu.Unlock()
+		select {
+		case <-wake:
+		case <-timeout.C:
+			writeJSON(w, http.StatusOK, map[string]any{"done": false})
+			return
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 func randomToken() (string, error) {
