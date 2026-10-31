@@ -4,7 +4,8 @@
 // The window is a separate program (broker-dialog) that speaks JSON lines:
 // broker writes Messages to its stdin and reads Replies from its stdout.
 // The window holds no logic beyond showing what it is told, so everything
-// a human approves with is decided here, in broker.
+// a human approves with is decided here, in broker. A request can also
+// show on a Remote (the phone page), alongside the window or alone.
 package approval
 
 import (
@@ -100,13 +101,22 @@ type Reply struct {
 // maxReply bounds one line from the window.
 const maxReply = 64 << 10
 
-// Session is one open request window.
+// Remote is another place a request shows besides the window, such as
+// the phone page. It gets every message the window gets, one JSON line
+// per Write, and its replies count as the window's, except that a remote
+// going away is not a deny: a phone may close its page and come back.
+type Remote interface {
+	io.Writer
+	Replies() <-chan Reply
+}
+
+// Session is one open request, in a window, on remotes, or both.
 type Session struct {
-	req  Request
-	cmd  *exec.Cmd
-	in   io.WriteCloser
-	send sync.Mutex
-	enc  *json.Encoder
+	req     Request
+	cmd     *exec.Cmd
+	in      io.WriteCloser
+	send    sync.Mutex
+	remotes []Remote
 
 	approve chan struct{}
 	values  chan Reply
@@ -119,9 +129,12 @@ type Session struct {
 	promptID int
 }
 
-// Start runs the window program cmd and shows req in it until req's
-// deadline.
-func Start(cmd *exec.Cmd, req Request) (*Session, error) {
+// Start runs the window program cmd and shows req in it, and on remotes,
+// until req's deadline. A nil cmd shows it on the remotes alone.
+func Start(cmd *exec.Cmd, req Request, remotes ...Remote) (*Session, error) {
+	if cmd == nil {
+		return New(nil, nil, req, remotes...)
+	}
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -133,7 +146,7 @@ func Start(cmd *exec.Cmd, req Request) (*Session, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start request window: %w", err)
 	}
-	s, err := New(out, in, req)
+	s, err := New(out, in, req, remotes...)
 	if err != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
@@ -143,22 +156,30 @@ func Start(cmd *exec.Cmd, req Request) (*Session, error) {
 	return s, nil
 }
 
-// New runs a session over a window already connected to r and w.
-func New(r io.Reader, w io.WriteCloser, req Request) (*Session, error) {
+// New runs a session over a window already connected to r and w, and on
+// remotes. With r and w nil there is no window, only the remotes.
+func New(r io.Reader, w io.WriteCloser, req Request, remotes ...Remote) (*Session, error) {
+	if r == nil && len(remotes) == 0 {
+		return nil, errors.New("a request needs a window or a remote to show in")
+	}
 	s := &Session{
 		req:     req,
 		in:      w,
-		enc:     json.NewEncoder(w),
+		remotes: remotes,
 		approve: make(chan struct{}, 1),
 		values:  make(chan Reply, 1),
 		done:    make(chan struct{}),
 		forSecs: req.For,
 	}
-	s.enc.SetEscapeHTML(false)
 	if err := s.write(Message{Type: "request", Request: &req}); err != nil {
 		return nil, fmt.Errorf("request window: %w", err)
 	}
-	go s.read(r)
+	if r != nil {
+		go s.read(r)
+	}
+	for _, rm := range remotes {
+		go s.readRemote(rm)
+	}
 	go func() {
 		t := time.NewTimer(time.Until(req.Deadline))
 		defer t.Stop()
@@ -171,10 +192,25 @@ func New(r io.Reader, w io.WriteCloser, req Request) (*Session, error) {
 	return s, nil
 }
 
+// write sends m to the window and every remote. Only the window's error
+// counts: a remote that cannot take a message catches up when it asks
+// again.
 func (s *Session) write(m Message) error {
+	line, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	line = append(line, '\n')
 	s.send.Lock()
 	defer s.send.Unlock()
-	return s.enc.Encode(m)
+	for _, rm := range s.remotes {
+		_, _ = rm.Write(line)
+	}
+	if s.in == nil {
+		return nil
+	}
+	_, err = s.in.Write(line)
+	return err
 }
 
 // read routes the window's replies until it closes, which counts as a
@@ -187,36 +223,58 @@ func (s *Session) read(r io.Reader) {
 		if json.Unmarshal(sc.Bytes(), &rep) != nil {
 			continue
 		}
-		switch rep.Type {
-		case "approve":
-			select {
-			case s.approve <- struct{}{}:
-			default:
-			}
-		case "deny":
-			s.end(ErrDenied)
+		if !s.handle(rep) {
 			return
-		case "value":
-			// Only an answer to the prompt now showing is queued, so a
-			// stale one can never crowd it out of the one-slot channel.
-			s.mu.Lock()
-			current := rep.ID == s.promptID
-			s.mu.Unlock()
-			if current {
-				select {
-				case s.values <- rep:
-				default:
-				}
-			}
-		case "for":
-			s.pick(rep.For)
 		}
 	}
 	s.end(ErrDenied)
 }
 
-// pick sets the grant duration to secs if it is one of the choices.
-func (s *Session) pick(secs int64) {
+// readRemote routes rm's replies until the request ends.
+func (s *Session) readRemote(rm Remote) {
+	for {
+		select {
+		case rep := <-rm.Replies():
+			if !s.handle(rep) {
+				return
+			}
+		case <-s.done:
+			return
+		}
+	}
+}
+
+// handle acts on one reply, and reports whether the request goes on.
+func (s *Session) handle(rep Reply) bool {
+	switch rep.Type {
+	case "approve":
+		select {
+		case s.approve <- struct{}{}:
+		default:
+		}
+	case "deny":
+		s.end(ErrDenied)
+		return false
+	case "value":
+		// Only an answer to the prompt now showing is queued, so a
+		// stale one can never crowd it out of the one-slot channel.
+		s.mu.Lock()
+		current := rep.ID == s.promptID
+		s.mu.Unlock()
+		if current {
+			select {
+			case s.values <- rep:
+			default:
+			}
+		}
+	case "for":
+		s.Pick(rep.For)
+	}
+	return true
+}
+
+// Pick sets the grant duration to secs if it is one of the choices.
+func (s *Session) Pick(secs int64) {
 	for _, c := range s.req.Choices {
 		if c == secs {
 			s.mu.Lock()
@@ -251,6 +309,9 @@ func (s *Session) For() time.Duration {
 	return time.Duration(s.forSecs) * time.Second
 }
 
+// Approved delivers each press of Approve (at most one waiting).
+func (s *Session) Approved() <-chan struct{} { return s.approve }
+
 // WaitApprove blocks until the human presses Approve, or the request ends.
 func (s *Session) WaitApprove() error {
 	select {
@@ -272,6 +333,9 @@ func (s *Session) Status(text string, isErr, retry bool) {
 func (s *Session) Finish(text string, isErr bool) {
 	_ = s.write(Message{Type: "done", Text: text, Error: isErr})
 	s.end(nil)
+	if s.in == nil {
+		return
+	}
 	if s.cmd == nil {
 		_ = s.in.Close()
 		return
