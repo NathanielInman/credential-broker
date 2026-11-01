@@ -513,8 +513,9 @@ useful line in the file).
 - `ls` and `log` are not logged. Flag and argument errors cobra catches
   before a command runs are not logged; everything after is.
 - import logs the names it stored; `import --dry-run` is not logged.
-- grant logs the private secrets it grants (by name, also with `--all`);
-  revoke logs the names it revoked. backup and restore log every secret
+- grant logs the private secrets it grants (by name, also with `--all`),
+  so a grant of only public secrets logs no names and no `for`; revoke
+  logs the names it revoked, with their tier, and none that had no grant. backup and restore log every secret
   the backup carries (tier usually `mixed`), so `--name` finds the backups
   holding a secret.
 - exec logs once, before the child starts (it may run for hours): `ok`

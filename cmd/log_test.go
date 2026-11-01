@@ -144,6 +144,7 @@ func TestAuditLogGrants(t *testing.T) {
 	grantVault(t)
 	home := os.Getenv("BROKER_HOME")
 	mustRun(t, "grant", "API_TOKEN", "API_USER", "--for", "2h")
+	mustRun(t, "grant", "API_USER")
 	out, _ := mustRun(t, "exec", "API_TOKEN", "--", "sh", "-c", `printf %s "$API_TOKEN"`)
 	if out != "[REDACTED:API_TOKEN]" {
 		t.Fatalf("exec stdout %q", out)
@@ -156,6 +157,7 @@ func TestAuditLogGrants(t *testing.T) {
 	mustRun(t, "grant", "--all", "--for", "10m")
 	mustRun(t, "get", "DB_PASS")
 	mustRun(t, "revoke", "DB_PASS")
+	mustRun(t, "revoke", "DB_PASS")
 	mustRun(t, "revoke", "--all")
 	mustRun(t, "rm", "DB_PASS")
 
@@ -165,13 +167,15 @@ func TestAuditLogGrants(t *testing.T) {
 		"set DB_PASS private ok",
 		"set API_USER public ok",
 		"grant API_TOKEN private ok for=2h",
+		"grant   ok",
 		"exec API_TOKEN private ok cmd=sh",
 		"exec API_TOKEN,API_USER mixed ok cmd=true",
 		"exec DB_PASS,API_TOKEN private no_grant cmd=env",
 		"grant API_TOKEN,DB_PASS private ok for=10m",
 		"get DB_PASS private ok",
-		"revoke DB_PASS  ok",
-		"revoke API_TOKEN  ok",
+		"revoke DB_PASS private ok",
+		"revoke   ok",
+		"revoke API_TOKEN private ok",
 		"rm DB_PASS private ok",
 	}
 	if got := summaries(auditLog(t)); !slices.Equal(got, want) {

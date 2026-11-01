@@ -45,8 +45,14 @@ func newGrantCmd() *cobra.Command {
 			}
 			e.For = shortDuration(ttl)
 			secrets, err := grantable(c, v, names, all)
-			if err != nil || len(secrets) == 0 {
+			if err != nil {
 				return err
+			}
+			if len(secrets) == 0 {
+				// Only public secrets, or none at all: nothing was granted,
+				// so the line says so instead of naming a grant.
+				e.Names, e.For = nil, ""
+				return nil
 			}
 			// Log what is granted: only private secrets, and with --all,
 			// each of them by name.
@@ -200,6 +206,11 @@ func newRevokeCmd() *cobra.Command {
 				e.Names = names
 			}
 
+			// The log names what was revoked, with its tier when the vault
+			// still knows it (revoke works without one).
+			e.Names = nil
+			v, _ := openVault()
+			defer func() { e.Tier = tierOf(v, e.Names) }()
 			out := c.OutOrStdout()
 			for _, name := range names {
 				live, err := kr.Revoke(name)
@@ -207,6 +218,7 @@ func newRevokeCmd() *cobra.Command {
 					return err
 				}
 				if live {
+					e.Names = append(e.Names, name)
 					fmt.Fprintf(out, "revoked %s\n", name)
 				} else if !all {
 					fmt.Fprintf(out, "%s was not granted\n", name)
