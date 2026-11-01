@@ -170,6 +170,11 @@ broker phone rm pixel    # rewraps the vault without that phone's key (one touch
 
 Android's WebAuthn insists on the key's FIDO2 PIN even when the page says it doesn't need one, so approving from Chrome means typing a PIN every time. broker's Android app skips that. It talks to the key itself over USB or NFC (CTAP2 `hmac-secret`, no user verification), so a touch approves, same as on the PC. Its notifications are native: the unlocked phone shows the secret names and the agent's reason, the lock screen only shows a count, Approve and Deny sit right on the notification, and it goes away once you answer on the desktop.
 
+<p align="center">
+  <img src="./artwork/phone-notification.png" alt="broker's notification on an unlocked Pixel: an agent wants GITHUB_TOKEN and DB_PASS for an hour, with its reason, the process chain that asked, a countdown, and Approve and Deny buttons" width="380">
+  <img src="./artwork/phone-request.png" alt="The same request open in the app: the secrets, the duration picker, the process chain, the directory and command, the agent's unverified reason, and buttons to approve with a security key or deny" width="260">
+</p>
+
 It needs Android 8 or newer and a YubiKey 5 the phone can reach, tapped on the back over NFC or plugged into USB-C. It's tested on a Pixel with a YubiKey 5C NFC.
 
 Notifications come through Firebase Cloud Messaging. FCM is free and needs no billing account, only a Firebase project on your Google account:
