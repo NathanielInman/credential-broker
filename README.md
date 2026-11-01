@@ -168,7 +168,9 @@ broker phone rm pixel    # rewraps the vault without that phone's key (one touch
 
 #### The Android app
 
-Android's WebAuthn insists on the key's FIDO2 PIN even when the page says it doesn't need one, so approving from Chrome means typing a PIN every time. broker's Android app (in `android/`) skips that. It talks to the key itself over USB or NFC (CTAP2 `hmac-secret`, no user verification), so a touch approves, same as on the PC. Its notifications are native: the unlocked phone shows the secret names and the agent's reason, the lock screen only shows a count, Approve and Deny sit right on the notification, and it goes away once you answer on the desktop.
+Android's WebAuthn insists on the key's FIDO2 PIN even when the page says it doesn't need one, so approving from Chrome means typing a PIN every time. broker's Android app skips that. It talks to the key itself over USB or NFC (CTAP2 `hmac-secret`, no user verification), so a touch approves, same as on the PC. Its notifications are native: the unlocked phone shows the secret names and the agent's reason, the lock screen only shows a count, Approve and Deny sit right on the notification, and it goes away once you answer on the desktop.
+
+It needs Android 8 or newer and a YubiKey 5 the phone can reach, tapped on the back over NFC or plugged into USB-C. It's tested on a Pixel with a YubiKey 5C NFC.
 
 Notifications come through Firebase Cloud Messaging. FCM is free and needs no billing account, only a Firebase project on your Google account:
 
@@ -179,7 +181,9 @@ Notifications come through Firebase Cloud Messaging. FCM is free and needs no bi
 
 broker copies the key next to its config (0600), so you can delete the download. The APK has no Firebase project built in: the app gets the project's public settings when it enrolls.
 
-Build it with `./gradlew assembleRelease` in `android/` (signing is described in `app/build.gradle.kts`) and install the APK. Then run `broker phone enroll --name phone` and scan the QR code from the app instead of opening the link in Chrome. The app makes its own credential on the key, which takes two touches. A credential made through Chrome gives a different answer without the PIN, so a phone enrolled through the page needs `broker phone rm` and a fresh enrollment.
+Download `broker_*_android.apk` from [Releases](https://github.com/NathanielInman/credential-broker/releases/latest) on the phone and open it. Android asks once to allow installs from your browser. Every release is signed with the same key, so the next APK installs over this one and keeps the enrollment. Then run `broker phone enroll --name phone` and scan the QR code from the app instead of opening the link in Chrome. The app makes its own credential on the key, which takes two touches, then you press Enter and touch the vault's key on the PC like the page flow. A credential made through Chrome gives a different answer without the PIN, so a phone enrolled through the page needs `broker phone rm` and a fresh enrollment.
+
+You can also build it yourself with `./gradlew assembleRelease` in `android/`. That APK is signed with your key (see `app/build.gradle.kts`), so switching between it and the release one means uninstalling and enrolling again.
 
 FCM doesn't encrypt to the phone the way Web Push does, so its messages only say that a request is waiting and how many secrets it wants. The app fetches the names, the command and the reason from the PC over your network.
 
@@ -189,7 +193,7 @@ Every failure an agent can hit has a stable `error` code. The full table is in t
 
 Linux, macOS, or Windows (see [Platforms](#platforms)). The stock `age` CLI is optional but worth having for [recovery](#recovering-without-broker).
 
-Download the archive for your platform from [Releases](https://github.com/NathanielInman/credential-broker/releases/latest) and put `broker` and `broker-dialog` together on your `PATH` (`~/.local/bin` works). The Linux builds need GTK 3 and WebKitGTK 4.1 installed; the macOS build is universal and already signed with the hardened runtime. A browser download on macOS is quarantined and Gatekeeper refuses it, so clear that once:
+Download the archive for your platform from [Releases](https://github.com/NathanielInman/credential-broker/releases/latest) and put `broker` and `broker-dialog` together on your `PATH` (`~/.local/bin` works). The Android app is there too, as an APK (see [The Android app](#the-android-app)). The Linux builds need GTK 3 and WebKitGTK 4.1 installed; the macOS build is universal and already signed with the hardened runtime. A browser download on macOS is quarantined and Gatekeeper refuses it, so clear that once:
 
 ```sh
 xattr -d com.apple.quarantine broker broker-dialog
@@ -464,7 +468,7 @@ It does not protect against:
 
 ## Platforms
 
-v2 runs on Linux, macOS, and Windows 10 (1803 or later, for AF_UNIX sockets) and 11.
+v2 runs on Linux, macOS, and Windows 10 (1803 or later, for AF_UNIX sockets) and 11. The phone app runs on Android 8 or newer; the phone page needs Chrome on Android (see [Approving from your phone](#approving-from-your-phone)).
 
 On Linux, grants are kernel keyring entries. The user keyring is per uid, so a grant made in your terminal is visible to agents in other sessions. It's also per **user namespace**, though: anything running under bubblewrap or flatpak (and agent sandboxes built on them) gets its own empty user keyring.
 
