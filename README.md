@@ -6,7 +6,7 @@ A local secret store for a machine where AI agents do most of the typing. Agents
 
 <p align="center">
   <img src="./artwork/request-window.png" alt="broker's request window: an agent asks for GITHUB_TOKEN and DB_PASS for an hour to run ./deploy.sh, with the process chain that asked, its directory, and its stated reason, waiting for a YubiKey touch" width="420">
-  <img src="./artwork/phone-request.png" alt="The same request in broker's Android app: the secrets, the duration, the process chain, the directory and command, the agent's unverified reason, and buttons to approve with a security key or deny" width="280">
+  <img src="./artwork/phone-request.png" alt="The same request in broker's Android app: the secrets, the duration, the process chain, the directory and command, the agent's unverified reason, and buttons to approve with a security key or deny" width="265">
 </p>
 
 You touch your YubiKey (or Touch ID on a Mac), the command runs, and the grant is forgotten an hour later. On the phone you tap a YubiKey on its back, no PIN, straight from a notification ([Approving from your phone](#approving-from-your-phone)). That's the whole human side. The agent's side is two commands:
