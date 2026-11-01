@@ -27,6 +27,20 @@ type Config struct {
 	Unlock []Unlock `json:"unlock"`
 	// Phone is where the phone page is served, once a phone is enrolled.
 	Phone *PhonePage `json:"phone,omitempty"`
+	// FCM is the Firebase project broker's Android app gets its
+	// notifications through, once broker phone fcm has set one up.
+	FCM *FCMApp `json:"fcm,omitempty"`
+}
+
+// FCMApp is the public half of a Firebase project, from its
+// google-services.json: what the Android app needs to get an FCM token.
+// None of it is secret; the service account key that sends is a file
+// beside the config (paths.FCMKey).
+type FCMApp struct {
+	ProjectID string `json:"project_id"`
+	SenderID  string `json:"sender_id"`
+	AppID     string `json:"app_id"`
+	APIKey    string `json:"api_key"`
 }
 
 // PhonePage is the HTTPS page on the local network where an enrolled
@@ -74,9 +88,13 @@ type PhoneKey struct {
 	// Token is the SHA-256 (hex) of the token the phone's page sends, so
 	// only that phone sees requests.
 	Token string `json:"token"`
-	// Push is the phone's Web Push subscription, if it allowed
-	// notifications.
+	// Push is the phone's Web Push subscription, if it enrolled through
+	// the page and allowed notifications.
 	Push *PushSubscription `json:"push,omitempty"`
+	// App marks a phone that enrolled with broker's Android app, and FCM
+	// is that app's token for notifications, if it got one.
+	App bool   `json:"app,omitempty"`
+	FCM string `json:"fcm,omitempty"`
 }
 
 // PushSubscription is a browser's Web Push subscription: where to send,

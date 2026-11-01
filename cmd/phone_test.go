@@ -170,7 +170,7 @@ func TestPhoneEnrollRequestRm(t *testing.T) {
 	if r := <-pushes; r.Header.Get("Content-Encoding") != "aes128gcm" || !strings.HasPrefix(r.Header.Get("Authorization"), "vapid t=") {
 		t.Fatalf("test push headers %v", r.Header)
 	}
-	if out, _ := mustRun(t, "phone", "ls"); !strings.Contains(out, "pixel (notifications on)") || !strings.Contains(out, origin) {
+	if out, _ := mustRun(t, "phone", "ls"); !strings.Contains(out, "pixel (page, notifications on)") || !strings.Contains(out, origin) {
 		t.Fatalf("phone ls %q", out)
 	}
 	if _, stderr, code := runStdin(t, "", "phone", "enroll", "--name", "pixel"); code != 64 || !strings.Contains(stderr, "a phone named pixel") {

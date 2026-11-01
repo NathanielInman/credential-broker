@@ -78,7 +78,12 @@ func (p Paths) RequestLock() string { return filepath.Join(p.Run, "request.lock"
 // VAPIDKey is the key phone notifications are signed with. It sits beside
 // the config, not in the data directory, so a restore keeps it and the
 // phones' subscriptions stay valid.
-func (p Paths) VAPIDKey() string  { return filepath.Join(p.Config, "vapid.key") }
+func (p Paths) VAPIDKey() string { return filepath.Join(p.Config, "vapid.key") }
+
+// FCMKey is the service account key notifications to the Android app are
+// sent with, beside the config for the same reason as VAPIDKey.
+func (p Paths) FCMKey() string { return filepath.Join(p.Config, "fcm-service-account.json") }
+
 func (p Paths) GrantLock() string { return filepath.Join(p.Run, "grantd.lock") }
 
 // maxSocketPath keeps a unix socket path within sun_path, which is 104

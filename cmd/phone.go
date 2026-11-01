@@ -28,6 +28,7 @@ import (
 	"github.com/NathanielInman/credential-broker/internal/agenterr"
 	"github.com/NathanielInman/credential-broker/internal/audit"
 	"github.com/NathanielInman/credential-broker/internal/config"
+	"github.com/NathanielInman/credential-broker/internal/fcm"
 	"github.com/NathanielInman/credential-broker/internal/paths"
 	"github.com/NathanielInman/credential-broker/internal/phone"
 	"github.com/NathanielInman/credential-broker/internal/vault"
@@ -39,6 +40,10 @@ const enrollTimeout = 10 * time.Minute
 
 // pushTimeout bounds one notification to the push service.
 const pushTimeout = 10 * time.Second
+
+// androidPackage is broker's Android app, whose entry in a
+// google-services.json broker phone fcm reads.
+const androidPackage = "com.nathanielinman.broker"
 
 var phoneNameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$`)
 
@@ -53,13 +58,15 @@ func newPhoneCmd() *cobra.Command {
 		Short: "Approve requests on a phone, with a security key plugged into it",
 		Long: "A phone enrolled here shows requests on broker's phone page (an HTTPS\n" +
 			"page this machine serves on the local network while a request is open)\n" +
-			"and gets a notification for each. Approving takes a touch of a security\n" +
-			"key plugged into the phone, whose WebAuthn PRF output unlocks the vault.",
+			"or in broker's Android app, and gets a notification for each. Approving\n" +
+			"takes a touch of a security key plugged into the phone, whose PRF output\n" +
+			"(hmac-secret) unlocks the vault. The app needs no PIN for the key, and\n" +
+			"its notifications come through Firebase (broker phone fcm).",
 		GroupID: groupHuman,
 		Args:    usageArgs(cobra.NoArgs),
 		RunE:    func(c *cobra.Command, _ []string) error { return c.Help() },
 	}
-	c.AddCommand(newPhoneEnrollCmd(), newPhoneLsCmd(), newPhoneRmCmd())
+	c.AddCommand(newPhoneEnrollCmd(), newPhoneLsCmd(), newPhoneRmCmd(), newPhoneFCMCmd())
 	return c
 }
 
@@ -70,9 +77,10 @@ func newPhoneEnrollCmd() *cobra.Command {
 		Use:   "enroll [--name NAME] [--origin URL --cert FILE --key FILE] [--listen ADDR]",
 		Short: "Enroll a phone and the security key plugged into it",
 		Long: "enroll serves the phone page and prints a link (and a QR code) for the\n" +
-			"phone to open. There the key makes a WebAuthn credential and gives its PRF\n" +
-			"output, and the phone allows notifications. Then the vault is wrapped to\n" +
-			"the key as well, which takes one more unlock here (a touch).\n\n" +
+			"phone to open, or for broker's Android app to scan. There the key makes a\n" +
+			"credential and gives its PRF output, and the phone allows notifications.\n" +
+			"Then the vault is wrapped to the key as well, which takes one more unlock\n" +
+			"here (a touch). The app's notifications need broker phone fcm first.\n\n" +
 			"The first enrollment needs --origin (https://HOST[:PORT], a name the phone\n" +
 			"resolves to this machine) and --cert/--key for it; they are kept for the\n" +
 			"next. --listen defaults to the origin's port on every interface.",
@@ -163,13 +171,13 @@ func enrollPhone(c *cobra.Command, v *vault.Vault, name string, page config.Phon
 	if _, err := rand.Read(salt); err != nil {
 		return err
 	}
-	srv, err := phone.StartEnroll(page, salt, key.Public())
+	srv, err := phone.StartEnroll(page, salt, key.Public(), v.Config().FCM)
 	if err != nil {
 		return err
 	}
 	defer srv.Close()
 
-	fmt.Fprintf(out, "On the phone (on this network), open:\n\n  %s\n\n", srv.EnrollURL())
+	fmt.Fprintf(out, "On the phone (on this network), scan this with broker's app, or open it in Chrome:\n\n  %s\n\n", srv.EnrollURL())
 	if f, ok := out.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
 		printQR(out, srv.EnrollURL())
 	}
@@ -222,6 +230,8 @@ func enrollPhone(c *cobra.Command, v *vault.Vault, name string, page config.Phon
 			Salt:       base64.RawURLEncoding.EncodeToString(salt),
 			Token:      en.Token,
 			Push:       en.Push,
+			App:        en.App,
+			FCM:        en.FCM,
 		},
 	})
 	cfg.Phone = &page
@@ -233,12 +243,23 @@ func enrollPhone(c *cobra.Command, v *vault.Vault, name string, page config.Phon
 		return fmt.Errorf("the vault does not open with the phone's key: %w", err)
 	}
 	fmt.Fprintf(out, "enrolled phone %s\n", name)
-	if en.Push == nil {
+	switch {
+	case en.App && en.FCM == "":
+		fmt.Fprintln(out, "notifications: off (no Firebase project is set up; see broker phone fcm, then enroll again)")
+	case en.App:
+		if err := fcmTo(context.Background(), v.Paths(), en.FCM, fcmMessage("enrolled", 0, time.Minute)); err != nil {
+			fmt.Fprintf(errOut, "broker: test notification failed: %v\n", err)
+		} else {
+			fmt.Fprintln(out, "sent a test notification")
+		}
+	case en.Push == nil:
 		fmt.Fprintln(out, "notifications: off (the phone did not allow them); open the page yourself when an agent asks")
-	} else if err := pushTo(context.Background(), key, page, *en.Push, phoneMessage("Phone enrolled", "Requests will show up here.", time.Minute)); err != nil {
-		fmt.Fprintf(errOut, "broker: test notification failed: %v\n", err)
-	} else {
-		fmt.Fprintln(out, "sent a test notification")
+	default:
+		if err := pushTo(context.Background(), key, page, *en.Push, phoneMessage("Phone enrolled", "Requests will show up here.", time.Minute)); err != nil {
+			fmt.Fprintf(errOut, "broker: test notification failed: %v\n", err)
+		} else {
+			fmt.Fprintln(out, "sent a test notification")
+		}
 	}
 	printUnlocks(out, v)
 	return nil
@@ -346,11 +367,14 @@ func newPhoneLsCmd() *cobra.Command {
 				fmt.Fprintf(out, "page: %s (listening on %s while a request is open)\n", cfg.Phone.Origin, cfg.Phone.Listen)
 			}
 			for _, u := range phones {
-				push := "notifications on"
-				if u.Phone.Push == nil {
+				kind, push := "page", "notifications on"
+				if u.Phone.App {
+					kind = "app"
+				}
+				if u.Phone.Push == nil && u.Phone.FCM == "" {
 					push = "notifications off"
 				}
-				fmt.Fprintf(out, "  %s (%s)\n", u.Phone.Name, push)
+				fmt.Fprintf(out, "  %s (%s, %s)\n", u.Phone.Name, kind, push)
 			}
 			return nil
 		},
@@ -436,6 +460,40 @@ func pushTo(ctx context.Context, key *webpush.Key, page config.PhonePage, sub co
 	return webpush.Send(ctx, http.DefaultClient, webpush.Subscription(sub), m, key, page.Origin)
 }
 
+// fcmMessage is a data message for the app: what happened (kind), how
+// many secrets a request wants, and when it gives up. Like phoneMessage it
+// never names secrets, here because Google can read it; the app fetches
+// the details from the page.
+func fcmMessage(kind string, n int, ttl time.Duration) fcm.Message {
+	return fcm.Message{
+		Data: map[string]string{
+			"type":     kind,
+			"count":    fmt.Sprint(n),
+			"deadline": time.Now().Add(ttl).UTC().Format(time.RFC3339),
+		},
+		TTL:      ttl,
+		Collapse: "request",
+	}
+}
+
+// fcmTo sends m to the app holding token, with the service account key
+// broker phone fcm saved.
+func fcmTo(ctx context.Context, p paths.Paths, token string, m fcm.Message) error {
+	data, err := os.ReadFile(p.FCMKey())
+	if errors.Is(err, fs.ErrNotExist) {
+		return errors.New("no Firebase service account key; run broker phone fcm")
+	} else if err != nil {
+		return err
+	}
+	key, err := fcm.ParseKey(data)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, pushTimeout)
+	defer cancel()
+	return fcm.Send(ctx, http.DefaultClient, key, token, m)
+}
+
 // notifyPhones tells each enrolled phone that a request for n secrets is
 // waiting until deadline. Failures go to stderr; the page works without.
 func notifyPhones(p paths.Paths, cfg *config.Config, n int, deadline time.Time, stderr io.Writer) {
@@ -448,17 +506,88 @@ func notifyPhones(p paths.Paths, cfg *config.Config, n int, deadline time.Time, 
 	if n > 1 {
 		body = fmt.Sprintf("An agent is asking for %d secrets.", n)
 	}
-	m := phoneMessage("broker", body, max(time.Until(deadline), time.Second))
+	ttl := max(time.Until(deadline), time.Second)
+	m := phoneMessage("broker", body, ttl)
 	for _, u := range cfg.Phones() {
-		if u.Phone.Push == nil {
+		var err error
+		switch {
+		case u.Phone.FCM != "":
+			err = fcmTo(context.Background(), p, u.Phone.FCM, fcmMessage("request", n, ttl))
+		case u.Phone.Push != nil:
+			err = pushTo(context.Background(), key, *cfg.Phone, *u.Phone.Push, m)
+		default:
 			continue
 		}
-		err := pushTo(context.Background(), key, *cfg.Phone, *u.Phone.Push, m)
 		switch {
-		case errors.Is(err, webpush.ErrGone):
+		case errors.Is(err, webpush.ErrGone), errors.Is(err, fcm.ErrGone):
 			fmt.Fprintf(stderr, "broker: phone %s no longer takes notifications; ask the human to run broker phone rm %s and enroll it again\n", u.Phone.Name, u.Phone.Name)
 		case err != nil:
 			fmt.Fprintf(stderr, "broker: notifying phone %s: %v\n", u.Phone.Name, err)
 		}
+	}
+}
+
+func newPhoneFCMCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "fcm SERVICE_ACCOUNT_KEY GOOGLE_SERVICES_JSON",
+		Short: "Set up the Firebase project the Android app's notifications come through",
+		Long: "fcm takes two files from a Firebase project's console: a service account\n" +
+			"key (Project settings, Service accounts, Generate new private key) and the\n" +
+			"google-services.json of an Android app named " + androidPackage + ".\n" +
+			"The key is copied beside the config (0600) and sends the notifications;\n" +
+			"the app's public settings go in the config, and the app gets them when it\n" +
+			"enrolls, so phones enrolled before this need enrolling again.\n\n" +
+			"FCM is free and needs no billing account.",
+		Args: usageArgs(cobra.ExactArgs(2)),
+		RunE: func(c *cobra.Command, args []string) (err error) {
+			defer func() { record(c, audit.Entry{Action: audit.PhoneFCM}, err) }()
+			if err := requireTTY(c.InOrStdin(), "broker phone fcm"); err != nil {
+				return err
+			}
+			keyData, err := os.ReadFile(args[0])
+			if err != nil {
+				return err
+			}
+			key, err := fcm.ParseKey(keyData)
+			if err != nil {
+				return agenterr.New(agenterr.Usage, "%s: %s", args[0], err)
+			}
+			appData, err := os.ReadFile(args[1])
+			if err != nil {
+				return err
+			}
+			app, err := fcm.App(appData, androidPackage)
+			if err != nil {
+				return agenterr.New(agenterr.Usage, "%s: %s", args[1], err)
+			}
+			if app.ProjectID != key.ProjectID {
+				return agenterr.New(agenterr.Usage, "the key is for project %s but google-services.json is for %s", key.ProjectID, app.ProjectID)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), pushTimeout)
+			defer cancel()
+			if err := key.Check(ctx, http.DefaultClient); err != nil {
+				return err
+			}
+			v, err := openVault()
+			if err != nil {
+				return err
+			}
+			p := v.Paths()
+			if err := paths.MkdirAll(p.Config); err != nil {
+				return err
+			}
+			if err := paths.WriteFile(p.FCMKey(), keyData); err != nil {
+				return err
+			}
+			cfg := v.Config()
+			cfg.FCM = app
+			if err := cfg.Save(p.ConfigFile()); err != nil {
+				return err
+			}
+			out := c.OutOrStdout()
+			fmt.Fprintf(out, "notifications for the app go through Firebase project %s\n", app.ProjectID)
+			fmt.Fprintf(out, "copied the service account key to %s; you can delete %s\n", p.FCMKey(), args[0])
+			return nil
+		},
 	}
 }

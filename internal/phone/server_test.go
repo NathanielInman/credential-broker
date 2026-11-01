@@ -71,6 +71,8 @@ type client struct {
 	http   *http.Client
 	origin string
 	token  string
+	// app leaves Origin out, as broker's Android app does.
+	app bool
 }
 
 func (c *client) do(method, path string, body any) (int, map[string]any) {
@@ -84,7 +86,9 @@ func (c *client) do(method, path string, body any) (int, map[string]any) {
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
-	req.Header.Set("Origin", c.origin)
+	if !c.app {
+		req.Header.Set("Origin", c.origin)
+	}
 	res, err := c.http.Do(req)
 	if err != nil {
 		c.t.Fatal(err)
@@ -183,7 +187,7 @@ func TestRequest(t *testing.T) {
 
 func TestEnroll(t *testing.T) {
 	pg, hc := page(t)
-	s, err := StartEnroll(pg, prf(3), "vapid-public")
+	s, err := StartEnroll(pg, prf(3), "vapid-public", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,6 +241,39 @@ func TestEnroll(t *testing.T) {
 	}()
 	if code, res := c.do("GET", "/api/enroll/result", nil); code != 200 || res["done"] != true || res["error"] != "could not unlock: no YubiKey" {
 		t.Fatalf("result: %d %v", code, res)
+	}
+}
+
+// TestEnrollApp enrolls as broker's Android app: it gets the Firebase
+// project, sends no Origin, and its FCM token comes back with the
+// enrollment, never a push subscription.
+func TestEnrollApp(t *testing.T) {
+	pg, hc := page(t)
+	app := &config.FCMApp{ProjectID: "broker-1", SenderID: "123", AppID: "1:123:android:abc", APIKey: "AIza-test"}
+	s, err := StartEnroll(pg, prf(3), "vapid-public", app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	_, token, _ := strings.Cut(s.EnrollURL(), "/enroll#")
+	c := &client{t: t, http: hc, origin: pg.Origin, token: token, app: true}
+	code, opts := c.do("GET", "/api/enroll", nil)
+	f, _ := opts["fcm"].(map[string]any)
+	if code != 200 || f["project_id"] != "broker-1" || f["sender_id"] != "123" || f["app_id"] != app.AppID || f["api_key"] != "AIza-test" {
+		t.Fatalf("options: %d %v", code, opts)
+	}
+	code, out := c.do("POST", "/api/enroll", map[string]any{
+		"credential": "Y3JlZA",
+		"prf":        b64.EncodeToString(prf(4)),
+		"app":        true,
+		"fcm":        "fcm-token",
+		"push":       map[string]string{"endpoint": "https://push.example/x", "p256dh": "p", "auth": "a"},
+	})
+	if code != 200 || out["token"] == "" {
+		t.Fatalf("enroll: %d %v", code, out)
+	}
+	if en := <-s.Enrolled(); !en.App || en.FCM != "fcm-token" || en.Push != nil {
+		t.Fatalf("enrollment %+v", en)
 	}
 }
 

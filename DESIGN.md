@@ -58,6 +58,7 @@ so agents can discover what it is for.
 ```
 $XDG_CONFIG_HOME/broker/config.json     # unlock identity paths/stubs, recipients, defaults
 $XDG_CONFIG_HOME/broker/vapid.key       # signs phone notifications (Web Push VAPID, 0600)
+$XDG_CONFIG_HOME/broker/fcm-service-account.json  # sends the Android app's notifications (FCM, 0600)
 $XDG_DATA_HOME/broker/public.key        # age X25519 identity for the public tier (0600)
 $XDG_DATA_HOME/broker/private.key.age   # age X25519 identity for the private tier,
                                         #   encrypted to the unlock recipients (hardware)
@@ -433,7 +434,7 @@ it.
 
 ## Audit log
 
-One JSON object per line: `ts`, `action` (`init|set|rm|grant|revoke|get|exec|import|backup|restore|request|phone-enroll|phone-rm`),
+One JSON object per line: `ts`, `action` (`init|set|rm|grant|revoke|get|exec|import|backup|restore|request|phone-enroll|phone-rm|phone-fcm`),
 `names`, `tier`, `for` (a grant's duration), `ok`, `error`, `cwd`, `cmd`
 (exec's child argv[0] only), `pid`, and `ancestry`: the process chain from
 `/proc/<pid>/stat` + `comm` up to pid 1, e.g.

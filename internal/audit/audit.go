@@ -31,9 +31,11 @@ const (
 	Backup  Action = "backup"
 	Restore Action = "restore"
 	Request Action = "request"
-	// PhoneEnroll and PhoneRm add and remove a phone's unlock.
+	// PhoneEnroll and PhoneRm add and remove a phone's unlock, and PhoneFCM
+	// sets the Firebase project the app's notifications go through.
 	PhoneEnroll Action = "phone-enroll"
 	PhoneRm     Action = "phone-rm"
+	PhoneFCM    Action = "phone-fcm"
 )
 
 // Entry is one line of the log.

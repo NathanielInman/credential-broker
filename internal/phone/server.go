@@ -11,6 +11,10 @@
 // sends is checked against the recipient enrolled for that phone before
 // it goes anywhere.
 //
+// broker's Android app speaks the same API as the page. It talks to the
+// key itself (CTAP2 hmac-secret over USB or NFC), which needs no PIN where
+// Android's own WebAuthn does, and gets its notifications through FCM.
+//
 // The page only listens while a request or an enrollment is open.
 package phone
 
@@ -78,6 +82,10 @@ type Enrollment struct {
 	// Push is the phone's push subscription, or nil if it said no to
 	// notifications.
 	Push *config.PushSubscription
+	// App is set when broker's Android app enrolled, not the page, and
+	// FCM is its token for notifications ("" without one).
+	App bool
+	FCM string
 }
 
 // Server is the phone page while it listens.
@@ -108,6 +116,7 @@ type enrollment struct {
 	token  string
 	salt   []byte
 	vapid  string
+	fcm    *config.FCMApp
 	userID []byte
 	done   chan Enrollment
 	used   bool
@@ -153,9 +162,10 @@ func StartRequest(page config.PhonePage, unlocks []config.Unlock) (*Server, erro
 }
 
 // StartEnroll opens the page for enrolling one phone, with the key's PRF
-// asked on salt and pushes subscribed to vapid (a VAPID public key). The
-// phone opens URL.
-func StartEnroll(page config.PhonePage, salt []byte, vapid string) (*Server, error) {
+// asked on salt and pushes subscribed to vapid (a VAPID public key), or,
+// for the app, through fcm's project when it is not nil. The phone opens
+// EnrollURL (the app scans it).
+func StartEnroll(page config.PhonePage, salt []byte, vapid string, fcm *config.FCMApp) (*Server, error) {
 	token, err := randomToken()
 	if err != nil {
 		return nil, err
@@ -164,7 +174,7 @@ func StartEnroll(page config.PhonePage, salt []byte, vapid string) (*Server, err
 	if _, err := rand.Read(userID); err != nil {
 		return nil, err
 	}
-	s := &Server{enroll: &enrollment{token: token, salt: salt, vapid: vapid, userID: userID, done: make(chan Enrollment, 1)}}
+	s := &Server{enroll: &enrollment{token: token, salt: salt, vapid: vapid, fcm: fcm, userID: userID, done: make(chan Enrollment, 1)}}
 	return s, s.start(page)
 }
 
@@ -359,9 +369,13 @@ func (s *Server) phone(r *http.Request) (config.Unlock, bool) {
 	return config.Unlock{}, false
 }
 
-// sameOrigin checks a write came from the page itself.
+// sameOrigin checks a write came from the page itself, or from the app.
+// Browsers send Origin with every POST from a page, so a write without one
+// is not from some other site in the phone's browser; and every write also
+// needs a token that only the page or the app holds.
 func (s *Server) sameOrigin(r *http.Request) bool {
-	return r.Header.Get("Origin") == s.origin
+	o := r.Header.Get("Origin")
+	return o == "" || o == s.origin
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -507,12 +521,13 @@ func (s *Server) enrollOptions(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"rpId":      s.rpID,
 		"userId":    b64.EncodeToString(s.enroll.userID),
 		"challenge": b64.EncodeToString(challenge),
 		"salt":      b64.EncodeToString(s.enroll.salt),
 		"vapid":     s.enroll.vapid,
+		"fcm":       s.enroll.fcm,
 	})
 }
 
@@ -534,6 +549,8 @@ func (s *Server) enrollFinish(w http.ResponseWriter, r *http.Request) {
 		Credential string                   `json:"credential"`
 		PRF        string                   `json:"prf"`
 		Push       *config.PushSubscription `json:"push"`
+		App        bool                     `json:"app"`
+		FCM        string                   `json:"fcm"`
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -553,8 +570,11 @@ func (s *Server) enrollFinish(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if p := body.Push; p != nil && (p.Endpoint == "" || p.P256dh == "" || p.Auth == "") {
+	if p := body.Push; p != nil && (p.Endpoint == "" || p.P256dh == "" || p.Auth == "") || body.App {
 		body.Push = nil
+	}
+	if !body.App || len(body.FCM) > 4096 {
+		body.FCM = ""
 	}
 	token, err := randomToken()
 	if err != nil {
@@ -570,7 +590,7 @@ func (s *Server) enrollFinish(w http.ResponseWriter, r *http.Request) {
 	s.enroll.used = true
 	s.enroll.phone = TokenHash(token)
 	s.mu.Unlock()
-	s.enroll.done <- Enrollment{Credential: body.Credential, Identity: id, Token: TokenHash(token), Push: body.Push}
+	s.enroll.done <- Enrollment{Credential: body.Credential, Identity: id, Token: TokenHash(token), Push: body.Push, App: body.App, FCM: body.FCM}
 	writeJSON(w, http.StatusOK, map[string]string{"token": token})
 }
 
