@@ -57,6 +57,9 @@ func TestSetLsRm(t *testing.T) {
 	if got := ls(t); got == nil || len(got) != 0 {
 		t.Fatalf("empty vault ls = %#v, want []", got)
 	}
+	if out, stderr := mustRun(t, "ls"); out != "" || !strings.Contains(stderr, "broker set NAME") {
+		t.Fatalf("empty vault ls: stdout %q stderr %q", out, stderr)
+	}
 
 	if _, stderr, code := runStdin(t, "token-value\n", "set", "API_TOKEN", "--stdin", "--desc", "deploy token"); code != 0 {
 		t.Fatalf("set exit %d: %s", code, stderr)

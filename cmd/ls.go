@@ -59,6 +59,8 @@ func newLsCmd() *cobra.Command {
 				return enc.Encode(entries)
 			}
 			if len(entries) == 0 {
+				// On stderr, so stdout stays empty for scripts.
+				fmt.Fprintln(c.ErrOrStderr(), "no secrets yet; add one with broker set NAME, or broker import FILE")
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
