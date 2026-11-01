@@ -282,6 +282,19 @@ func TestRestoreWrongPassphrase(t *testing.T) {
 	assertNoStaging(t, p)
 }
 
+func TestRestoreEmptyPassphrase(t *testing.T) {
+	v, _ := seeded(t)
+	data := backup(t, v, BackupOptions{})
+	p := testPaths(t)
+	_, err := Restore(p, bytes.NewReader(data), func() (string, error) { return " \t", nil }, RestoreOptions{UI: testUI})
+	if agenterr.From(err).Code != agenterr.Usage {
+		t.Fatalf("got %v, want a usage error", err)
+	}
+	if Existing(p) != "" {
+		t.Error("failed restore left a vault")
+	}
+}
+
 func TestRestoreForgivesSpacing(t *testing.T) {
 	v, _ := seeded(t)
 	data := backup(t, v, BackupOptions{})

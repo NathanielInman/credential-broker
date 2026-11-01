@@ -247,6 +247,9 @@ func Restore(p paths.Paths, r io.Reader, passphrase func() (string, error), opts
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(pass) == "" {
+		return nil, agenterr.New(agenterr.Usage, "the passphrase is empty; type the backup's passphrase")
+	}
 	id, err := age.NewScryptIdentity(pass)
 	if err != nil {
 		return nil, err
