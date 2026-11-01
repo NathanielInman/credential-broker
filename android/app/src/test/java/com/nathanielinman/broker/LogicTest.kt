@@ -47,6 +47,20 @@ class LogicTest {
     }
 
     @Test
+    fun aNewRequestDropsTheLastOutcome() {
+        fun req(secs: Long) = Request(
+            emptyList(), secs, listOf(secs), java.time.Instant.EPOCH,
+            emptyList(), "", "", emptyList(), "",
+        )
+        val granted = Screen.Asking(req(300), phase = Phase.Done, outcome = Outcome("Granted for 5m", false))
+        assertEquals(Screen.Asking(req(3600)), granted.showing(req(3600)))
+
+        val picking = Screen.Asking(req(3600), phase = Phase.Key, picked = 900)
+        assertEquals(picking, picking.showing(req(3600)))
+        assertEquals(Screen.Asking(req(3600)), Screen.Idle().showing(req(3600)))
+    }
+
+    @Test
     fun quotesLikeAShell() {
         assertEquals("gh pr list 'a b' 'it'\\''s'", quote(listOf("gh", "pr", "list", "a b", "it's")))
     }

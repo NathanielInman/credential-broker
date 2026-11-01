@@ -51,6 +51,14 @@ sealed interface Screen {
     ) : Screen
 }
 
+/**
+ * The screen once [r] arrives. A poll from the start sees the open
+ * request again, which keeps what the human has done with it so far; a
+ * request after one that is over starts fresh, not with its outcome.
+ */
+fun Screen.showing(r: Request): Screen =
+    if (this is Screen.Asking && phase != Phase.Done) copy(request = r) else Screen.Asking(r)
+
 /** The phone's key as the PC knows it, from each poll. */
 private data class KeyInfo(val rpId: String, val credential: ByteArray, val salt: ByteArray)
 
@@ -169,7 +177,7 @@ class BrokerModel(app: Application) : AndroidViewModel(app) {
         when (m.optString("type")) {
             "request" -> {
                 val r = Request.parse(m.optJSONObject("request") ?: return)
-                _screen.update { s -> if (s is Screen.Asking) s.copy(request = r) else Screen.Asking(r) }
+                _screen.update { s -> s.showing(r) }
             }
             // The window's own steps (touch the key on the PC) mean nothing
             // here; only what follows this phone's answer is shown.
