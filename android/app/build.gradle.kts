@@ -13,6 +13,15 @@ plugins {
 val keystore = file(System.getenv("BROKER_ANDROID_KEYSTORE") ?: "${System.getProperty("user.home")}/.android/broker-release.jks")
 val keystorePassword = System.getenv("BROKER_ANDROID_KEYSTORE_PASSWORD")
 
+// Releases pass broker's version (-PbrokerVersion=2.1.0), which also
+// gives the version code Android compares on upgrade (2.1.0 is 20100).
+// Builds without one are 0.0.0, which installs over nothing newer.
+val brokerVersion = (findProperty("brokerVersion") as String?) ?: "0.0.0"
+val brokerVersionCode = brokerVersion.split(".").let { v ->
+    require(v.size == 3 && v.all { it.toIntOrNull() in 0..99 }) { "brokerVersion $brokerVersion is not MAJOR.MINOR.PATCH" }
+    v[0].toInt() * 10000 + v[1].toInt() * 100 + v[2].toInt()
+}
+
 android {
     namespace = "com.nathanielinman.broker"
     compileSdk = 36
@@ -21,8 +30,8 @@ android {
         applicationId = "com.nathanielinman.broker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = maxOf(brokerVersionCode, 1)
+        versionName = brokerVersion
     }
 
     signingConfigs {

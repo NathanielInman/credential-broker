@@ -451,6 +451,12 @@ and talks to the key itself.
 - The app keeps the origin, its phone token, and the Firebase settings in
   private preferences, excluded from backup and device transfer: a
   restored copy would hold a token for a phone that never enrolled.
+- Release: `release.yml` builds the APK with the tag's version
+  (`-PbrokerVersion`, version code MAJOR*10000 + MINOR*100 + PATCH) and
+  signs it with one keystore kept in repository secrets, since Android
+  only upgrades an app signed by the key it was installed with. Anyone
+  holding that keystore can ship an update the phone accepts; the
+  enrollment it would inherit still needs the YubiKey for every approval.
 
 ## exec behaviour
 
