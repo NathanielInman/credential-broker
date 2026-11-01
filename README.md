@@ -2,13 +2,14 @@
 
 # Credential Broker
 
-A local secret store for a machine where AI agents do most of the typing. Agents run commands **with** your secrets and never see them. When one needs a secret, this pops up on your desktop:
+A local secret store for a machine where AI agents do most of the typing. Agents run commands **with** your secrets and never see them. When one needs a secret, this pops up on your desktop, and on your phone if you're on the couch:
 
 <p align="center">
-  <img src="./artwork/request-window.png" alt="broker's request window: an agent asks for GITHUB_TOKEN and DB_PASS for an hour to run ./deploy.sh, with the process chain that asked, its directory, and its stated reason, waiting for a YubiKey touch" width="460">
+  <img src="./artwork/request-window.png" alt="broker's request window: an agent asks for GITHUB_TOKEN and DB_PASS for an hour to run ./deploy.sh, with the process chain that asked, its directory, and its stated reason, waiting for a YubiKey touch" width="420">
+  <img src="./artwork/phone-request.png" alt="The same request in broker's Android app: the secrets, the duration, the process chain, the directory and command, the agent's unverified reason, and buttons to approve with a security key or deny" width="280">
 </p>
 
-You touch your YubiKey (or Touch ID on a Mac), the command runs, and the grant is forgotten an hour later. That's the whole human side. The agent's side is two commands:
+You touch your YubiKey (or Touch ID on a Mac), the command runs, and the grant is forgotten an hour later. On the phone you tap a YubiKey on its back, no PIN, straight from a notification ([Approving from your phone](#approving-from-your-phone)). That's the whole human side. The agent's side is two commands:
 
 ```sh
 broker ls --json        # what secrets exist (names and descriptions, never values)
@@ -171,8 +172,7 @@ broker phone rm pixel    # rewraps the vault without that phone's key (one touch
 Android's WebAuthn insists on the key's FIDO2 PIN even when the page says it doesn't need one, so approving from Chrome means typing a PIN every time. broker's Android app skips that. It talks to the key itself over USB or NFC (CTAP2 `hmac-secret`, no user verification), so a touch approves, same as on the PC. Its notifications are native: the unlocked phone shows the secret names and the agent's reason, the lock screen only shows a count, Approve and Deny sit right on the notification, and it goes away once you answer on the desktop.
 
 <p align="center">
-  <img src="./artwork/phone-notification.png" alt="broker's notification on an unlocked Pixel: an agent wants GITHUB_TOKEN and DB_PASS for an hour, with its reason, the process chain that asked, a countdown, and Approve and Deny buttons" width="380">
-  <img src="./artwork/phone-request.png" alt="The same request open in the app: the secrets, the duration picker, the process chain, the directory and command, the agent's unverified reason, and buttons to approve with a security key or deny" width="260">
+  <img src="./artwork/phone-notification.png" alt="broker's notification on an unlocked Pixel: an agent wants GITHUB_TOKEN and DB_PASS for an hour, with its reason, the process chain that asked, a countdown, and Approve and Deny buttons" width="420">
 </p>
 
 It needs Android 8 or newer and a YubiKey 5 the phone can reach, tapped on the back over NFC or plugged into USB-C. It's tested on a Pixel with a YubiKey 5C NFC.
