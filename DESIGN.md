@@ -138,6 +138,14 @@ not per login session, so agents in other session keyrings see the grant
 (verified: `TestCrossProcess`, `TestGrantVisibleToOtherSession`, and a manual
 check with `keyctl session -` and `setsid` against the real user keyring).
 
+One user keyring serves every vault of the uid, so a vault under
+`BROKER_HOME` names its keys `broker:<namespace>:secret:<NAME>` (and
+`...:expiry:...`), the namespace being the first 12 hex digits of the
+SHA-256 of its data directory. Its grants, `revoke --all`, and the revoke
+after `restore --force` stay inside it, and the default vault keeps the
+plain names (`TestNamespaces`). The grant agent needs no namespace: its
+socket is in the vault's own runtime directory.
+
 User keyrings are per user namespace, though. A process inside another user
 namespace (bubblewrap, flatpak, and agent sandboxes built on them; bwrap
 always unshares the user namespace when unprivileged) has its own empty user

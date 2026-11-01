@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/NathanielInman/credential-broker/internal/keyring/keyringtest"
+	"github.com/NathanielInman/credential-broker/internal/paths"
 )
 
 // testStore is an isolated kernel keyring with a fresh grant agent beside
@@ -133,5 +134,23 @@ func TestSandboxed(t *testing.T) {
 	keyringtest.Require(t)
 	if !sandboxed() {
 		t.Fatal("tests run in their own user namespace but sandboxed() is false")
+	}
+}
+
+func TestNamespace(t *testing.T) {
+	t.Setenv("BROKER_HOME", "")
+	p, err := paths.Resolve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ns := namespace(p); ns != "" {
+		t.Fatalf("default vault namespace %q, want none", ns)
+	}
+	t.Setenv("BROKER_HOME", "/tmp/broker-a")
+	a, _ := paths.Resolve()
+	t.Setenv("BROKER_HOME", "/tmp/broker-b")
+	b, _ := paths.Resolve()
+	if namespace(a) == "" || namespace(a) == namespace(b) {
+		t.Fatalf("BROKER_HOME namespaces %q and %q, want two different ones", namespace(a), namespace(b))
 	}
 }

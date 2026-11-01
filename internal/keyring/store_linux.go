@@ -1,6 +1,8 @@
 package keyring
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -35,7 +37,7 @@ func User() (*Keyring, error) {
 	if sandboxed() {
 		k.agent.Start = nil
 	}
-	kern, err := openKernel()
+	kern, err := openKernel(namespace(p))
 	if err != nil {
 		if k.agent.Start != nil {
 			return nil, err
@@ -44,6 +46,20 @@ func User() (*Keyring, error) {
 	}
 	k.kernel = kern
 	return k, nil
+}
+
+// namespace names a vault's grants in the kernel keyring, which every
+// vault of the uid shares: nothing for the default vault, so its grant
+// names never change, and a hash of the data directory for one under
+// BROKER_HOME (a test vault, say), so it never sees or revokes the
+// default vault's grants. The grant agent needs none: its socket is in
+// the vault's own runtime directory.
+func namespace(p paths.Paths) string {
+	if os.Getenv("BROKER_HOME") == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(p.Data))
+	return hex.EncodeToString(sum[:6])
 }
 
 // sandboxed reports whether this process runs in a user namespace other

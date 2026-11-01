@@ -7,7 +7,8 @@
 // value, and user key "broker:expiry:<NAME>" holds the expiry as Unix
 // seconds, because the kernel does not report a key's timeout through
 // keyctl. The kernel drops
-// both at expiry; there is no daemon.
+// both at expiry; there is no daemon. A vault under BROKER_HOME puts a
+// namespace after "broker:" so it never touches the default vault's keys.
 //
 // The user keyring is per uid (and per user namespace), not per login
 // session, so a grant made in the human's terminal is visible to agents

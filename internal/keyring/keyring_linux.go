@@ -13,8 +13,6 @@ import (
 )
 
 const (
-	secretPrefix = "broker:secret:"
-	expiryPrefix = "broker:expiry:"
 	// big_key holds up to 1 MiB (vault.MaxValue fits) and moves large
 	// payloads out of the key quota into encrypted shmem; a user key caps
 	// at 32 KiB and counts every byte against kernel.keys.maxbytes.
@@ -31,19 +29,29 @@ const (
 	permission = posAll | usrView | usrRead | usrSearch
 )
 
-// kernel is the calling uid's kernel user keyring.
+// kernel is the calling uid's kernel user keyring, as one vault sees it.
 type kernel struct {
 	ring int
+	// secret and expiry prefix a grant's two key descriptions:
+	// "broker:secret:NAME" for the default vault, and
+	// "broker:<namespace>:secret:NAME" for any other, since the user
+	// keyring is one per uid however many vaults it serves.
+	secret, expiry string
 }
 
 // openKernel returns the user keyring, creating it if the kernel has not
-// yet. Every call addresses it as KEY_SPEC_USER_KEYRING, which the caller
-// always possesses whatever its session keyring is.
-func openKernel() (*kernel, error) {
+// yet, for the vault named by namespace ("" for the default one). Every
+// call addresses it as KEY_SPEC_USER_KEYRING, which the caller always
+// possesses whatever its session keyring is.
+func openKernel(namespace string) (*kernel, error) {
 	if _, err := unix.KeyctlGetKeyringID(unix.KEY_SPEC_USER_KEYRING, true); err != nil {
 		return nil, fmt.Errorf("kernel user keyring: %w", err)
 	}
-	return &kernel{ring: unix.KEY_SPEC_USER_KEYRING}, nil
+	k := &kernel{ring: unix.KEY_SPEC_USER_KEYRING, secret: "broker:secret:", expiry: "broker:expiry:"}
+	if namespace != "" {
+		k.secret, k.expiry = "broker:"+namespace+":secret:", "broker:"+namespace+":expiry:"
+	}
+	return k, nil
 }
 
 // Add grants name for ttl (rounded up to whole seconds) and returns when
@@ -61,10 +69,10 @@ func (k *kernel) Add(name string, value []byte, ttl time.Duration) (time.Time, e
 	// The kernel sets expiry to its current second plus the timeout.
 	expires := time.Unix(time.Now().Unix()+secs, 0)
 	stamp := []byte(strconv.FormatInt(expires.Unix(), 10))
-	if err := k.add(expiryType, expiryPrefix+name, stamp, secs); err != nil {
+	if err := k.add(expiryType, k.expiry+name, stamp, secs); err != nil {
 		return time.Time{}, fmt.Errorf("grant %s: %w", name, err)
 	}
-	if err := k.add(secretType, secretPrefix+name, value, secs); err != nil {
+	if err := k.add(secretType, k.secret+name, value, secs); err != nil {
 		return time.Time{}, fmt.Errorf("grant %s: %w", name, err)
 	}
 	return expires, nil
@@ -100,7 +108,7 @@ func keyErr(err error) error {
 
 // Read returns name's granted value, ErrNotGranted, or ErrExpired.
 func (k *kernel) Read(name string) ([]byte, error) {
-	id, err := k.search(secretType, secretPrefix+name)
+	id, err := k.search(secretType, k.secret+name)
 	if err != nil {
 		return nil, err
 	}
@@ -109,11 +117,11 @@ func (k *kernel) Read(name string) ([]byte, error) {
 
 // Lookup returns name's live grant, ErrNotGranted, or ErrExpired.
 func (k *kernel) Lookup(name string) (Grant, error) {
-	if _, err := k.search(secretType, secretPrefix+name); err != nil {
+	if _, err := k.search(secretType, k.secret+name); err != nil {
 		return Grant{}, err
 	}
 	g := Grant{Name: name}
-	if id, err := k.search(expiryType, expiryPrefix+name); err == nil {
+	if id, err := k.search(expiryType, k.expiry+name); err == nil {
 		if stamp, err := readKey(id); err == nil {
 			if sec, err := strconv.ParseInt(string(stamp), 10, 64); err == nil {
 				g.Expires = time.Unix(sec, 0)
@@ -166,7 +174,7 @@ func (k *kernel) List() ([]Grant, error) {
 	}
 	var out []Grant
 	for _, l := range links {
-		name, ok := strings.CutPrefix(l.desc, secretPrefix)
+		name, ok := strings.CutPrefix(l.desc, k.secret)
 		if !ok || l.typ != secretType {
 			continue
 		}
@@ -196,8 +204,8 @@ func (k *kernel) Revoke(name string) (bool, error) {
 		return false, err
 	}
 	for _, l := range links {
-		if (l.typ == secretType && l.desc == secretPrefix+name) ||
-			(l.typ == expiryType && l.desc == expiryPrefix+name) {
+		if (l.typ == secretType && l.desc == k.secret+name) ||
+			(l.typ == expiryType && l.desc == k.expiry+name) {
 			_, err := unix.KeyctlInt(unix.KEYCTL_UNLINK, l.id, k.ring, 0, 0)
 			if err != nil && !errors.Is(err, unix.ENOENT) {
 				return live, fmt.Errorf("revoke %s: %w", name, err)

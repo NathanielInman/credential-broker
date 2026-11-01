@@ -34,7 +34,7 @@ func runHelper(args []string) int {
 		return 1
 	}
 	fmt.Println(session)
-	k, err := openKernel()
+	k, err := openKernel(testNamespace)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -88,10 +88,14 @@ func helper(t *testing.T, args ...string) (session int, value string) {
 	return session, rest
 }
 
+// testNamespace keeps the tests' grants apart from the real vault's in
+// the same user keyring.
+const testNamespace = "keyringtest"
+
 func testKeyring(t *testing.T) *kernel {
 	t.Helper()
 	keyringtest.Require(t)
-	k, err := openKernel()
+	k, err := openKernel(testNamespace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +216,7 @@ func TestPermissions(t *testing.T) {
 	if _, err := k.Add("PERM", []byte("value"), time.Minute); err != nil {
 		t.Fatal(err)
 	}
-	for _, typDesc := range [][2]string{{secretType, secretPrefix + "PERM"}, {expiryType, expiryPrefix + "PERM"}} {
+	for _, typDesc := range [][2]string{{secretType, k.secret + "PERM"}, {expiryType, k.expiry + "PERM"}} {
 		id, err := unix.KeyctlSearch(k.ring, typDesc[0], typDesc[1], 0)
 		if err != nil {
 			t.Fatal(err)
@@ -257,7 +261,7 @@ func TestCrossProcess(t *testing.T) {
 	// By serial: the helper's new session keyring does not link the user
 	// keyring, so it does not possess the key and relies on the user
 	// read permission.
-	id, err := unix.KeyctlSearch(k.ring, secretType, secretPrefix+"FROM_PARENT", 0)
+	id, err := unix.KeyctlSearch(k.ring, secretType, k.secret+"FROM_PARENT", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,5 +272,37 @@ func TestCrossProcess(t *testing.T) {
 	helper(t, "add", "FROM_CHILD", "child-value")
 	if v, err := k.Read("FROM_CHILD"); err != nil || string(v) != "child-value" {
 		t.Fatalf("Read child grant = %q, %v", v, err)
+	}
+}
+
+// TestNamespaces is what keeps a vault under BROKER_HOME from reading or
+// revoking the default vault's grants: one user keyring, separate names.
+func TestNamespaces(t *testing.T) {
+	k := testKeyring(t)
+	other, err := openKernel(testNamespace + "-other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = other.Revoke("SHARED") })
+	if _, err := k.Add("SHARED", []byte("mine"), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := other.Read("SHARED"); !errors.Is(err, ErrNotGranted) {
+		t.Fatalf("other namespace read = %v, want ErrNotGranted", err)
+	}
+	if live, err := other.Revoke("SHARED"); err != nil || live {
+		t.Fatalf("other namespace revoke = %v, %v", live, err)
+	}
+	gs, err := other.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range gs {
+		if g.Name == "SHARED" {
+			t.Fatal("other namespace lists SHARED")
+		}
+	}
+	if v, err := k.Read("SHARED"); err != nil || string(v) != "mine" {
+		t.Fatalf("Read after the other namespace's revoke = %q, %v", v, err)
 	}
 }
