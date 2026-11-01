@@ -247,7 +247,7 @@ func enrollPhone(c *cobra.Command, v *vault.Vault, name string, page config.Phon
 	case en.App && en.FCM == "":
 		fmt.Fprintln(out, "notifications: off (no Firebase project is set up; see broker phone fcm, then enroll again)")
 	case en.App:
-		if err := fcmTo(context.Background(), v.Paths(), en.FCM, fcmMessage("enrolled", 0, time.Minute)); err != nil {
+		if err := fcmTo(context.Background(), v.Paths(), en.FCM, fcmMessage("enrolled", requestID(), 0, time.Minute)); err != nil {
 			fmt.Fprintf(errOut, "broker: test notification failed: %v\n", err)
 		} else {
 			fmt.Fprintln(out, "sent a test notification")
@@ -460,19 +460,45 @@ func pushTo(ctx context.Context, key *webpush.Key, page config.PhonePage, sub co
 	return webpush.Send(ctx, http.DefaultClient, webpush.Subscription(sub), m, key, page.Origin)
 }
 
-// fcmMessage is a data message for the app: what happened (kind), how
-// many secrets a request wants, and when it gives up. Like phoneMessage it
-// never names secrets, here because Google can read it; the app fetches
-// the details from the page.
-func fcmMessage(kind string, n int, ttl time.Duration) fcm.Message {
+// fcmMessage is a data message for the app: what happened (kind), to
+// which request (id), how many secrets it wants, and when it gives up.
+// Like phoneMessage it never names secrets, here because Google can read
+// it; the app fetches the details from the page.
+func fcmMessage(kind, id string, n int, ttl time.Duration) fcm.Message {
 	return fcm.Message{
 		Data: map[string]string{
 			"type":     kind,
+			"id":       id,
 			"count":    fmt.Sprint(n),
 			"deadline": time.Now().Add(ttl).UTC().Format(time.RFC3339),
 		},
 		TTL:      ttl,
 		Collapse: "request",
+	}
+}
+
+// requestID names one request in the app's messages, so a "done" that
+// FCM delivers before its "request" still clears it.
+func requestID() string {
+	b := make([]byte, 9)
+	_, _ = rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// clearTimeout bounds telling the app a request is over, which the
+// approver waits for before it exits.
+const clearTimeout = 3 * time.Second
+
+// clearPhones tells each app phone that request id is over, so its
+// notification goes away. Failures are dropped: the notification still
+// times out at the deadline.
+func clearPhones(p paths.Paths, cfg *config.Config, id string) {
+	ctx, cancel := context.WithTimeout(context.Background(), clearTimeout)
+	defer cancel()
+	for _, u := range cfg.Phones() {
+		if u.Phone.FCM != "" {
+			_ = fcmTo(ctx, p, u.Phone.FCM, fcmMessage("done", id, 0, time.Minute))
+		}
 	}
 }
 
@@ -496,7 +522,7 @@ func fcmTo(ctx context.Context, p paths.Paths, token string, m fcm.Message) erro
 
 // notifyPhones tells each enrolled phone that a request for n secrets is
 // waiting until deadline. Failures go to stderr; the page works without.
-func notifyPhones(p paths.Paths, cfg *config.Config, n int, deadline time.Time, stderr io.Writer) {
+func notifyPhones(p paths.Paths, cfg *config.Config, id string, n int, deadline time.Time, stderr io.Writer) {
 	key, err := vapidKey(p)
 	if err != nil {
 		fmt.Fprintf(stderr, "broker: phone notification: %v\n", err)
@@ -512,7 +538,7 @@ func notifyPhones(p paths.Paths, cfg *config.Config, n int, deadline time.Time, 
 		var err error
 		switch {
 		case u.Phone.FCM != "":
-			err = fcmTo(context.Background(), p, u.Phone.FCM, fcmMessage("request", n, ttl))
+			err = fcmTo(context.Background(), p, u.Phone.FCM, fcmMessage("request", id, n, ttl))
 		case u.Phone.Push != nil:
 			err = pushTo(context.Background(), key, *cfg.Phone, *u.Phone.Push, m)
 		default:

@@ -450,7 +450,11 @@ func approve(req *requestFile, e *audit.Entry, stderr io.Writer) (requestResult,
 		return res, err
 	}
 	if page != nil {
-		go notifyPhones(p, v.Config(), len(secrets), req.Deadline, stderr)
+		id := requestID()
+		go notifyPhones(p, v.Config(), id, len(secrets), req.Deadline, stderr)
+		// The app's notification would otherwise sit there until the
+		// deadline after the request was answered somewhere else.
+		defer clearPhones(p, v.Config(), id)
 	}
 
 	id, err := unlockApproved(sess, v, shown.Approve, dialog != nil, phoneUnlocks)

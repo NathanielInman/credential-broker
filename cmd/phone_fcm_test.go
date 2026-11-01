@@ -79,11 +79,16 @@ func TestPhoneFCM(t *testing.T) {
 	cfg.Phone = &config.PhonePage{Origin: "https://broker.test"}
 	cfg.Unlock = append(cfg.Unlock, config.Unlock{Phone: &config.PhoneKey{Name: "moto", App: true, FCM: "device-token"}})
 	var stderr bytes.Buffer
-	notifyPhones(p, cfg, 2, time.Now().Add(time.Minute), &stderr)
+	notifyPhones(p, cfg, "req-1", 2, time.Now().Add(time.Minute), &stderr)
 	m := <-got
 	data := m["data"].(map[string]any)
-	if m["token"] != "device-token" || data["type"] != "request" || data["count"] != "2" || stderr.Len() != 0 {
+	if m["token"] != "device-token" || data["type"] != "request" || data["id"] != "req-1" || data["count"] != "2" || stderr.Len() != 0 {
 		t.Fatalf("message %v, stderr %q", m, stderr.String())
+	}
+	// Once it is answered, the app hears so and drops the notification.
+	clearPhones(p, cfg, "req-1")
+	if m := <-got; m["data"].(map[string]any)["type"] != "done" || m["data"].(map[string]any)["id"] != "req-1" {
+		t.Fatalf("done message %v", m)
 	}
 
 	// Files that do not belong together are refused.
