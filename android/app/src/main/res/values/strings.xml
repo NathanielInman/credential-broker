@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">broker</string>
+    <string name="channel_requests">Requests</string>
+    <string name="channel_requests_desc">An agent is asking for secrets</string>
+    <string name="channel_info">Status</string>
+    <string name="channel_info_desc">Enrollment and other news from broker</string>
+</resources>

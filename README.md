@@ -166,6 +166,23 @@ broker phone ls          # enrolled phones, and whether notifications are on
 broker phone rm pixel    # rewraps the vault without that phone's key (one touch)
 ```
 
+#### The Android app
+
+Android's WebAuthn insists on the key's FIDO2 PIN even when the page says it doesn't need one, so approving from Chrome means typing a PIN every time. broker's Android app (in `android/`) skips that. It talks to the key itself over USB or NFC (CTAP2 `hmac-secret`, no user verification), so a touch approves, same as on the PC. Its notifications are native: the unlocked phone shows the secret names and the agent's reason, the lock screen only shows a count, Approve and Deny sit right on the notification, and it goes away once you answer on the desktop.
+
+Notifications come through Firebase Cloud Messaging. FCM is free and needs no billing account, only a Firebase project on your Google account:
+
+1. In the [Firebase console](https://console.firebase.google.com/), create a project. Analytics can stay off.
+2. Add an Android app with the package name `com.nathanielinman.broker` and download its `google-services.json`.
+3. In Project settings, Service accounts, generate a new private key.
+4. On the PC, run `broker phone fcm KEY.json google-services.json`.
+
+broker copies the key next to its config (0600), so you can delete the download. The APK has no Firebase project built in: the app gets the project's public settings when it enrolls.
+
+Build it with `./gradlew assembleRelease` in `android/` (signing is described in `app/build.gradle.kts`) and install the APK. Then run `broker phone enroll --name phone` and scan the QR code from the app instead of opening the link in Chrome. The app makes its own credential on the key, which takes two touches. A credential made through Chrome gives a different answer without the PIN, so a phone enrolled through the page needs `broker phone rm` and a fresh enrollment.
+
+FCM doesn't encrypt to the phone the way Web Push does, so its messages only say that a request is waiting and how many secrets it wants. The app fetches the names, the command and the reason from the PC over your network.
+
 Every failure an agent can hit has a stable `error` code. The full table is in the [agent skill](./skills/broker/SKILL.md).
 
 ## Install
@@ -484,6 +501,7 @@ broker log [--since DUR] [--name NAME]    # Show the audit log
            [--json]
 broker phone enroll [--name NAME]         # Approve requests from a phone, with a key plugged into it
              [--origin URL --cert FILE --key FILE] [--listen ADDR]
+broker phone fcm KEY GOOGLE_SERVICES     # Set up the Android app's notifications (Firebase)
 broker phone ls                           # List enrolled phones
 broker phone rm NAME                      # Remove a phone's unlock (one touch)
 broker restore FILE [--identity FILE...]  # Rebuild the vault from a backup

@@ -401,6 +401,57 @@ it.
   window again, inside this design's threat model. Other devices on the
   network have neither the TLS key nor a phone token.
 
+## Android app
+
+Android's WebAuthn (Play services) runs user verification on every
+security key, whatever the page asks for, so the page in Chrome costs a
+PIN per approval. `android/` is a native app that speaks the page's API
+and talks to the key itself.
+
+- Key: YubiKit (`Ctap2Session` over FIDO HID on USB, or the smart card
+  interface on NFC). Enrollment makes a non-discoverable ES256 credential
+  with `hmac-secret` (`rk` false, no `pinUvAuthParam`; YubiKeys allow that
+  with a PIN set, `makeCredUvNotRqd`) and evaluates it in the same
+  session. Approving evaluates `hmac-secret` with only user presence: key
+  agreement through `ClientPin` (protocol 2 when offered), the salt
+  encrypted and MACed with the shared secret, the output decrypted. The
+  salt goes through WebAuthn PRF's `SHA-256("WebAuthn PRF" || 0 || salt)`,
+  so the server side is the page's unchanged. A UV-less evaluation reads
+  the key's no-UV secret (CTAP 2.1 keeps two), so a page credential made
+  with a PIN gives other output here, and the app enrolls its own.
+- API: the same endpoints as the page. The app sends no `Origin`; writes
+  accept a missing one, since browsers always send it on POST, and every
+  write still needs the phone's token. `POST /api/enroll` carries `app`
+  and the app's FCM token instead of a push subscription. The enroll link
+  is the page's (`/enroll#TOKEN`), scanned from the QR code with Play
+  services' code scanner.
+- Notifications are FCM HTTP v1 data messages (`internal/fcm`): an RS256
+  JWT from the service account key traded for an access token per send
+  (each approver is a new process), `priority: HIGH`, TTL to the
+  deadline, one collapse key. FCM payloads are readable by Google, so they
+  carry only `type` (`request`, `done`, `enrolled`), a random request
+  `id`, `count`, and `deadline`. On `request` the app fetches the details
+  from the page (one `poll?after=0`, 5s) and posts a notification whose
+  private version names the secrets and whose public (lock screen) version
+  only counts them, with a countdown, Approve (opens the app and starts
+  the key flow), and Deny (a broadcast that posts `/api/reply`). When the
+  approver finishes it sends `done` for that `id` (3s cap), which clears
+  the notification; the app remembers done ids for an hour, so a `done`
+  that FCM delivers first still wins.
+- Firebase is set up at run time from the project's public settings,
+  which `broker phone fcm` reads from `google-services.json` into
+  `config.fcm` and the page hands the app at enrollment. The APK carries
+  no project, and the google-services plugin is not used. The service
+  account key stays beside the config (`fcm-service-account.json`, 0600),
+  readable by the user like the VAPID key; with it someone can send the
+  app notifications, which only make it ask the PC what is pending. A
+  token FCM later replaces is not sent anywhere (the page only listens
+  during requests); the app says notifications stopped and to enroll
+  again.
+- The app keeps the origin, its phone token, and the Firebase settings in
+  private preferences, excluded from backup and device transfer: a
+  restored copy would hold a token for a phone that never enrolled.
+
 ## exec behaviour
 
 - Resolve each NAME: public from disk, private from the keyring. Any private
