@@ -61,6 +61,22 @@ class LogicTest {
     }
 
     @Test
+    fun explainsChangedSecrets() {
+        fun req(vararg secrets: Secret) = Request(
+            secrets.toList(), 0, emptyList(), java.time.Instant.EPOCH,
+            emptyList(), "", "", emptyList(), "",
+        )
+        assertNull(req(Secret("A", "")).changedNote())
+        assertEquals(
+            "Asking again: A is still granted, but the value changed in the vault since, so the grant holds the old one. " +
+                "Approving grants the new value.",
+            req(Secret("A", "", changed = true), Secret("B", "")).changedNote(),
+        )
+        val three = req(Secret("A", "", true), Secret("B", "", true), Secret("C", "", true)).changedNote()!!
+        assertEquals("Asking again: A, B, and C are", three.substringBefore(" still"))
+    }
+
+    @Test
     fun quotesLikeAShell() {
         assertEquals("gh pr list 'a b' 'it'\\''s'", quote(listOf("gh", "pr", "list", "a b", "it's")))
     }

@@ -493,11 +493,28 @@ private fun AskingScreen(s: Screen.Asking, model: BrokerModel, actions: Actions)
     Label(if (n == 1) "Secret" else "Secrets")
     r.secrets.forEach { secret ->
         Panel {
-            Mono(secret.name)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Mono(secret.name)
+                if (secret.changed) {
+                    Text(
+                        "changed",
+                        color = p.claimFg,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(p.claimBg)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
+            }
             if (secret.description.isNotEmpty()) {
                 Text(secret.description, color = p.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp))
             }
         }
+    }
+    r.changedNote()?.let { note ->
+        Boxed(p.panel, p.primary) { Text(note, color = p.fg, fontSize = 14.sp, lineHeight = 20.sp) }
     }
 
     Label("Request")

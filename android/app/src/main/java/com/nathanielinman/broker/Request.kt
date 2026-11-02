@@ -5,8 +5,11 @@ import org.json.JSONObject
 import java.time.Instant
 import java.time.OffsetDateTime
 
-/** One secret a request asks for. */
-data class Secret(val name: String, val description: String)
+/**
+ * One secret a request asks for. [changed] means it is still granted, but its value changed in the
+ * vault since, so the grant holds the old one and the request is for the new value.
+ */
+data class Secret(val name: String, val description: String, val changed: Boolean = false)
 
 /** A grant request, as broker shows it in the desktop window. */
 data class Request(
@@ -32,6 +35,16 @@ data class Request(
         return if (chain.size > 6) chain.take(6) + "…" else chain
     }
 
+    /** Why a request asks again for secrets that are still granted, as the window says it, or null. */
+    fun changedNote(): String? {
+        val names = secrets.filter { it.changed }.map { it.name }
+        if (names.isEmpty()) return null
+        val one = names.size == 1
+        val list = if (names.size < 3) names.joinToString(" and ") else names.dropLast(1).joinToString(", ") + ", and " + names.last()
+        return "Asking again: $list ${if (one) "is" else "are"} still granted, but the value changed in the vault since, " +
+            "so the grant holds the old one. Approving grants the new ${if (one) "value" else "values"}."
+    }
+
     /** [path] with the home directory shortened to ~. */
     fun tilde(path: String): String = when {
         home.isEmpty() || path.isEmpty() -> path
@@ -41,7 +54,9 @@ data class Request(
 
     companion object {
         fun parse(o: JSONObject): Request = Request(
-            secrets = o.optJSONArray("secrets").objects().map { Secret(it.optString("name"), it.optString("description")) },
+            secrets = o.optJSONArray("secrets").objects().map {
+                Secret(it.optString("name"), it.optString("description"), it.optBoolean("changed"))
+            },
             forSecs = o.optLong("for"),
             choices = o.optJSONArray("choices").longs(),
             deadline = runCatching { OffsetDateTime.parse(o.optString("deadline")).toInstant() }
