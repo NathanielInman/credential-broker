@@ -153,6 +153,22 @@ keyring and sees no grants there. So every Linux grant also goes to the
 grant agent (next section), whose socket a sandbox can reach; see
 [Grants in sandboxes (Linux)](#grants-in-sandboxes-linux).
 
+A grant is a copy of the value, so it outlives a change to the secret.
+Each grant therefore carries the vault's `Version` of the secret: the first
+16 bytes of the SHA-256 of its `.age` file, hex. age encrypts afresh every
+time, so any write (`set`, `import --overwrite`, `restore`, an edit with
+the age CLI) changes it, and it says nothing about the value. In the kernel
+it follows the expiry in the companion key (`<unix seconds> <version>`);
+the agent keeps it beside the value. A grant whose version no longer
+matches the file is *changed*: not live, so exec refuses it, `ls` reports
+`"granted": false, "changed": true`, and `request` asks for it again. It is
+left in place until it expires or is replaced, so the next exec can still
+say why. `grant` reads the version before decrypting, and the kernel gets
+the value before the version that names it while readers look up the
+version before reading the value, so every race reads as changed (one
+needless request), never as current. A grant without a version (made by
+an older broker) cannot be checked and counts as live.
+
 Default duration comes from config (`default_grant`, initially `1h`); max
 `24h` unless `--force`. Granting a public secret is a no-op with a note.
 `broker revoke NAME... | --all` unlinks keys; `rm` also drops the secret's
@@ -264,7 +280,8 @@ Human-facing (rare):
 Agent-facing (frequent, no prompts ever):
 
 - `broker ls [--json]`: name, tier, description, granted (bool), grant
-  expiry. Never values.
+  expiry, and `changed` for a grant whose value the vault has since
+  replaced (see [Grants](#grants-kernel-keyring)). Never values.
 - `broker exec NAME... -- CMD [ARGS...]`: run CMD with the named secrets added
   to its environment. Exit code, stdin, and signals pass through.
   `--request [--reason TEXT]` asks for missing grants first (below).
@@ -280,8 +297,9 @@ sees, so it can't hand them a `broker grant` to type. `request` (and
 their desktop instead.
 
 - `request` (agent side) resolves the names to private ones without a live
-  grant. None: done, no window. Else it writes the request as JSON
-  (names, duration, reason, command, its own PID, a deadline) to the stdin
+  grant (a changed grant is not live). None: done, no window. Else it
+  writes the request as JSON (names, duration, reason, command, its own
+  PID, a deadline) to the stdin
   of `broker approve`, started with `systemd-run --user --wait --pipe
   --collect` and an allowlisted environment (`approverEnv`), and reads one
   JSON result line from its stdout. Without systemd it starts it with
@@ -297,7 +315,8 @@ their desktop instead.
   `PT_DENY_ATTACH`. Being outside the agent's process group also keeps the window up
   if the agent's command is killed; the grant still lands.
 - The approver checks `/proc/PID/exe` is broker before showing anything,
-  and reads the requester's cwd and process chain from `/proc` itself, so
+  and reads the requester's cwd and process chain from `/proc` itself (and
+  which grants are changed from the vault and keyring), so
   the window shows where the request came from, not what the request
   claims. Only `--reason` (and the command) are the agent's word, and the
   window labels the reason as such.
@@ -472,6 +491,8 @@ and talks to the key itself.
   NAME without a live grant fails before running anything: exit 77 and
   print to stderr one JSON line:
   `{"error":"no_grant","names":["X"],"ask_human":"broker grant X --for 1h"}`.
+  Names whose grant holds a changed value are also listed in `changed`,
+  with a `message` saying so, since the agent was using them a moment ago.
   Unknown names: exit 78, `{"error":"unknown_secret","names":[...]}`.
 - Redaction: when the child's stdout or stderr is not a TTY (the agent case),
   pipe it through a streaming redactor (`internal/redact`) that replaces

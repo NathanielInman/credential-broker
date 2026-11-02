@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"filippo.io/age"
 	"github.com/spf13/cobra"
 
 	"github.com/NathanielInman/credential-broker/internal/agenterr"
@@ -77,12 +78,7 @@ func newGrantCmd() *cobra.Command {
 				return err
 			}
 			for _, s := range secrets {
-				value, err := v.Decrypt(s.Name, id)
-				if err != nil {
-					return err
-				}
-				expires, err := kr.Add(s.Name, value, ttl)
-				clear(value)
+				expires, err := grantSecret(kr, v, s.Name, id, ttl)
 				if err != nil {
 					return err
 				}
@@ -234,19 +230,62 @@ func newRevokeCmd() *cobra.Command {
 	return c
 }
 
-// lookupGrant reports name's live grant in kr, if any. Expired and missing
-// grants both read as not granted.
-func lookupGrant(kr *keyring.Keyring, name string) (bool, *time.Time, error) {
+// grantState is what exec can do with a secret's grant.
+type grantState struct {
+	// Live means exec can use the grant.
+	Live bool
+	// Changed means the grant has not expired but holds a value the vault
+	// has since replaced (broker set, import, restore), so it is not Live:
+	// exec would hand out the old value.
+	Changed bool
+	// Expires is when a live or changed grant ends, nil when unknown.
+	Expires *time.Time
+}
+
+// lookupGrant reports the state of name's grant in kr. Expired and missing
+// grants both read as not granted. A grant from before grants carried the
+// vault's Version cannot be checked, and counts as live.
+func lookupGrant(kr *keyring.Keyring, v *vault.Vault, name string) (grantState, error) {
 	g, err := kr.Lookup(name)
 	if errors.Is(err, keyring.ErrNotGranted) || errors.Is(err, keyring.ErrExpired) {
-		return false, nil, nil
+		return grantState{}, nil
 	}
 	if err != nil {
-		return false, nil, err
+		return grantState{}, err
 	}
-	if g.Expires.IsZero() {
-		return true, nil, nil
+	var st grantState
+	if !g.Expires.IsZero() {
+		exp := g.Expires.UTC()
+		st.Expires = &exp
 	}
-	exp := g.Expires.UTC()
-	return true, &exp, nil
+	if g.Version != "" {
+		now, err := v.Version(name)
+		if err != nil {
+			return grantState{}, err
+		}
+		if now != g.Version {
+			st.Changed = true
+			return st, nil
+		}
+	}
+	st.Live = true
+	return st, nil
+}
+
+// grantSecret decrypts name with the unlocked private identity and grants
+// it for ttl, along with the vault's Version of it, so exec can tell when
+// the vault changes under the grant.
+func grantSecret(kr *keyring.Keyring, v *vault.Vault, name string, id age.Identity, ttl time.Duration) (time.Time, error) {
+	// Version before Decrypt: a change in between then reads as a changed
+	// grant, never as a current one (see vault.Version).
+	version, err := v.Version(name)
+	if err != nil {
+		return time.Time{}, err
+	}
+	value, err := v.Decrypt(name, id)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer clear(value)
+	return kr.Add(name, value, version, ttl)
 }

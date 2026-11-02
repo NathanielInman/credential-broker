@@ -291,6 +291,25 @@ func TestExecRequest(t *testing.T) {
 	}
 }
 
+func TestExecRequestAfterChange(t *testing.T) {
+	grantVault(t)
+	mustRun(t, "grant", "API_TOKEN", "DB_PASS")
+	if _, stderr, code := runStdin(t, "rotated-token", "set", "API_TOKEN", "--stdin"); code != 0 {
+		t.Fatalf("set exit %d: %s", code, stderr)
+	}
+	log := useWindow(t, "approve")
+	out, stderr, code := runStdin(t, "", "exec", "--request", "API_TOKEN", "DB_PASS",
+		"--", "sh", "-c", `test "$API_TOKEN" = rotated-token && echo new`)
+	if code != 0 || out != "new\n" || !strings.Contains(stderr, "granted API_TOKEN for 1h") {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, stderr)
+	}
+	// Only the changed secret is asked for, and the window says why.
+	req, _ := shown(t, log)
+	if len(req.Secrets) != 1 || req.Secrets[0].Name != "API_TOKEN" || !req.Secrets[0].Changed {
+		t.Fatalf("window showed %+v", req.Secrets)
+	}
+}
+
 func TestExecRequestAlreadyGranted(t *testing.T) {
 	grantVault(t)
 	mustRun(t, "grant", "API_TOKEN")

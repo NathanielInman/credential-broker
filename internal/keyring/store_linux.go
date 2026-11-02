@@ -78,19 +78,20 @@ func noGrant(err error) bool {
 	return errors.Is(err, ErrNotGranted) || errors.Is(err, ErrExpired)
 }
 
-// Add grants name for ttl in the kernel keyring and the agent and returns
-// when the kernel's grant expires. If the agent cannot take it, the kernel
+// Add grants name for ttl in the kernel keyring and the agent, remembering
+// version (the vault's Version of the value), and returns when the
+// kernel's grant expires. If the agent cannot take it, the kernel
 // grant is revoked again, so sandboxes never miss a grant the host sees.
 // A sandbox with no agent to reach grants in its own keyring only.
-func (k *Keyring) Add(name string, value []byte, ttl time.Duration) (time.Time, error) {
+func (k *Keyring) Add(name string, value []byte, version string, ttl time.Duration) (time.Time, error) {
 	if k.kernel == nil {
-		return k.agent.Add(name, value, ttl)
+		return k.agent.Add(name, value, version, ttl)
 	}
-	expires, err := k.kernel.Add(name, value, ttl)
+	expires, err := k.kernel.Add(name, value, version, ttl)
 	if err != nil {
 		return time.Time{}, err
 	}
-	if _, err := k.agent.Add(name, value, ttl); err != nil {
+	if _, err := k.agent.Add(name, value, version, ttl); err != nil {
 		if k.agent.Start == nil && errors.Is(err, errNoAgent) {
 			return expires, nil
 		}

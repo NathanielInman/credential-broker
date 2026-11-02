@@ -6,7 +6,7 @@
 // with the same kernel timeout: big_key "broker:secret:<NAME>" holds the
 // value, and user key "broker:expiry:<NAME>" holds the expiry as Unix
 // seconds, because the kernel does not report a key's timeout through
-// keyctl. The kernel drops
+// keyctl, followed by a space and the grant's Version. The kernel drops
 // both at expiry; there is no daemon. A vault under BROKER_HOME puts a
 // namespace after "broker:" so it never touches the default vault's keys.
 //
@@ -37,4 +37,9 @@ type Grant struct {
 	// Expires is when the kernel drops the grant. It is zero if the
 	// companion expiry key is missing.
 	Expires time.Time
+	// Version is the vault's Version of the secret when its value was
+	// granted, so a grant whose secret changed since can be told apart.
+	// It is empty when unknown: a grant made by an older broker, or held by
+	// an older grant agent.
+	Version string
 }

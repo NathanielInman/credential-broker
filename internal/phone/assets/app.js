@@ -223,6 +223,18 @@ const sessionRoots = new Set([
   "lightdm", "xfce4-session", "cinnamon-sessio", "mate-session", "i3", "bspwm", "awesome", "openbox",
 ]);
 
+// changedNote explains a request for secrets that are still granted but
+// whose values changed in the vault since: the grants hold the old values.
+function changedNote(secrets) {
+  const names = secrets.filter((s) => s.changed).map((s) => s.name);
+  if (!names.length) return null;
+  const one = names.length === 1;
+  const list = names.length < 3 ? names.join(" and ") : names.slice(0, -1).join(", ") + ", and " + names[names.length - 1];
+  return el("div", { class: "changed" }, "Asking again: " + list + (one ? " is" : " are") +
+    " still granted, but the value changed in the vault since, so the grant holds the old one. Approving grants the new " +
+    (one ? "value." : "values."));
+}
+
 function human(secs) {
   if (secs % 3600 === 0) { const h = secs / 3600; return h + (h === 1 ? " hour" : " hours"); }
   if (secs < 3600 && secs % 60 === 0) return (secs / 60) + " min";
@@ -404,8 +416,10 @@ class Watch {
       header(n === 1 ? "An agent wants to use a secret" : "An agent wants to use " + n + " secrets",
         this.phase === "done" ? "broker request" : "broker request · expires in " + this.left()),
       el("div", { class: "label" }, n === 1 ? "Secret" : "Secrets"),
-      ...r.secrets.map((s) => el("div", { class: "secret" }, el("div", { class: "mono" }, s.name),
+      ...r.secrets.map((s) => el("div", { class: "secret" },
+        el("div", {}, el("span", { class: "mono" }, s.name), s.changed ? el("span", { class: "tag" }, "changed") : null),
         s.description ? el("div", { class: "desc" }, s.description) : null)),
+      changedNote(r.secrets),
       el("div", { class: "label" }, "Request"),
       el("div", { class: "grid" },
         el("div", { class: "k" }, "For"), el("div", { class: "v" }, forView),

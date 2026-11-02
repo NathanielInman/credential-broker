@@ -67,8 +67,11 @@ var exitCodes = map[Code]int{
 
 // Error is the JSON line written to stderr.
 type Error struct {
-	Code     Code     `json:"error"`
-	Names    []string `json:"names,omitempty"`
+	Code  Code     `json:"error"`
+	Names []string `json:"names,omitempty"`
+	// Changed, on no_grant, lists the names that are still granted but
+	// whose value changed in the vault since: the grant holds the old one.
+	Changed  []string `json:"changed,omitempty"`
 	AskHuman string   `json:"ask_human,omitempty"`
 	Message  string   `json:"message,omitempty"`
 }

@@ -117,9 +117,12 @@ func requestGrants(c *cobra.Command, v *vault.Vault, names []string, ttl time.Du
 	if err != nil || len(missing) == 0 {
 		return err
 	}
-	var missingNames []string
+	var missingNames, changed []string
 	for _, s := range missing {
 		missingNames = append(missingNames, s.Name)
+		if s.Changed {
+			changed = append(changed, s.Name)
+		}
 	}
 	e := audit.Entry{Action: audit.Request, Names: missingNames, Tier: string(vault.Private), For: shortDuration(ttl), Reason: reason}
 	if len(argv) > 0 {
@@ -129,6 +132,7 @@ func requestGrants(c *cobra.Command, v *vault.Vault, names []string, ttl time.Du
 		err := &agenterr.Error{
 			Code:     agenterr.NoGrant,
 			Names:    missingNames,
+			Changed:  changed,
 			AskHuman: "broker grant " + strings.Join(missingNames, " ") + " --for " + shortDuration(ttl),
 			Message:  "no request window: " + why.Error(),
 		}
@@ -197,9 +201,18 @@ func lastLine(b []byte) []byte {
 	return b
 }
 
+// missingGrant is a private secret exec cannot use until it is granted.
+type missingGrant struct {
+	vault.Secret
+	// Changed means it is still granted, but with a value the vault has
+	// since replaced, so this asks again for the new one.
+	Changed bool
+}
+
 // ungranted resolves names to the private secrets among them without a
-// live grant. Unknown names fail, since no grant would fix them.
-func ungranted(v *vault.Vault, names []string) ([]vault.Secret, error) {
+// live grant, including those whose grant holds a value since changed.
+// Unknown names fail, since no grant would fix them.
+func ungranted(v *vault.Vault, names []string) ([]missingGrant, error) {
 	var out []vault.Secret
 	var unknown []string
 	seen := map[string]bool{}
@@ -230,14 +243,14 @@ func ungranted(v *vault.Vault, names []string) ([]vault.Secret, error) {
 	if err != nil {
 		return nil, err
 	}
-	var missing []vault.Secret
+	var missing []missingGrant
 	for _, s := range out {
-		live, _, err := lookupGrant(kr, s.Name)
+		st, err := lookupGrant(kr, v, s.Name)
 		if err != nil {
 			return nil, err
 		}
-		if !live {
-			missing = append(missing, s)
+		if !st.Live {
+			missing = append(missing, missingGrant{Secret: s, Changed: st.Changed})
 		}
 	}
 	return missing, nil
@@ -438,7 +451,7 @@ func approve(req *requestFile, e *audit.Entry, stderr io.Writer) (requestResult,
 	}
 	shown.Approve, shown.Device = approveBy(v.Config())
 	for _, s := range secrets {
-		shown.Secrets = append(shown.Secrets, approval.Secret{Name: s.Name, Description: s.Description})
+		shown.Secrets = append(shown.Secrets, approval.Secret{Name: s.Name, Description: s.Description, Changed: s.Changed})
 	}
 	var remotes []approval.Remote
 	var phoneUnlocks <-chan phone.Unlock
@@ -470,13 +483,7 @@ func approve(req *requestFile, e *audit.Entry, stderr io.Writer) (requestResult,
 		return res, err
 	}
 	for _, s := range secrets {
-		value, err := v.Decrypt(s.Name, id)
-		if err != nil {
-			sess.Finish("Could not grant: "+err.Error(), true)
-			return res, err
-		}
-		expires, err := kr.Add(s.Name, value, ttl)
-		clear(value)
+		expires, err := grantSecret(kr, v, s.Name, id, ttl)
 		if err != nil {
 			sess.Finish("Could not grant: "+err.Error(), true)
 			return res, err

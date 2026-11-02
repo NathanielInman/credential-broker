@@ -10,6 +10,8 @@ package vault
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -347,6 +349,25 @@ func (v *Vault) Decrypt(name string, private age.Identity) ([]byte, error) {
 		return nil, fmt.Errorf("%s is private: decrypting it needs the unlocked private identity", name)
 	}
 	return decryptFile(v.valuePath(name, s.Tier), id)
+}
+
+// Version names the value name holds now without revealing it: a hash of
+// its encrypted file. Any change to the value (set, import, restore, an
+// edit with the age CLI) changes it, since age encrypts afresh each time,
+// so a grant that remembers the Version it was decrypted at can tell when
+// it holds an old value. Read it before Decrypt: a change in between then
+// makes the grant look older than it is, never newer.
+func (v *Vault) Version(name string) (string, error) {
+	s, err := v.Get(name)
+	if err != nil {
+		return "", err
+	}
+	ct, err := os.ReadFile(v.valuePath(name, s.Tier))
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(ct)
+	return hex.EncodeToString(sum[:16]), nil
 }
 
 // SetOptions configures Set.

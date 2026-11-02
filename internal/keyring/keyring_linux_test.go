@@ -49,7 +49,7 @@ func runHelper(args []string) int {
 			value, err = readKey(id)
 		}
 	case "add":
-		_, err = k.Add(args[1], []byte(args[2]), time.Minute)
+		_, err = k.Add(args[1], []byte(args[2]), "", time.Minute)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -115,7 +115,7 @@ func TestAddReadRevoke(t *testing.T) {
 	}
 
 	before := time.Now()
-	expires, err := k.Add("API_TOKEN", []byte("s3cret-value"), time.Hour)
+	expires, err := k.Add("API_TOKEN", []byte("s3cret-value"), "v1", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,16 +126,19 @@ func TestAddReadRevoke(t *testing.T) {
 		t.Fatalf("Read = %q, %v", v, err)
 	}
 	g, err := k.Lookup("API_TOKEN")
-	if err != nil || !g.Expires.Equal(expires) {
-		t.Fatalf("Lookup = %+v, %v; want expiry %s", g, err, expires)
+	if err != nil || !g.Expires.Equal(expires) || g.Version != "v1" {
+		t.Fatalf("Lookup = %+v, %v; want expiry %s, version v1", g, err, expires)
 	}
 
-	// A second grant replaces the value and expiry in place.
-	if _, err := k.Add("API_TOKEN", []byte("rotated"), 2*time.Hour); err != nil {
+	// A second grant replaces the value, expiry, and version in place.
+	if _, err := k.Add("API_TOKEN", []byte("rotated"), "v2", 2*time.Hour); err != nil {
 		t.Fatal(err)
 	}
 	if v, err := k.Read("API_TOKEN"); err != nil || string(v) != "rotated" {
 		t.Fatalf("Read after regrant = %q, %v", v, err)
+	}
+	if g, err := k.Lookup("API_TOKEN"); err != nil || g.Version != "v2" {
+		t.Fatalf("Lookup after regrant = %+v, %v", g, err)
 	}
 	gs, err := k.List()
 	if err != nil || len(gs) != 1 || gs[0].Name != "API_TOKEN" || time.Until(gs[0].Expires) < time.Hour {
@@ -160,7 +163,7 @@ func TestLargeValue(t *testing.T) {
 	k := testKeyring(t)
 	// Over a user key's 32 KiB cap and the default 20000 byte quota.
 	value := []byte(strings.Repeat("x", 128<<10))
-	if _, err := k.Add("BIG", value, time.Minute); err != nil {
+	if _, err := k.Add("BIG", value, "", time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	if v, err := k.Read("BIG"); err != nil || string(v) != string(value) {
@@ -170,10 +173,10 @@ func TestLargeValue(t *testing.T) {
 
 func TestExpiry(t *testing.T) {
 	k := testKeyring(t)
-	if _, err := k.Add("SHORT", []byte("short-lived"), time.Second); err != nil {
+	if _, err := k.Add("SHORT", []byte("short-lived"), "", time.Second); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := k.Add("LONG", []byte("long-lived"), time.Hour); err != nil {
+	if _, err := k.Add("LONG", []byte("long-lived"), "", time.Hour); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := k.Read("SHORT"); err != nil {
@@ -196,7 +199,7 @@ func TestExpiry(t *testing.T) {
 		t.Fatalf("Revoke expired = %v, %v", live, err)
 	}
 	// A new grant displaces the expired keys.
-	if _, err := k.Add("SHORT", []byte("again"), time.Minute); err != nil {
+	if _, err := k.Add("SHORT", []byte("again"), "", time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	if v, err := k.Read("SHORT"); err != nil || string(v) != "again" {
@@ -206,14 +209,14 @@ func TestExpiry(t *testing.T) {
 
 func TestBadDuration(t *testing.T) {
 	k := testKeyring(t)
-	if _, err := k.Add("X", []byte("value"), 0); err == nil {
+	if _, err := k.Add("X", []byte("value"), "", 0); err == nil {
 		t.Fatal("zero duration granted")
 	}
 }
 
 func TestPermissions(t *testing.T) {
 	k := testKeyring(t)
-	if _, err := k.Add("PERM", []byte("value"), time.Minute); err != nil {
+	if _, err := k.Add("PERM", []byte("value"), "", time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	for _, typDesc := range [][2]string{{secretType, k.secret + "PERM"}, {expiryType, k.expiry + "PERM"}} {
@@ -246,7 +249,7 @@ func TestCrossProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := k.Add("FROM_PARENT", []byte("parent-value"), time.Minute); err != nil {
+	if _, err := k.Add("FROM_PARENT", []byte("parent-value"), "", time.Minute); err != nil {
 		t.Fatal(err)
 	}
 
@@ -284,7 +287,7 @@ func TestNamespaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = other.Revoke("SHARED") })
-	if _, err := k.Add("SHARED", []byte("mine"), time.Minute); err != nil {
+	if _, err := k.Add("SHARED", []byte("mine"), "", time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := other.Read("SHARED"); !errors.Is(err, ErrNotGranted) {

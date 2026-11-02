@@ -57,6 +57,15 @@ func newSetCmd() *cobra.Command {
 			}
 			e.Tier = string(s.Tier)
 			fmt.Fprintf(c.OutOrStdout(), "stored %s in the %s tier\n", s.Name, s.Tier)
+			// A grant made before holds the old value, which exec now
+			// refuses, so agents ask again.
+			if s.Tier == vault.Private {
+				if kr, err := userKeyring(); err == nil {
+					if st, err := lookupGrant(kr, v, name); err == nil && st.Changed {
+						fmt.Fprintf(c.OutOrStdout(), "its grant still holds the old value; agents now ask for a new grant\n")
+					}
+				}
+			}
 			return nil
 		},
 	}

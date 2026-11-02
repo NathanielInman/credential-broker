@@ -35,6 +35,8 @@ type agentRequest struct {
 	Value []byte `json:"value,omitempty"`
 	// TTL is a grant's duration in whole seconds.
 	TTL int64 `json:"ttl,omitempty"`
+	// Version is the grant's Version, which add keeps beside the value.
+	Version string `json:"version,omitempty"`
 }
 
 type agentResponse struct {
@@ -42,6 +44,7 @@ type agentResponse struct {
 	Error   string       `json:"error,omitempty"`
 	Value   []byte       `json:"value,omitempty"`
 	Expires int64        `json:"expires,omitempty"`
+	Version string       `json:"version,omitempty"`
 	Live    bool         `json:"live,omitempty"`
 	Grants  []agentGrant `json:"grants,omitempty"`
 }
@@ -49,6 +52,7 @@ type agentResponse struct {
 type agentGrant struct {
 	Name    string `json:"name"`
 	Expires int64  `json:"expires"`
+	Version string `json:"version,omitempty"`
 }
 
 const notGranted = "not_granted"
@@ -63,6 +67,7 @@ type store struct {
 
 type held struct {
 	value   []byte
+	version string
 	expires time.Time
 	timer   *time.Timer
 }
@@ -86,7 +91,7 @@ func (s *store) handle(req agentRequest) agentResponse {
 			s.drop(req.Name, h)
 		}
 		expires := time.Now().Add(time.Duration(req.TTL) * time.Second)
-		h := &held{value: bytes.Clone(req.Value), expires: expires}
+		h := &held{value: bytes.Clone(req.Value), version: req.Version, expires: expires}
 		h.timer = time.AfterFunc(time.Until(expires), func() {
 			s.mu.Lock()
 			defer s.mu.Unlock()
@@ -101,7 +106,7 @@ func (s *store) handle(req agentRequest) agentResponse {
 		if !ok || !time.Now().Before(h.expires) {
 			return agentResponse{Error: notGranted}
 		}
-		res := agentResponse{Expires: h.expires.Unix()}
+		res := agentResponse{Expires: h.expires.Unix(), Version: h.version}
 		if req.Op == "read" {
 			res.Value = h.value
 		}
@@ -109,7 +114,7 @@ func (s *store) handle(req agentRequest) agentResponse {
 	case "list":
 		var res agentResponse
 		for name, h := range s.grants {
-			res.Grants = append(res.Grants, agentGrant{Name: name, Expires: h.expires.Unix()})
+			res.Grants = append(res.Grants, agentGrant{Name: name, Expires: h.expires.Unix(), Version: h.version})
 		}
 		sort.Slice(res.Grants, func(i, j int) bool { return res.Grants[i].Name < res.Grants[j].Name })
 		return res
@@ -241,14 +246,15 @@ func (res agentResponse) err() error {
 	return errors.New("grant agent: " + res.Error)
 }
 
-// Add grants name for ttl (rounded up to whole seconds), starting the
-// agent if none runs, and returns when the grant expires.
-func (c *Client) Add(name string, value []byte, ttl time.Duration) (time.Time, error) {
+// Add grants name for ttl (rounded up to whole seconds), remembering
+// version, starting the agent if none runs, and returns when the grant
+// expires.
+func (c *Client) Add(name string, value []byte, version string, ttl time.Duration) (time.Time, error) {
 	secs := int64((ttl + time.Second - 1) / time.Second)
 	if secs < 1 {
 		return time.Time{}, fmt.Errorf("grant duration %s is not positive", ttl)
 	}
-	res, err := c.do(agentRequest{Op: "add", Name: name, Value: value, TTL: secs}, true)
+	res, err := c.do(agentRequest{Op: "add", Name: name, Value: value, TTL: secs, Version: version}, true)
 	if err == nil {
 		err = res.err()
 	}
@@ -282,7 +288,7 @@ func (c *Client) Lookup(name string) (Grant, error) {
 	if err != nil {
 		return Grant{}, err
 	}
-	return Grant{Name: name, Expires: time.Unix(res.Expires, 0)}, nil
+	return Grant{Name: name, Expires: time.Unix(res.Expires, 0), Version: res.Version}, nil
 }
 
 // List returns every live grant, sorted by name.
@@ -299,7 +305,7 @@ func (c *Client) List() ([]Grant, error) {
 	}
 	var out []Grant
 	for _, g := range res.Grants {
-		out = append(out, Grant{Name: g.Name, Expires: time.Unix(g.Expires, 0)})
+		out = append(out, Grant{Name: g.Name, Expires: time.Unix(g.Expires, 0), Version: g.Version})
 	}
 	return out, nil
 }

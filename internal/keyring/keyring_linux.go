@@ -54,9 +54,10 @@ func openKernel(namespace string) (*kernel, error) {
 	return k, nil
 }
 
-// Add grants name for ttl (rounded up to whole seconds) and returns when
-// the grant expires. An existing grant of name is replaced atomically.
-func (k *kernel) Add(name string, value []byte, ttl time.Duration) (time.Time, error) {
+// Add grants name for ttl (rounded up to whole seconds), remembering
+// version, and returns when the grant expires. An existing grant of name
+// is replaced atomically.
+func (k *kernel) Add(name string, value []byte, version string, ttl time.Duration) (time.Time, error) {
 	secs := int64((ttl + time.Second - 1) / time.Second)
 	if secs < 1 {
 		return time.Time{}, fmt.Errorf("grant duration %s is not positive", ttl)
@@ -68,11 +69,18 @@ func (k *kernel) Add(name string, value []byte, ttl time.Duration) (time.Time, e
 
 	// The kernel sets expiry to its current second plus the timeout.
 	expires := time.Unix(time.Now().Unix()+secs, 0)
-	stamp := []byte(strconv.FormatInt(expires.Unix(), 10))
-	if err := k.add(expiryType, k.expiry+name, stamp, secs); err != nil {
+	stamp := strconv.FormatInt(expires.Unix(), 10)
+	if version != "" {
+		stamp += " " + version
+	}
+	// The value goes in before the version that names it, and readers look
+	// up the version before reading the value, so a reader racing a
+	// re-grant may pair an old version with the new value (and ask again
+	// for nothing) but never the new version with the old value.
+	if err := k.add(secretType, k.secret+name, value, secs); err != nil {
 		return time.Time{}, fmt.Errorf("grant %s: %w", name, err)
 	}
-	if err := k.add(secretType, k.secret+name, value, secs); err != nil {
+	if err := k.add(expiryType, k.expiry+name, []byte(stamp), secs); err != nil {
 		return time.Time{}, fmt.Errorf("grant %s: %w", name, err)
 	}
 	return expires, nil
@@ -123,8 +131,14 @@ func (k *kernel) Lookup(name string) (Grant, error) {
 	g := Grant{Name: name}
 	if id, err := k.search(expiryType, k.expiry+name); err == nil {
 		if stamp, err := readKey(id); err == nil {
-			if sec, err := strconv.ParseInt(string(stamp), 10, 64); err == nil {
-				g.Expires = time.Unix(sec, 0)
+			f := strings.Fields(string(stamp))
+			if len(f) > 0 {
+				if sec, err := strconv.ParseInt(f[0], 10, 64); err == nil {
+					g.Expires = time.Unix(sec, 0)
+				}
+			}
+			if len(f) > 1 {
+				g.Version = f[1]
 			}
 		}
 	}

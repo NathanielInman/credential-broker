@@ -37,6 +37,7 @@ type lsJSON struct {
 	Description string  `json:"description"`
 	Granted     bool    `json:"granted"`
 	Expires     *string `json:"expires"`
+	Changed     bool    `json:"changed"`
 }
 
 func ls(t *testing.T) []lsJSON {

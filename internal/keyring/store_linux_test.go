@@ -21,7 +21,7 @@ func testStore(t *testing.T) (*Keyring, *kernel, *Client) {
 
 func TestStoreAddGoesToBoth(t *testing.T) {
 	k, kern, c := testStore(t)
-	expires, err := k.Add("API_TOKEN", []byte("token-value"), time.Hour)
+	expires, err := k.Add("API_TOKEN", []byte("token-value"), "", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,10 +52,10 @@ func TestStoreAddGoesToBoth(t *testing.T) {
 // the agent.
 func TestStoreFallsBackToAgent(t *testing.T) {
 	k, _, c := testStore(t)
-	if _, err := c.Add("FROM_HOST", []byte("host-value"), time.Hour); err != nil {
+	if _, err := c.Add("FROM_HOST", []byte("host-value"), "", time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := k.Add("LOCAL", []byte("local-value"), time.Hour); err != nil {
+	if _, err := k.Add("LOCAL", []byte("local-value"), "", time.Hour); err != nil {
 		t.Fatal(err)
 	}
 	if v, err := k.Read("FROM_HOST"); err != nil || string(v) != "host-value" {
@@ -81,7 +81,7 @@ func TestStoreFallsBackToAgent(t *testing.T) {
 
 func TestStoreExpiresInBoth(t *testing.T) {
 	k, _, _ := testStore(t)
-	if _, err := k.Add("SHORT", []byte("v"), time.Second); err != nil {
+	if _, err := k.Add("SHORT", []byte("v"), "", time.Second); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(2500 * time.Millisecond)
@@ -94,7 +94,7 @@ func TestStoreExpiresInBoth(t *testing.T) {
 func TestStoreSandboxWithoutAgent(t *testing.T) {
 	kern := testKeyring(t)
 	k := &Keyring{kernel: kern, agent: &Client{Socket: filepath.Join(t.TempDir(), "none.sock")}}
-	if _, err := k.Add("API_TOKEN", []byte("token-value"), time.Hour); err != nil {
+	if _, err := k.Add("API_TOKEN", []byte("token-value"), "", time.Hour); err != nil {
 		t.Fatal(err)
 	}
 	if v, err := k.Read("API_TOKEN"); err != nil || string(v) != "token-value" {
@@ -110,7 +110,7 @@ func TestStoreAgentFailureUndoesGrant(t *testing.T) {
 		Socket: filepath.Join(t.TempDir(), "none.sock"),
 		Start:  func() error { return errors.New("no agent today") },
 	}}
-	if _, err := k.Add("API_TOKEN", []byte("token-value"), time.Hour); err == nil {
+	if _, err := k.Add("API_TOKEN", []byte("token-value"), "", time.Hour); err == nil {
 		t.Fatal("Add succeeded without an agent")
 	}
 	if _, err := kern.Read("API_TOKEN"); !errors.Is(err, ErrNotGranted) {
@@ -122,7 +122,7 @@ func TestStoreAgentFailureUndoesGrant(t *testing.T) {
 func TestStoreAgentOnly(t *testing.T) {
 	c, _ := agent(t, time.Minute)
 	k := &Keyring{agent: c}
-	if _, err := k.Add("API_TOKEN", []byte("token-value"), time.Hour); err != nil {
+	if _, err := k.Add("API_TOKEN", []byte("token-value"), "", time.Hour); err != nil {
 		t.Fatal(err)
 	}
 	if v, err := k.Read("API_TOKEN"); err != nil || string(v) != "token-value" {

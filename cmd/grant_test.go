@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -211,6 +212,67 @@ func TestRmDropsGrant(t *testing.T) {
 	}
 	if _, err := kr.Read("API_TOKEN"); !errors.Is(err, keyring.ErrNotGranted) {
 		t.Fatalf("Read after rm: %v", err)
+	}
+}
+
+func TestSetAfterGrantAsksAgain(t *testing.T) {
+	grantVault(t)
+	mustRun(t, "grant", "API_TOKEN")
+	out, stderr, code := runStdin(t, "rotated-token", "set", "API_TOKEN", "--stdin")
+	if code != 0 || !strings.Contains(out, "its grant still holds the old value") {
+		t.Fatalf("set exit %d, stdout %q, stderr %q", code, out, stderr)
+	}
+	for _, e := range ls(t) {
+		if e.Name == "API_TOKEN" && (e.Granted || !e.Changed || e.Expires != nil) {
+			t.Fatalf("ls after set: %+v", e)
+		}
+	}
+	if out, _ := mustRun(t, "ls"); !regexp.MustCompile(`\nAPI_TOKEN +private +changed `).MatchString(out) {
+		t.Fatalf("human ls:\n%s", out)
+	}
+
+	// exec refuses the old value and says why.
+	_, stderr, code = runStdin(t, "", "exec", "API_TOKEN", "API_USER", "--", "true")
+	var e struct {
+		Error   string   `json:"error"`
+		Names   []string `json:"names"`
+		Changed []string `json:"changed"`
+		Message string   `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(stderr), &e); err != nil || code != 77 || e.Error != "no_grant" ||
+		strings.Join(e.Names, ",") != "API_TOKEN" || strings.Join(e.Changed, ",") != "API_TOKEN" ||
+		!strings.Contains(e.Message, "API_TOKEN changed in the vault after it was granted") {
+		t.Fatalf("exec exit %d: %s", code, stderr)
+	}
+
+	// A new grant carries the new value.
+	mustRun(t, "grant", "API_TOKEN")
+	if out, _ := mustRun(t, "exec", "API_TOKEN", "--", "sh", "-c", `test "$API_TOKEN" = rotated-token && echo new`); out != "new\n" {
+		t.Fatalf("exec after regrant: %q", out)
+	}
+	for _, e := range ls(t) {
+		if e.Name == "API_TOKEN" && (!e.Granted || e.Changed) {
+			t.Fatalf("ls after regrant: %+v", e)
+		}
+	}
+}
+
+// A grant made by a broker from before grants recorded the vault's
+// version cannot be checked, so it keeps working as it did.
+func TestGrantWithoutVersionStillWorks(t *testing.T) {
+	grantVault(t)
+	kr, err := userKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := kr.Add("API_TOKEN", []byte("token-value"), "", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, code := runStdin(t, "rotated-token", "set", "API_TOKEN", "--stdin"); code != 0 || out != "stored API_TOKEN in the private tier\n" {
+		t.Fatalf("set exit %d: %q", code, out)
+	}
+	if out, _ := mustRun(t, "exec", "API_TOKEN", "--", "sh", "-c", `test "$API_TOKEN" = token-value && echo old`); out != "old\n" {
+		t.Fatalf("exec: %q", out)
 	}
 }
 

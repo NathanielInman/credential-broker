@@ -112,7 +112,7 @@ func resolve(v *vault.Vault, names []string) ([]resolved, error) {
 	}
 
 	var kr *keyring.Keyring
-	var ungranted []string
+	var ungranted, changed []string
 	for i := range out {
 		r := &out[i]
 		var err error
@@ -122,11 +122,20 @@ func resolve(v *vault.Vault, names []string) ([]resolved, error) {
 			if kr == nil {
 				kr, err = userKeyring()
 			}
+			// The grant's version is looked up before its value is read:
+			// see keyring's Add.
+			var st grantState
 			if err == nil {
+				st, err = lookupGrant(kr, v, r.Name)
+			}
+			if err == nil && st.Live {
 				r.value, err = kr.Read(r.Name)
 			}
-			if errors.Is(err, keyring.ErrNotGranted) || errors.Is(err, keyring.ErrExpired) {
+			if (err == nil && !st.Live) || errors.Is(err, keyring.ErrNotGranted) || errors.Is(err, keyring.ErrExpired) {
 				ungranted = append(ungranted, r.Name)
+				if st.Changed {
+					changed = append(changed, r.Name)
+				}
 				continue
 			}
 		}
@@ -141,9 +150,21 @@ func resolve(v *vault.Vault, names []string) ([]resolved, error) {
 		if ttl, err := grantDuration(v.Config(), false, 0, false); err == nil {
 			ask += " --for " + shortDuration(ttl)
 		}
-		return nil, &agenterr.Error{Code: agenterr.NoGrant, Names: ungranted, AskHuman: ask}
+		e := &agenterr.Error{Code: agenterr.NoGrant, Names: ungranted, Changed: changed, AskHuman: ask}
+		if len(changed) > 0 {
+			e.Message = changedMessage(changed)
+		}
+		return nil, e
 	}
 	return out, nil
+}
+
+// changedMessage tells an agent why a grant it just used stopped working.
+func changedMessage(names []string) string {
+	if len(names) == 1 {
+		return names[0] + " changed in the vault after it was granted; its grant holds the old value, so ask for a new grant"
+	}
+	return strings.Join(names, ", ") + " changed in the vault after they were granted; their grants hold the old values, so ask for new grants"
 }
 
 func clearValues(rs []resolved) {

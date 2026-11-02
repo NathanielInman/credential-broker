@@ -26,7 +26,7 @@ func TestGrantd(t *testing.T) {
 	if _, err := os.Stat(p.GrantSocket()); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("a read started an agent")
 	}
-	if _, err := c.Add("API_TOKEN", []byte("token-value"), time.Minute); err != nil {
+	if _, err := c.Add("API_TOKEN", []byte("token-value"), "", time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Revoke("API_TOKEN") })

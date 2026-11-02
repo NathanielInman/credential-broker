@@ -32,6 +32,10 @@ var (
 type Secret struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
+	// Changed means the secret is still granted, but its value changed in
+	// the vault since, so the grant holds the old one: the request is for
+	// the new value.
+	Changed bool `json:"changed,omitempty"`
 }
 
 // Request is what the window shows. broker works out everything but

@@ -27,7 +27,7 @@ func agent(t *testing.T, idle time.Duration) (*Client, <-chan error) {
 
 func TestAgentAddReadRevoke(t *testing.T) {
 	c, _ := agent(t, time.Minute)
-	expires, err := c.Add("API_TOKEN", []byte("token-value"), 2*time.Hour)
+	expires, err := c.Add("API_TOKEN", []byte("token-value"), "v1", 2*time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,22 +37,25 @@ func TestAgentAddReadRevoke(t *testing.T) {
 	if v, err := c.Read("API_TOKEN"); err != nil || string(v) != "token-value" {
 		t.Fatalf("Read = %q, %v", v, err)
 	}
-	if g, err := c.Lookup("API_TOKEN"); err != nil || !g.Expires.Equal(expires) {
+	if g, err := c.Lookup("API_TOKEN"); err != nil || !g.Expires.Equal(expires) || g.Version != "v1" {
 		t.Fatalf("Lookup = %+v, %v", g, err)
 	}
-	if _, err := c.Add("DB_PASS", []byte("db"), time.Minute); err != nil {
+	if _, err := c.Add("DB_PASS", []byte("db"), "", time.Minute); err != nil {
 		t.Fatal(err)
 	}
-	if gs, err := c.List(); err != nil || len(gs) != 2 || gs[0].Name != "API_TOKEN" || gs[1].Name != "DB_PASS" {
+	if gs, err := c.List(); err != nil || len(gs) != 2 || gs[0].Name != "API_TOKEN" || gs[1].Name != "DB_PASS" || gs[0].Version != "v1" || gs[1].Version != "" {
 		t.Fatalf("List = %+v, %v", gs, err)
 	}
 
-	// Replacing a grant keeps the newest value.
-	if _, err := c.Add("API_TOKEN", []byte("new-value"), time.Minute); err != nil {
+	// Replacing a grant keeps the newest value and version.
+	if _, err := c.Add("API_TOKEN", []byte("new-value"), "v2", time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	if v, _ := c.Read("API_TOKEN"); string(v) != "new-value" {
 		t.Fatalf("Read after replace = %q", v)
+	}
+	if g, _ := c.Lookup("API_TOKEN"); g.Version != "v2" {
+		t.Fatalf("Lookup after replace = %+v", g)
 	}
 
 	if live, err := c.Revoke("API_TOKEN"); err != nil || !live {
@@ -68,7 +71,7 @@ func TestAgentAddReadRevoke(t *testing.T) {
 
 func TestAgentExpiry(t *testing.T) {
 	c, _ := agent(t, time.Minute)
-	if _, err := c.Add("API_TOKEN", []byte("token-value"), time.Second); err != nil {
+	if _, err := c.Add("API_TOKEN", []byte("token-value"), "", time.Second); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(2100 * time.Millisecond)
@@ -82,7 +85,7 @@ func TestAgentExpiry(t *testing.T) {
 
 func TestAgentExitsWhenIdle(t *testing.T) {
 	c, done := agent(t, 400*time.Millisecond)
-	if _, err := c.Add("API_TOKEN", []byte("v"), time.Second); err != nil {
+	if _, err := c.Add("API_TOKEN", []byte("v"), "", time.Second); err != nil {
 		t.Fatal(err)
 	}
 	// Holding a grant keeps it up past idle.
@@ -124,7 +127,7 @@ func TestAgentStartsForAdd(t *testing.T) {
 	if _, err := c.Read("X"); !errors.Is(err, ErrNotGranted) || starts != 0 {
 		t.Fatalf("Read: %v, %d starts", err, starts)
 	}
-	if _, err := c.Add("X", []byte("v"), time.Minute); err != nil || starts != 1 {
+	if _, err := c.Add("X", []byte("v"), "", time.Minute); err != nil || starts != 1 {
 		t.Fatalf("Add: %v, %d starts", err, starts)
 	}
 	if v, err := c.Read("X"); err != nil || string(v) != "v" {

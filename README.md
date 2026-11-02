@@ -83,6 +83,8 @@ sequenceDiagram
 
 The default duration is `1h` (`default_grant` in `~/.config/broker/config.json`) and the max is `24h` unless you pass `--force`. `broker revoke` drops grants early.
 
+A grant is a copy of the value, so changing the secret later (`broker set`, `import --overwrite`, `restore`, or the `age` CLI) leaves the grant holding the old one. Each grant remembers a hash of the encrypted file it came from, and `exec` checks it: once the secret has changed, `exec` refuses the grant instead of handing out the old value, `ls` shows it as `changed`, and the `no_grant` line lists it under `changed`. `exec --request` asks again, and the window marks the secret as changed and says why it's asking. There's nothing to revoke by hand.
+
 ### exec and redaction
 
 `exec` pulls public secrets from disk and private ones from the keyring, starts the command with them in its environment, and passes stdin, signals, and the exit status straight through. Values never go in argv and never touch disk.

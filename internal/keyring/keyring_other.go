@@ -14,7 +14,7 @@ type Keyring struct{}
 
 func User() (*Keyring, error) { return nil, errUnsupported }
 
-func (*Keyring) Add(string, []byte, time.Duration) (time.Time, error) {
+func (*Keyring) Add(string, []byte, string, time.Duration) (time.Time, error) {
 	return time.Time{}, errUnsupported
 }
 func (*Keyring) Read(string) ([]byte, error)  { return nil, errUnsupported }

@@ -16,6 +16,9 @@ type lsEntry struct {
 	vault.Secret
 	Granted bool       `json:"granted"`
 	Expires *time.Time `json:"expires"`
+	// Changed means a grant is still in place, but its value changed in
+	// the vault since: exec refuses it, and a new grant is needed.
+	Changed bool `json:"changed,omitempty"`
 }
 
 func newLsCmd() *cobra.Command {
@@ -42,14 +45,17 @@ func newLsCmd() *cobra.Command {
 			}
 			entries := make([]lsEntry, 0, len(secrets))
 			for _, s := range secrets {
-				var granted bool
-				var expires *time.Time
+				var st grantState
 				if krErr == nil {
-					if granted, expires, err = lookupGrant(kr, s.Name); err != nil {
+					if st, err = lookupGrant(kr, v, s.Name); err != nil {
 						return err
 					}
 				}
-				entries = append(entries, lsEntry{Secret: s, Granted: granted, Expires: expires})
+				e := lsEntry{Secret: s, Granted: st.Live, Changed: st.Changed}
+				if st.Live {
+					e.Expires = st.Expires
+				}
+				entries = append(entries, e)
 			}
 
 			out := c.OutOrStdout()
@@ -72,6 +78,8 @@ func newLsCmd() *cobra.Command {
 					grant = shortDuration(time.Until(*e.Expires).Round(time.Second))
 				case e.Granted:
 					grant = "granted"
+				case e.Changed:
+					grant = "changed"
 				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", e.Name, e.Tier, grant, e.Description)
 			}
