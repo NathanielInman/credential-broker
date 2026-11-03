@@ -451,7 +451,10 @@ TIME                 ACTION  RESULT    TIER     NAMES                 DETAIL    
 2026-10-21 21:48:45  exec    no_grant  private  GITHUB_TOKEN,DB_PASS  ./deploy.sh  bash < claude < zsh < alacritty < systemd
 2026-10-21 21:48:45  grant   ok        private  GITHUB_TOKEN,DB_PASS  for 2h       zsh < alacritty < systemd
 2026-10-21 21:48:45  exec    ok        private  GITHUB_TOKEN,DB_PASS  ./deploy.sh  bash < claude < zsh < alacritty < systemd
+2026-10-21 21:51:02  exit    ok        private  GITHUB_TOKEN,DB_PASS  ./deploy.sh after 2m17s  bash < claude < zsh < alacritty < systemd
 ```
+
+Each `exec` that got its secrets is followed by an `exit` when the command finishes, with its exit status (`exit 3` when it failed) and how long it ran. An `exec` with no `exit` is still running, or broker was killed under it.
 
 `--json` prints the raw lines. Values are never logged.
 

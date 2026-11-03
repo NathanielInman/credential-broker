@@ -36,6 +36,10 @@ const (
 	PhoneEnroll Action = "phone-enroll"
 	PhoneRm     Action = "phone-rm"
 	PhoneFCM    Action = "phone-fcm"
+	// Exit follows an exec whose child started: the child's status and how
+	// long it ran, under the same pid. An exec with no exit had broker
+	// killed before its child finished, or is still running.
+	Exit Action = "exit"
 )
 
 // Entry is one line of the log.
@@ -54,6 +58,11 @@ type Entry struct {
 	Cwd   string `json:"cwd"`
 	// Cmd is exec's child argv[0], never its arguments.
 	Cmd string `json:"cmd,omitempty"`
+	// Status is an exit's child status as a shell reports it: its exit
+	// code, or 128+N when signal N killed it. Absent when it never ran.
+	Status *int `json:"status,omitempty"`
+	// Took is how long an exit's child ran.
+	Took string `json:"took,omitempty"`
 	// Reason is the agent's stated reason for a request.
 	Reason   string   `json:"reason,omitempty"`
 	PID      int      `json:"pid"`

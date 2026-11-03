@@ -520,9 +520,10 @@ and talks to the key itself.
 
 ## Audit log
 
-One JSON object per line: `ts`, `action` (`init|set|rm|grant|revoke|get|exec|import|backup|restore|request|phone-enroll|phone-rm|phone-fcm`),
+One JSON object per line: `ts`, `action` (`init|set|rm|grant|revoke|get|exec|exit|import|backup|restore|request|phone-enroll|phone-rm|phone-fcm`),
 `names`, `tier`, `for` (a grant's duration), `ok`, `error`, `cwd`, `cmd`
-(exec's child argv[0] only), `pid`, and `ancestry`: the process chain from
+(exec's child argv[0] only), `status` and `took` (exit's child status and
+run time), `pid`, and `ancestry`: the process chain from
 `/proc/<pid>/stat` + `comm` up to pid 1, e.g.
 `["broker","bash","claude","zsh","alacritty"]`, so it shows which agent
 asked. Never log values. Log failures too (a denied `no_grant` is the most
@@ -530,7 +531,8 @@ useful line in the file).
 
 - `tier` is the names' tier, `mixed` when they span both, and absent when
   none is known (an unknown name). `error` is the agenterr code. Empty
-  `names`, `tier`, `for`, `error`, and `cmd` are left out.
+  `names`, `tier`, `for`, `error`, `cmd`, `status`, and `took` are left
+  out.
 - `ls` and `log` are not logged. Flag and argument errors cobra catches
   before a command runs are not logged; everything after is.
 - import logs the names it stored; `import --dry-run` is not logged.
@@ -539,9 +541,20 @@ useful line in the file).
   logs the names it revoked, with their tier, and none that had no grant. backup and restore log every secret
   the backup carries (tier usually `mixed`), so `--name` finds the backups
   holding a secret.
-- exec logs once, before the child starts (it may run for hours): `ok`
-  means the secrets were handed to the child. The child's exit status is
-  not logged.
+- exec logs before the child starts (it may run for hours): `ok` means
+  the secrets were handed to the child. Once the secrets were handed out,
+  an `exit` entry follows when the child is done, with the exec's names,
+  tier, cmd, and pid (they pair by pid): `status` as a shell reports it
+  (128+N when signal N killed it) and `took` (to the millisecond under a
+  second, to the second above). `ok` is true for status 0; any other
+  status is the child's outcome, not a broker failure, so it has no
+  `error`. A child that could not start (`command_not_found`,
+  `cannot_exec`) or whose output could not be copied gets that `error`
+  and no `status`. Signals sent to broker are forwarded and broker
+  outlives the child, so only a broker killed outright (SIGKILL, a crash,
+  power loss) leaves an exec without its exit. That is the point of the
+  pair: an exec with no exit is either still running or had broker killed
+  under it, never a command that quietly finished or failed.
 - Each line is one `O_APPEND` write under an exclusive `flock`, so
   concurrent brokers never interleave lines. The lock wait is bounded (1s)
   so a stopped broker cannot stall the rest; after that the write goes

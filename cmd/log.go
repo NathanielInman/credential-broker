@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -65,12 +66,19 @@ func newLogCmd() *cobra.Command {
 			fmt.Fprintln(tw, "TIME\tACTION\tRESULT\tTIER\tNAMES\tDETAIL\tFROM")
 			for _, l := range lines {
 				result := "ok"
-				if !l.OK {
+				switch {
+				case l.OK:
+				case l.Status != nil:
+					result = "exit " + strconv.Itoa(*l.Status)
+				default:
 					result = l.Error
 				}
 				detail := l.Cmd
 				if l.For != "" {
 					detail = "for " + l.For
+				}
+				if l.Took != "" {
+					detail += " after " + l.Took
 				}
 				// ancestry[0] is broker itself; the rest is who asked.
 				var from []string

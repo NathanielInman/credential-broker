@@ -38,8 +38,9 @@ func newExecCmd() *cobra.Command {
 			dash := c.ArgsLenAtDash()
 			names, argv := args[:dash], args[dash:]
 			// The entry goes in before the child runs, which may take hours:
-			// ok means its secrets were handed out. The child's own exit
-			// status is not logged.
+			// ok means its secrets were handed out. An exit entry follows
+			// once the child is done, so an exec without one is still
+			// running or had broker killed under it.
 			e := audit.Entry{Action: audit.Exec, Names: names, Cmd: argv[0]}
 			v, err := openVault()
 			if err != nil {
@@ -62,7 +63,10 @@ func newExecCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runChild(c, argv, secrets)
+			started := time.Now()
+			err = runChild(c, argv, secrets)
+			recordExit(c, e, err, time.Since(started))
+			return err
 		},
 	}
 	c.Flags().BoolVar(&request, "request", false, "ask the human for missing grants in a desktop window, then run")
@@ -216,6 +220,33 @@ func runChild(c *cobra.Command, argv []string, secrets []resolved) error {
 		return exitStatus(status)
 	}
 	return err
+}
+
+// recordExit logs how exec's child ended, under the exec entry's names,
+// tier, and cmd: ok with status 0, its status otherwise (not broker's
+// failure, so no error code), or the error that kept it from starting or
+// lost its output.
+func recordExit(c *cobra.Command, e audit.Entry, err error, took time.Duration) {
+	e.Action = audit.Exit
+	e.Took = runTime(took)
+	var status exitStatus
+	if err == nil || errors.As(err, &status) {
+		code := int(status)
+		e.Status = &code
+		e.OK = code == 0
+		appendEntry(c, e)
+		return
+	}
+	record(c, e, err)
+}
+
+// runTime is d to the millisecond under a second and to the second above,
+// as exit's took.
+func runTime(d time.Duration) string {
+	if d < time.Second {
+		return d.Round(time.Millisecond).String()
+	}
+	return d.Round(time.Second).String()
 }
 
 // redactUnlessTTY wraps w in a redactor unless w is a terminal, where a

@@ -21,6 +21,11 @@ func record(c *cobra.Command, e audit.Entry, err error) {
 	} else {
 		e.OK = true
 	}
+	appendEntry(c, e)
+}
+
+// appendEntry appends e as it is, best effort like record.
+func appendEntry(c *cobra.Command, e audit.Entry) {
 	p, werr := paths.Resolve()
 	if werr == nil {
 		werr = audit.Append(p.LogFile(), e)
