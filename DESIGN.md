@@ -567,6 +567,19 @@ useful line in the file).
   cmd or grant's duration, and the ancestry above broker). `--since DUR`
   keeps entries newer than DUR, `--name NAME` those naming NAME, and
   `--json` prints the matching lines as written.
+- The table also shows what it can work out from the whole log, filters
+  applied after:
+  - `expire` rows: grants run out in the kernel (or the grant agent) with
+    no broker running to log them, so the table computes them. A grant or
+    request entry that is `ok` with a `for` gives each of its names an
+    expiry at `ts` + `for`, unless a later grant, request, revoke, or rm
+    naming it comes first (a new grant replaces the old). An expiry goes
+    after any entry with the same time. Grants still live have no row;
+    `--json` never has these rows.
+  - `(running)` after an exec's cmd: it handed out its secrets, no exit
+    with its pid follows, and its pid is a live process with broker's
+    name (not this one). A reused pid can be marked by mistake; an exec
+    with no exit and no live broker is one whose broker was killed.
 
 ## Import
 

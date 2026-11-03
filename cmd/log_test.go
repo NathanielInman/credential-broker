@@ -298,11 +298,12 @@ func TestLogFilters(t *testing.T) {
 
 	out, _ := mustRun(t, "log")
 	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
-	if len(lines) != 5 || !strings.HasPrefix(lines[0], "TIME ") {
+	if len(lines) != 6 || !strings.HasPrefix(lines[0], "TIME ") {
 		t.Fatalf("human log:\n%s", out)
 	}
 	for i, want := range []string{
 		"grant  ok              private  A    for 1h  zsh < alacritty",
+		"expire -               private  A    after 1h  -",
 		"exec   no_grant        mixed    A,B  curl    bash < claude < zsh",
 		"set    ok              public   B    -       -",
 		"exit   exit 7          public   B    curl after 10m3s  bash < claude < zsh",
@@ -332,6 +333,97 @@ func TestLogFilters(t *testing.T) {
 	for _, args := range [][]string{{"log", "--since", "-1h"}, {"log", "--name", "lower"}, {"log", "x"}} {
 		if _, stderr, code := runStdin(t, "", args...); code != 64 || errorCode(t, stderr) != "usage" {
 			t.Errorf("%v: exit %d %s", args, code, stderr)
+		}
+	}
+}
+
+// TestLogComputedRows covers the rows broker log works out rather than
+// reads: grants that expired, and execs still running.
+func TestLogComputedRows(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BROKER_HOME", home)
+	file := filepath.Join(home, "state", "log.jsonl")
+	now := time.Now().UTC()
+	at := func(ago time.Duration) time.Time { return now.Add(-ago) }
+	for _, e := range []audit.Entry{
+		// A and B for 1h: B is revoked after 10m, A runs out.
+		{TS: at(5 * time.Hour), Action: audit.Grant, Names: []string{"A", "B"}, Tier: "private", For: "1h", OK: true},
+		{TS: at(5*time.Hour - 10*time.Minute), Action: audit.Revoke, Names: []string{"B"}, Tier: "private", OK: true},
+		// C is granted again before its first grant runs out: one expiry,
+		// the second grant's.
+		{TS: at(4 * time.Hour), Action: audit.Request, Names: []string{"C"}, Tier: "private", For: "1h", OK: true},
+		{TS: at(3*time.Hour + 30*time.Minute), Action: audit.Grant, Names: []string{"C"}, Tier: "private", For: "15m", OK: true},
+		// A denied request and a removed secret leave no expiry.
+		{TS: at(3 * time.Hour), Action: audit.Request, Names: []string{"D"}, Tier: "private", For: "1h", Error: "denied"},
+		{TS: at(3 * time.Hour), Action: audit.Grant, Names: []string{"E"}, Tier: "private", For: "1h", OK: true},
+		{TS: at(2*time.Hour + 30*time.Minute), Action: audit.Rm, Names: []string{"E"}, Tier: "private", OK: true},
+		// Still live: no expiry yet.
+		{TS: at(time.Minute), Action: audit.Grant, Names: []string{"F"}, Tier: "private", For: "1h", OK: true},
+		// pid 100 finished, pid 200 is running, pid 300's broker is gone.
+		{TS: at(50 * time.Second), Action: audit.Exec, Names: []string{"F"}, Tier: "private", Cmd: "a", OK: true, PID: 100},
+		{TS: at(40 * time.Second), Action: audit.Exit, Names: []string{"F"}, Tier: "private", Cmd: "a", OK: true, PID: 100,
+			Status: new(0), Took: "10s"},
+		{TS: at(30 * time.Second), Action: audit.Exec, Names: []string{"F"}, Tier: "private", Cmd: "b", OK: true, PID: 200},
+		{TS: at(20 * time.Second), Action: audit.Exec, Names: []string{"F"}, Tier: "private", Cmd: "c", OK: true, PID: 300},
+		// A denied exec never ran, whatever its pid.
+		{TS: at(10 * time.Second), Action: audit.Exec, Names: []string{"G"}, Tier: "private", Cmd: "d", Error: "no_grant", PID: 200},
+	} {
+		e.Ancestry = []string{"broker"}
+		if err := audit.Append(file, e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	brokerAlive = func(pid int) bool { return pid == 100 || pid == 200 }
+	t.Cleanup(func() {
+		brokerAlive = defaultBrokerAlive
+	})
+
+	rows := func(args ...string) []string {
+		t.Helper()
+		out, _ := mustRun(t, append([]string{"log"}, args...)...)
+		var got []string
+		for _, line := range strings.Split(strings.TrimSuffix(out, "\n"), "\n")[1:] {
+			// Drop the date and time.
+			got = append(got, strings.Join(strings.Fields(line)[2:], " "))
+		}
+		return got
+	}
+	want := []string{
+		"grant ok private A,B for 1h -",
+		"revoke ok private B - -",
+		// An expiry at the same time as an entry goes after it.
+		"request ok private C for 1h -",
+		"expire - private A after 1h -",
+		"grant ok private C for 15m -",
+		"expire - private C after 15m -",
+		"request denied private D for 1h -",
+		"grant ok private E for 1h -",
+		"rm ok private E - -",
+		"grant ok private F for 1h -",
+		"exec ok private F a -",
+		"exit ok private F a after 10s -",
+		"exec ok private F b (running) -",
+		"exec ok private F c -",
+		"exec no_grant private G d -",
+	}
+	if got := rows(); !slices.Equal(got, want) {
+		t.Fatalf("log:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if got, want := rows("--name", "C"), []string{
+		"request ok private C for 1h -",
+		"grant ok private C for 15m -",
+		"expire - private C after 15m -",
+	}; !slices.Equal(got, want) {
+		t.Errorf("log --name C:\n%s", strings.Join(got, "\n"))
+	}
+	// The expiry is filtered by its own time, not its grant's.
+	if got := rows("--since", "3h20m", "--name", "C"); !slices.Equal(got, []string{"expire - private C after 15m -"}) {
+		t.Errorf("log --since 3h20m --name C:\n%s", strings.Join(got, "\n"))
+	}
+	// Computed rows are never in --json.
+	for _, e := range auditLog(t) {
+		if e.Action == "expire" {
+			t.Errorf("--json has a computed row %+v", e)
 		}
 	}
 }

@@ -454,7 +454,7 @@ TIME                 ACTION  RESULT    TIER     NAMES                 DETAIL    
 2026-10-21 21:51:02  exit    ok        private  GITHUB_TOKEN,DB_PASS  ./deploy.sh after 2m17s  bash < claude < zsh < alacritty < systemd
 ```
 
-Each `exec` that got its secrets is followed by an `exit` when the command finishes, with its exit status (`exit 3` when it failed) and how long it ran. An `exec` with no `exit` is still running, or broker was killed under it.
+Each `exec` that got its secrets is followed by an `exit` when the command finishes, with its exit status (`exit 3` when it failed) and how long it ran. An `exec` with no `exit` is marked `(running)` while its broker is alive; otherwise broker was killed under it. Grants run out with nothing running to log it, so the table adds an `expire` row for each one from its grant's time and duration (unless a revoke or a new grant got there first). `--json` has only what was written.
 
 `--json` prints the raw lines. Values are never logged.
 
