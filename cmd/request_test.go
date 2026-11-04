@@ -258,6 +258,41 @@ func TestRequestAlreadyGranted(t *testing.T) {
 	}
 }
 
+func TestRequestExtends(t *testing.T) {
+	grantVault(t)
+	mustRun(t, "grant", "API_TOKEN", "--for", "10m")
+	log := useWindow(t, "approve")
+	if out, _ := mustRun(t, "request", "API_TOKEN", "--for", "8h"); !strings.HasPrefix(out, "granted API_TOKEN for 8h ") {
+		t.Fatalf("request output %q", out)
+	}
+	if d := time.Until(granted(t)["API_TOKEN"]); d < 7*time.Hour {
+		t.Fatalf("grant lasts %s, want the 8h asked for", d)
+	}
+	// The window says the grant is live and being extended.
+	req, _ := shown(t, log)
+	if len(req.Secrets) != 1 || req.Secrets[0].Expires == nil || time.Until(*req.Secrets[0].Expires) > 10*time.Minute {
+		t.Fatalf("window showed %+v", req.Secrets)
+	}
+}
+
+func TestRequestLongEnoughGrant(t *testing.T) {
+	grantVault(t)
+	mustRun(t, "grant", "API_TOKEN", "--for", "8h")
+	launches := 0
+	orig := launchApprover
+	launchApprover = func(context.Context, []byte, io.Writer) ([]byte, error) {
+		launches++
+		return nil, nil
+	}
+	t.Cleanup(func() { launchApprover = orig })
+	// Asking again for what is (nearly all) left, or for less, needs no window.
+	for _, dur := range []string{"8h", "1h"} {
+		if out, _ := mustRun(t, "request", "API_TOKEN", "--for", dur); out != "" || launches != 0 {
+			t.Fatalf("--for %s: output %q, %d windows for a grant that lasts long enough", dur, out, launches)
+		}
+	}
+}
+
 func TestRequestUnknownName(t *testing.T) {
 	grantVault(t)
 	useWindow(t, "approve")

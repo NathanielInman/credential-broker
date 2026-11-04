@@ -53,7 +53,7 @@ func newExecCmd() *cobra.Command {
 				var ttl time.Duration
 				if ttl, err = grantDuration(v.Config(), false, 0, false); err == nil {
 					// Grant lines go to stderr: stdout is the child's.
-					err = requestGrants(c, v, names, ttl, reason, argv, requestTimeout, c.ErrOrStderr())
+					err = requestGrants(c, v, names, ttl, false, reason, argv, requestTimeout, c.ErrOrStderr())
 				}
 				if err == nil {
 					secrets, err = resolve(v, names)

@@ -61,6 +61,9 @@ type requestFile struct {
 	Command  []string  `json:"command,omitempty"`
 	PID      int       `json:"pid"`
 	Deadline time.Time `json:"deadline"`
+	// Extend asks again for live grants that end too soon for For (see
+	// extendUntil), not only for missing ones.
+	Extend bool `json:"extend,omitempty"`
 }
 
 // requestResult is the approver's answer on stdout.
@@ -86,7 +89,9 @@ func newRequestCmd() *cobra.Command {
 		Long: "request opens a window on the human's desktop asking them to grant the\n" +
 			"private NAMEs, and waits (up to --timeout) for them to approve with a\n" +
 			"touch, their passphrase, or a click, depending on the vault. --reason is\n" +
-			"shown to them as your words. Names already granted need nothing.",
+			"shown to them as your words. Names already granted need nothing, unless\n" +
+			"--for asks for longer than their grant has left: then the window offers\n" +
+			"to extend it.",
 		GroupID: groupAgent,
 		Args:    usageArgs(cobra.MinimumNArgs(1)),
 		RunE: func(c *cobra.Command, names []string) error {
@@ -99,7 +104,8 @@ func newRequestCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return requestGrants(c, v, names, ttl, reason, nil, timeout, c.OutOrStdout())
+			extend := c.Flags().Changed("for")
+			return requestGrants(c, v, names, ttl, extend, reason, nil, timeout, c.OutOrStdout())
 		},
 	}
 	c.Flags().DurationVar(&dur, "for", 0, "grant duration to ask for (default from config, max 24h)")
@@ -109,11 +115,16 @@ func newRequestCmd() *cobra.Command {
 }
 
 // requestGrants asks the human, in the request window, to grant whichever
-// private names have no live grant, and reports each grant on out. When
+// private names have no live grant (with extend, or one that ends too soon
+// for ttl), and reports each grant on out. When
 // there is no window to ask in, it fails with the same no_grant error exec
 // gives, so the agent can still hand the human a terminal command.
-func requestGrants(c *cobra.Command, v *vault.Vault, names []string, ttl time.Duration, reason string, argv []string, timeout time.Duration, out io.Writer) error {
-	missing, err := ungranted(v, names)
+func requestGrants(c *cobra.Command, v *vault.Vault, names []string, ttl time.Duration, extend bool, reason string, argv []string, timeout time.Duration, out io.Writer) error {
+	var until time.Time
+	if extend {
+		until = extendUntil(ttl)
+	}
+	missing, err := ungranted(v, names, until)
 	if err != nil || len(missing) == 0 {
 		return err
 	}
@@ -153,6 +164,7 @@ func requestGrants(c *cobra.Command, v *vault.Vault, names []string, ttl time.Du
 		Command:  argv,
 		PID:      os.Getpid(),
 		Deadline: time.Now().Add(timeout).UTC(),
+		Extend:   extend,
 	})
 	if err != nil {
 		return err
@@ -207,12 +219,23 @@ type missingGrant struct {
 	// Changed means it is still granted, but with a value the vault has
 	// since replaced, so this asks again for the new one.
 	Changed bool
+	// Expires is set when the grant is live but ends before the duration
+	// asked for, so this asks to extend it.
+	Expires *time.Time
+}
+
+// extendUntil is how long a live grant must last for a request asking for
+// ttl to leave it be: ttl from now, less a tenth of it (a minute at
+// least), so asking twice in a row does not open a second window.
+func extendUntil(ttl time.Duration) time.Time {
+	return time.Now().Add(ttl - max(ttl/10, time.Minute))
 }
 
 // ungranted resolves names to the private secrets among them without a
-// live grant, including those whose grant holds a value since changed.
-// Unknown names fail, since no grant would fix them.
-func ungranted(v *vault.Vault, names []string) ([]missingGrant, error) {
+// live grant, including those whose grant holds a value since changed,
+// and, when until is set, those whose live grant ends before it. Unknown
+// names fail, since no grant would fix them.
+func ungranted(v *vault.Vault, names []string, until time.Time) ([]missingGrant, error) {
 	var out []vault.Secret
 	var unknown []string
 	seen := map[string]bool{}
@@ -249,8 +272,11 @@ func ungranted(v *vault.Vault, names []string) ([]missingGrant, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !st.Live {
+		switch {
+		case !st.Live:
 			missing = append(missing, missingGrant{Secret: s, Changed: st.Changed})
+		case !until.IsZero() && st.Expires != nil && st.Expires.Before(until):
+			missing = append(missing, missingGrant{Secret: s, Expires: st.Expires})
 		}
 	}
 	return missing, nil
@@ -409,7 +435,11 @@ func approve(req *requestFile, e *audit.Entry, stderr io.Writer) (requestResult,
 		return res, requestErr(err)
 	}
 	defer unlock()
-	secrets, err := ungranted(v, req.Names)
+	var until time.Time
+	if req.Extend {
+		until = extendUntil(ttl)
+	}
+	secrets, err := ungranted(v, req.Names, until)
 	if err != nil || len(secrets) == 0 {
 		return res, err
 	}
@@ -451,7 +481,7 @@ func approve(req *requestFile, e *audit.Entry, stderr io.Writer) (requestResult,
 	}
 	shown.Approve, shown.Device = approveBy(v.Config())
 	for _, s := range secrets {
-		shown.Secrets = append(shown.Secrets, approval.Secret{Name: s.Name, Description: s.Description, Changed: s.Changed})
+		shown.Secrets = append(shown.Secrets, approval.Secret{Name: s.Name, Description: s.Description, Changed: s.Changed, Expires: s.Expires})
 	}
 	var remotes []approval.Remote
 	var phoneUnlocks <-chan phone.Unlock

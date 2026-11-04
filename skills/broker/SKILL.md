@@ -27,6 +27,8 @@ description: Credentials through the `broker` CLI. Use whenever a task needs an 
    Written straight into the arguments (`-- curl -H "Authorization: Bearer $GITHUB_TOKEN" ...`), the variable expands in your own shell first, where it is empty.
 3. **Read the result** by exit status and stderr (next section).
 
+To extend a live grant (the human is stepping away and the task will outlast it), ask with an explicit duration: `broker request --reason "WHY" --for 8h NAME...` (24h at most). If the grant ends sooner than that, the human gets a window to approve the longer grant, as above; if it already lasts about that long, nothing opens and nothing prints. Without `--for`, a live grant is left alone.
+
 Private values in the child's stdout and stderr come back as `[REDACTED:NAME]`. That is expected: the command saw the real value and worked. Leave the value unrecovered. Public values are not redacted, and `broker get NAME` prints a public one.
 
 Keep each value inside the exec'd process: run `broker exec` per command (not `export` into your shell), and keep values out of files, commits, logs, and chat. Redaction covers only the child's output streams, not files it writes. A private `broker get` needs a hardware touch and would print the value into your transcript; use `exec`.

@@ -36,6 +36,9 @@ type Secret struct {
 	// the vault since, so the grant holds the old one: the request is for
 	// the new value.
 	Changed bool `json:"changed,omitempty"`
+	// Expires is set when the secret is still granted, until then, and the
+	// request is to extend the grant.
+	Expires *time.Time `json:"expires,omitempty"`
 }
 
 // Request is what the window shows. broker works out everything but

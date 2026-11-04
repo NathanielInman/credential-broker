@@ -297,9 +297,13 @@ sees, so it can't hand them a `broker grant` to type. `request` (and
 their desktop instead.
 
 - `request` (agent side) resolves the names to private ones without a live
-  grant (a changed grant is not live). None: done, no window. Else it
+  grant (a changed grant is not live). With an explicit `--for` it also
+  takes live grants that end before `extendUntil`: the duration from now,
+  less a tenth of it (a minute at least), so asking twice in a row opens
+  one window, not two. `exec --request` never extends: it only asks for
+  what it can't run without. None: done, no window. Else it
   writes the request as JSON (names, duration, reason, command, its own
-  PID, a deadline) to the stdin
+  PID, a deadline, whether to extend) to the stdin
   of `broker approve`, started with `systemd-run --user --wait --pipe
   --collect` and an allowlisted environment (`approverEnv`), and reads one
   JSON result line from its stdout. Without systemd it starts it with
@@ -347,6 +351,8 @@ their desktop instead.
   with the error showing; other unlock failures offer Try again; three
   failures end the request. The human may pick a shorter duration (the
   asked one, and 5m, 15m, 1h, 4h below it) until the grant is written.
+  A secret being extended carries its grant's `expires`; the window and
+  phone tag it with the time left and say approving replaces the grant.
 - Outcomes: granted (exit 0, one `granted NAME for DUR (until ...)` line
   per name, on stderr for exec), `denied` (exit 77: Deny, Escape, or
   closing the window), `request_timeout` (exit 75, with `ask_human`).
