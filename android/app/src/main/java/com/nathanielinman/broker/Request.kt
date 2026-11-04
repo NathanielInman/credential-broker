@@ -7,9 +7,15 @@ import java.time.OffsetDateTime
 
 /**
  * One secret a request asks for. [changed] means it is still granted, but its value changed in the
- * vault since, so the grant holds the old one and the request is for the new value.
+ * vault since, so the grant holds the old one and the request is for the new value. [expires] is
+ * set when it is still granted until then, and the request is to extend the grant.
  */
-data class Secret(val name: String, val description: String, val changed: Boolean = false)
+data class Secret(val name: String, val description: String, val changed: Boolean = false, val expires: Instant? = null) {
+    /** How long the live grant has left, to the minute, as the window says it. */
+    fun left(now: Instant = Instant.now()): String? = expires?.let {
+        human(maxOf(60L, Math.round((it.epochSecond - now.epochSecond) / 60.0) * 60)) + " left"
+    }
+}
 
 /** A grant request, as broker shows it in the desktop window. */
 data class Request(
@@ -45,6 +51,16 @@ data class Request(
             "so the grant holds the old one. Approving grants the new ${if (one) "value" else "values"}."
     }
 
+    /** Why a request asks for secrets that are still granted but end too soon, or null. */
+    fun extendNote(): String? {
+        val names = secrets.filter { it.expires != null }.map { it.name }
+        if (names.isEmpty()) return null
+        val one = names.size == 1
+        val list = if (names.size < 3) names.joinToString(" and ") else names.dropLast(1).joinToString(", ") + ", and " + names.last()
+        return "Extending: $list ${if (one) "is" else "are"} still granted, but ${if (one) "ends" else "end"} sooner than asked. " +
+            "Approving replaces the ${if (one) "grant with a new one" else "grants with new ones"} for the time below."
+    }
+
     /** [path] with the home directory shortened to ~. */
     fun tilde(path: String): String = when {
         home.isEmpty() || path.isEmpty() -> path
@@ -55,7 +71,11 @@ data class Request(
     companion object {
         fun parse(o: JSONObject): Request = Request(
             secrets = o.optJSONArray("secrets").objects().map {
-                Secret(it.optString("name"), it.optString("description"), it.optBoolean("changed"))
+                Secret(
+                    it.optString("name"), it.optString("description"), it.optBoolean("changed"),
+                    it.optString("expires").takeIf { e -> e.isNotEmpty() }
+                        ?.let { e -> runCatching { OffsetDateTime.parse(e).toInstant() }.getOrNull() },
+                )
             },
             forSecs = o.optLong("for"),
             choices = o.optJSONArray("choices").longs(),

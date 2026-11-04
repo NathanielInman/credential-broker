@@ -260,6 +260,22 @@ private fun Mono(text: String, color: Color = LocalPalette.current.fg) {
     Text(text, color = color, fontFamily = FontFamily.Monospace, fontSize = 14.sp, lineHeight = 20.sp)
 }
 
+/** A small label beside a secret's name. */
+@Composable
+private fun Tag(text: String) {
+    val p = LocalPalette.current
+    Text(
+        text,
+        color = p.claimFg,
+        fontSize = 12.sp,
+        modifier = Modifier
+            .padding(start = 6.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .background(p.claimBg)
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+    )
+}
+
 /** Seconds until [deadline] as m:ss, ticking. */
 @Composable
 private fun countdown(deadline: Instant): String {
@@ -498,25 +514,15 @@ private fun AskingScreen(s: Screen.Asking, autoClose: Boolean, model: BrokerMode
         Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Mono(secret.name)
-                if (secret.changed) {
-                    Text(
-                        "changed",
-                        color = p.claimFg,
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .padding(start = 6.dp)
-                            .clip(RoundedCornerShape(5.dp))
-                            .background(p.claimBg)
-                            .padding(horizontal = 6.dp, vertical = 1.dp),
-                    )
-                }
+                if (secret.changed) Tag("changed")
+                secret.left()?.let { Tag(it) }
             }
             if (secret.description.isNotEmpty()) {
                 Text(secret.description, color = p.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp))
             }
         }
     }
-    r.changedNote()?.let { note ->
+    listOfNotNull(r.changedNote(), r.extendNote()).forEach { note ->
         Boxed(p.panel, p.primary) { Text(note, color = p.fg, fontSize = 14.sp, lineHeight = 20.sp) }
     }
 

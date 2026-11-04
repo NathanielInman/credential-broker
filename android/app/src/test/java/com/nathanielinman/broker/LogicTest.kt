@@ -99,6 +99,20 @@ class LogicTest {
     }
 
     @Test
+    fun explainsExtendedSecrets() {
+        val now = java.time.Instant.parse("2026-11-04T12:00:00Z")
+        val a = Secret("A", "", expires = now.plusSeconds(12 * 60 + 20))
+        val r = Request(listOf(a, Secret("B", "")), 0, emptyList(), now, emptyList(), "", "", emptyList(), "")
+        assertEquals("12 min left", a.left(now))
+        assertNull(Secret("B", "").left(now))
+        assertEquals(
+            "Extending: A is still granted, but ends sooner than asked. " +
+                "Approving replaces the grant with a new one for the time below.",
+            r.extendNote(),
+        )
+    }
+
+    @Test
     fun quotesLikeAShell() {
         assertEquals("gh pr list 'a b' 'it'\\''s'", quote(listOf("gh", "pr", "list", "a b", "it's")))
     }
