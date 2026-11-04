@@ -235,6 +235,23 @@ function changedNote(secrets) {
     (one ? "value." : "values."));
 }
 
+// extendNote explains a request for secrets that are still granted but
+// end sooner than asked: approving replaces the grants.
+function extendNote(secrets) {
+  const names = secrets.filter((s) => s.expires).map((s) => s.name);
+  if (!names.length) return null;
+  const one = names.length === 1;
+  const list = names.length < 3 ? names.join(" and ") : names.slice(0, -1).join(", ") + ", and " + names[names.length - 1];
+  return el("div", { class: "changed" }, "Extending: " + list + (one ? " is" : " are") +
+    " still granted, but " + (one ? "ends" : "end") + " sooner than asked. Approving replaces the " +
+    (one ? "grant with a new one" : "grants with new ones") + " for the time below.");
+}
+
+// grantLeft is how long a secret's live grant has left, to the minute.
+function grantLeft(s) {
+  return human(Math.max(60, Math.round((Date.parse(s.expires) - Date.now()) / 60000) * 60)) + " left";
+}
+
 function human(secs) {
   if (secs % 3600 === 0) { const h = secs / 3600; return h + (h === 1 ? " hour" : " hours"); }
   if (secs < 3600 && secs % 60 === 0) return (secs / 60) + " min";
@@ -417,9 +434,11 @@ class Watch {
         this.phase === "done" ? "broker request" : "broker request · expires in " + this.left()),
       el("div", { class: "label" }, n === 1 ? "Secret" : "Secrets"),
       ...r.secrets.map((s) => el("div", { class: "secret" },
-        el("div", {}, el("span", { class: "mono" }, s.name), s.changed ? el("span", { class: "tag" }, "changed") : null),
+        el("div", {}, el("span", { class: "mono" }, s.name), s.changed ? el("span", { class: "tag" }, "changed") : null,
+          s.expires ? el("span", { class: "tag" }, grantLeft(s)) : null),
         s.description ? el("div", { class: "desc" }, s.description) : null)),
       changedNote(r.secrets),
+      extendNote(r.secrets),
       el("div", { class: "label" }, "Request"),
       el("div", { class: "grid" },
         el("div", { class: "k" }, "For"), el("div", { class: "v" }, forView),

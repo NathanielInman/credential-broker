@@ -244,6 +244,22 @@ function changedNote(secrets) {
     (one ? "value." : "values."));
 }
 
+// extendNote explains a request for secrets that are still granted but
+// end sooner than asked: approving replaces the grants.
+function extendNote(secrets) {
+  const names = secrets.filter((s) => s.expires).map((s) => s.name);
+  if (!names.length) return null;
+  const one = names.length === 1;
+  return el("div", { class: "changed" }, "Extending: " + list(names) + (one ? " is" : " are") +
+    " still granted, but " + (one ? "ends" : "end") + " sooner than asked. Approving replaces the " +
+    (one ? "grant with a new one" : "grants with new ones") + " for the time below.");
+}
+
+// grantLeft is how long a secret's live grant has left, to the minute.
+function grantLeft(s) {
+  return human(Math.max(60, Math.round((Date.parse(s.expires) - Date.now()) / 60000) * 60)) + " left";
+}
+
 function list(names) {
   return names.length < 3 ? names.join(" and ") : names.slice(0, -1).join(", ") + ", and " + names[names.length - 1];
 }
@@ -289,9 +305,11 @@ function render() {
         el("div", { class: "sub", id: "sub" }, state.done ? "broker request" : "broker request · expires in " + left()))),
     el("div", { class: "label" }, n === 1 ? "Secret" : "Secrets"),
     ...r.secrets.map((s) => el("div", { class: "secret" },
-      el("span", {}, el("span", { class: "mono" }, s.name), s.changed ? el("span", { class: "tag" }, "changed") : null),
+      el("span", {}, el("span", { class: "mono" }, s.name), s.changed ? el("span", { class: "tag" }, "changed") : null,
+        s.expires ? el("span", { class: "tag" }, grantLeft(s)) : null),
       s.description ? el("span", { class: "desc" }, s.description) : null)),
     changedNote(r.secrets),
+    extendNote(r.secrets),
     el("div", { class: "label" }, "Request"), grid,
     r.reason ? el("div", { class: "claim" }, el("div", { class: "who" }, "The agent says (unverified)"), r.reason) : null,
     el("div", { class: "note" }, "While granted, any agent on this machine can use " + (n === 1 ? "it" : "them") + ", not just this one."),
