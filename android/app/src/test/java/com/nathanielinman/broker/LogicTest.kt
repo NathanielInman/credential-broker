@@ -2,7 +2,9 @@ package com.nathanielinman.broker
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.security.MessageDigest
 
@@ -58,6 +60,26 @@ class LogicTest {
         val picking = Screen.Asking(req(3600), phase = Phase.Key, picked = 900)
         assertEquals(picking, picking.showing(req(3600)))
         assertEquals(Screen.Asking(req(3600)), Screen.Idle().showing(req(3600)))
+    }
+
+    @Test
+    fun closesItselfOnlyOnItsOwnGrant() {
+        val r = Request(
+            emptyList(), 300, listOf(300), java.time.Instant.EPOCH,
+            emptyList(), "", "", emptyList(), "",
+        )
+        val granted = Outcome("Granted for 5m", false)
+        val mine = Screen.Asking(r, phase = Phase.Unlocking).finished(granted)
+        assertEquals(Screen.Asking(r, phase = Phase.Done, outcome = granted, approved = true), mine)
+        assertTrue(mine.closesItself(true))
+        assertFalse(mine.closesItself(false))
+
+        // Granted on the PC while the phone only looked, or a failed unlock.
+        assertFalse(Screen.Asking(r).finished(granted).closesItself(true))
+        assertFalse(Screen.Asking(r, phase = Phase.Unlocking).finished(Outcome("Wrong key", true)).closesItself(true))
+        assertFalse(Screen.Asking(r, phase = Phase.Denying).finished(Outcome("Denied", true)).closesItself(true))
+        assertEquals(Screen.Idle("Granted for 5m", false), Screen.Idle().finished(granted))
+        assertFalse(Screen.Idle().finished(granted).closesItself(true))
     }
 
     @Test

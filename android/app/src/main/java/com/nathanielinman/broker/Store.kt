@@ -26,8 +26,19 @@ object Store {
     private const val FCM_STALE = "fcm_stale"
     private const val DONE = "done"
 
+    private const val AUTO_CLOSE = "auto_close"
+
     private fun prefs(ctx: Context): SharedPreferences =
         ctx.applicationContext.getSharedPreferences("broker", Context.MODE_PRIVATE)
+
+    /** The human's choices, kept apart so enrolling again or forgetting the PC leaves them. */
+    private fun settings(ctx: Context): SharedPreferences =
+        ctx.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
+
+    /** Whether the app closes itself once this phone's approval is granted; on unless turned off. */
+    fun autoClose(ctx: Context): Boolean = settings(ctx).getBoolean(AUTO_CLOSE, true)
+
+    fun setAutoClose(ctx: Context, on: Boolean) = settings(ctx).edit { putBoolean(AUTO_CLOSE, on) }
 
     fun enrollment(ctx: Context): Enrollment? {
         val p = prefs(ctx)

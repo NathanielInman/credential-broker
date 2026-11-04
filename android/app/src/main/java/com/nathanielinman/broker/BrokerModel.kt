@@ -48,6 +48,8 @@ sealed interface Screen {
         val error: String? = null,
         val status: Outcome? = null,
         val outcome: Outcome? = null,
+        /** Broker granted what this phone approved, as opposed to an answer from elsewhere. */
+        val approved: Boolean = false,
     ) : Screen
 }
 
@@ -59,6 +61,18 @@ sealed interface Screen {
 fun Screen.showing(r: Request): Screen =
     if (this is Screen.Asking && phase != Phase.Done) copy(request = r) else Screen.Asking(r)
 
+/**
+ * The screen once broker says a request is over with [o]. Only a grant
+ * that follows this phone's own unlock counts as approved here.
+ */
+fun Screen.finished(o: Outcome): Screen =
+    if (this is Screen.Asking) copy(phase = Phase.Done, outcome = o, approved = phase == Phase.Unlocking && !o.bad)
+    else Screen.Idle(o.text, o.bad)
+
+/** Whether the app should close itself on [this] screen, with auto close [on]. */
+fun Screen.closesItself(on: Boolean): Boolean =
+    on && this is Screen.Asking && phase == Phase.Done && approved
+
 /** The phone's key as the PC knows it, from each poll. */
 private data class KeyInfo(val rpId: String, val credential: ByteArray, val salt: ByteArray)
 
@@ -67,6 +81,9 @@ class BrokerModel(app: Application) : AndroidViewModel(app) {
 
     private val _screen = MutableStateFlow<Screen>(Screen.Loading)
     val screen: StateFlow<Screen> = _screen
+
+    private val _autoClose = MutableStateFlow(Store.autoClose(app))
+    val autoClose: StateFlow<Boolean> = _autoClose
 
     /** The activity's key reader, while there is an activity. */
     var reader: KeyReader? = null
@@ -184,10 +201,7 @@ class BrokerModel(app: Application) : AndroidViewModel(app) {
             "status" -> _screen.update { s ->
                 if (s is Screen.Asking && s.phase == Phase.Unlocking) s.copy(status = Outcome(m.optString("text"), m.optBoolean("error"))) else s
             }
-            "done" -> _screen.update { s ->
-                val o = Outcome(m.optString("text"), m.optBoolean("error"))
-                if (s is Screen.Asking) s.copy(phase = Phase.Done, outcome = o) else Screen.Idle(o.text, o.bad)
-            }
+            "done" -> _screen.update { s -> s.finished(Outcome(m.optString("text"), m.optBoolean("error"))) }
         }
     }
 
@@ -233,6 +247,11 @@ class BrokerModel(app: Application) : AndroidViewModel(app) {
                 _screen.update { cur -> if (cur is Screen.Asking && cur.phase != Phase.Done) cur.copy(phase = Phase.Request, error = msg) else cur }
             }
         }
+    }
+
+    fun setAutoClose(on: Boolean) {
+        Store.setAutoClose(ctx, on)
+        _autoClose.value = on
     }
 
     /** Stops waiting for the key. */

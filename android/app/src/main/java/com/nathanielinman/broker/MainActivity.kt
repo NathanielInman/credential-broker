@@ -43,9 +43,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             BrokerTheme {
                 val screen by model.screen.collectAsStateWithLifecycle()
+                val autoClose by model.autoClose.collectAsStateWithLifecycle()
                 val enrollment = Store.enrollment(this)
                 BrokerScreen(
                     screen = screen,
+                    autoClose = autoClose,
                     model = model,
                     actions = actions,
                     origin = enrollment?.origin,

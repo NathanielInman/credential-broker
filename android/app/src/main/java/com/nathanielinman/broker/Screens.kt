@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -29,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -51,6 +53,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,7 +70,7 @@ class Actions(
 )
 
 @Composable
-fun BrokerScreen(screen: Screen, model: BrokerModel, actions: Actions, origin: String?, notifying: Boolean, stale: Boolean) {
+fun BrokerScreen(screen: Screen, autoClose: Boolean, model: BrokerModel, actions: Actions, origin: String?, notifying: Boolean, stale: Boolean) {
     val p = LocalPalette.current
     Box(
         Modifier
@@ -89,7 +92,7 @@ fun BrokerScreen(screen: Screen, model: BrokerModel, actions: Actions, origin: S
                 is Screen.Setup -> SetupScreen(screen, actions)
                 is Screen.Enrolling -> EnrollingScreen(screen, model)
                 is Screen.Idle -> IdleScreen(screen, model, actions, origin, notifying, stale)
-                is Screen.Asking -> AskingScreen(screen, model, actions)
+                is Screen.Asking -> AskingScreen(screen, autoClose, model, actions)
             }
         }
     }
@@ -479,7 +482,7 @@ private fun IdleScreen(s: Screen.Idle, model: BrokerModel, actions: Actions, ori
 }
 
 @Composable
-private fun AskingScreen(s: Screen.Asking, model: BrokerModel, actions: Actions) {
+private fun AskingScreen(s: Screen.Asking, autoClose: Boolean, model: BrokerModel, actions: Actions) {
     val p = LocalPalette.current
     val r = s.request
     val n = r.secrets.size
@@ -543,8 +546,18 @@ private fun AskingScreen(s: Screen.Asking, model: BrokerModel, actions: Actions)
         Phase.Done -> {
             val o = s.outcome ?: Outcome("This request is over", true)
             Result(o.text, o.bad)
-            Spacer(Modifier.height(22.dp))
-            SecondaryButton("Close", actions.close)
+            if (s.closesItself(autoClose)) {
+                // Long enough to see the grant before the app goes.
+                LaunchedEffect(s) {
+                    delay(1200)
+                    actions.close()
+                }
+                Waiting("Closing…")
+            } else {
+                Spacer(Modifier.height(22.dp))
+                SecondaryButton("Close", actions.close)
+                AutoClose(autoClose, model::setAutoClose)
+            }
         }
         Phase.Key -> Touch("Touch your YubiKey", "Plugged into this phone, or held to its back.", onCancel = model::cancelKey)
         Phase.Denying -> Waiting("Denying…")
@@ -558,7 +571,23 @@ private fun AskingScreen(s: Screen.Asking, model: BrokerModel, actions: Actions)
             PrimaryButton("Approve with security key", model::approve)
             Spacer(Modifier.height(10.dp))
             SecondaryButton("Deny", model::deny)
+            AutoClose(autoClose, model::setAutoClose)
         }
+    }
+}
+
+@Composable
+private fun AutoClose(on: Boolean, onChange: (Boolean) -> Unit) {
+    val p = LocalPalette.current
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(top = 10.dp)
+            .fillMaxWidth()
+            .toggleable(value = on, role = Role.Checkbox, onValueChange = onChange),
+    ) {
+        Checkbox(checked = on, onCheckedChange = null)
+        Text("Auto close on approval", color = p.muted, fontSize = 15.sp, modifier = Modifier.padding(start = 8.dp))
     }
 }
 
