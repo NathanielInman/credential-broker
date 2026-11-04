@@ -133,6 +133,9 @@ func entryRow(l audit.Line, running bool) logRow {
 	if l.Took != "" {
 		detail += " after " + l.Took
 	}
+	if l.Via != "" {
+		detail += " via " + l.Via
+	}
 	if running {
 		detail += " (running)"
 	}

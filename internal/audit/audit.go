@@ -64,7 +64,10 @@ type Entry struct {
 	// Took is how long an exit's child ran.
 	Took string `json:"took,omitempty"`
 	// Reason is the agent's stated reason for a request.
-	Reason   string   `json:"reason,omitempty"`
+	Reason string `json:"reason,omitempty"`
+	// Via is where an approved request was approved: "desktop" for the
+	// request window, or "phone NAME" for an enrolled phone.
+	Via      string   `json:"via,omitempty"`
 	PID      int      `json:"pid"`
 	Ancestry []string `json:"ancestry"`
 }

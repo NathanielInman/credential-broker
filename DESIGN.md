@@ -523,7 +523,7 @@ and talks to the key itself.
 One JSON object per line: `ts`, `action` (`init|set|rm|grant|revoke|get|exec|exit|import|backup|restore|request|phone-enroll|phone-rm|phone-fcm`),
 `names`, `tier`, `for` (a grant's duration), `ok`, `error`, `cwd`, `cmd`
 (exec's child argv[0] only), `status` and `took` (exit's child status and
-run time), `pid`, and `ancestry`: the process chain from
+run time), `via` (where a request was approved), `pid`, and `ancestry`: the process chain from
 `/proc/<pid>/stat` + `comm` up to pid 1, e.g.
 `["broker","bash","claude","zsh","alacritty"]`, so it shows which agent
 asked. Never log values. Log failures too (a denied `no_grant` is the most
@@ -531,8 +531,8 @@ useful line in the file).
 
 - `tier` is the names' tier, `mixed` when they span both, and absent when
   none is known (an unknown name). `error` is the agenterr code. Empty
-  `names`, `tier`, `for`, `error`, `cmd`, `status`, and `took` are left
-  out.
+  `names`, `tier`, `for`, `error`, `cmd`, `status`, `took`, and `via` are
+  left out.
 - `ls` and `log` are not logged. Flag and argument errors cobra catches
   before a command runs are not logged; everything after is.
 - import logs the names it stored; `import --dry-run` is not logged.
@@ -541,6 +541,9 @@ useful line in the file).
   logs the names it revoked, with their tier, and none that had no grant. backup and restore log every secret
   the backup carries (tier usually `mixed`), so `--name` finds the backups
   holding a secret.
+- An approved request's `via` is `desktop` for the request window or
+  `phone NAME` for the enrolled phone that answered, so a lost phone or
+  key shows which grants it gave. Denied and unanswered requests have none.
 - exec logs before the child starts (it may run for hours): `ok` means
   the secrets were handed to the child. Once the secrets were handed out,
   an `exit` entry follows when the child is done, with the exec's names,

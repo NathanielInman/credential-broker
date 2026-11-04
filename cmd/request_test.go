@@ -191,7 +191,7 @@ func TestRequestApproved(t *testing.T) {
 
 	entries := auditLog(t, "--name", "API_TOKEN")
 	e := entries[len(entries)-1]
-	if e.Action != audit.Request || !e.OK || e.Reason != "deploy the dev box" || e.For != "30m" || e.PID != os.Getpid() {
+	if e.Action != audit.Request || !e.OK || e.Reason != "deploy the dev box" || e.For != "30m" || e.PID != os.Getpid() || e.Via != "desktop" {
 		t.Errorf("audit entry %+v", e)
 	}
 }

@@ -351,7 +351,7 @@ func TestLogComputedRows(t *testing.T) {
 		{TS: at(5*time.Hour - 10*time.Minute), Action: audit.Revoke, Names: []string{"B"}, Tier: "private", OK: true},
 		// C is granted again before its first grant runs out: one expiry,
 		// the second grant's.
-		{TS: at(4 * time.Hour), Action: audit.Request, Names: []string{"C"}, Tier: "private", For: "1h", OK: true},
+		{TS: at(4 * time.Hour), Action: audit.Request, Names: []string{"C"}, Tier: "private", For: "1h", OK: true, Via: "phone pixel"},
 		{TS: at(3*time.Hour + 30*time.Minute), Action: audit.Grant, Names: []string{"C"}, Tier: "private", For: "15m", OK: true},
 		// A denied request and a removed secret leave no expiry.
 		{TS: at(3 * time.Hour), Action: audit.Request, Names: []string{"D"}, Tier: "private", For: "1h", Error: "denied"},
@@ -392,7 +392,7 @@ func TestLogComputedRows(t *testing.T) {
 		"grant ok private A,B for 1h -",
 		"revoke ok private B - -",
 		// An expiry at the same time as an entry goes after it.
-		"request ok private C for 1h -",
+		"request ok private C for 1h via phone pixel -",
 		"expire - private A after 1h -",
 		"grant ok private C for 15m -",
 		"expire - private C after 15m -",
@@ -410,7 +410,7 @@ func TestLogComputedRows(t *testing.T) {
 		t.Fatalf("log:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	if got, want := rows("--name", "C"), []string{
-		"request ok private C for 1h -",
+		"request ok private C for 1h via phone pixel -",
 		"grant ok private C for 15m -",
 		"expire - private C after 15m -",
 	}; !slices.Equal(got, want) {

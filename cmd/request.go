@@ -470,7 +470,7 @@ func approve(req *requestFile, e *audit.Entry, stderr io.Writer) (requestResult,
 		defer clearPhones(p, v.Config(), id)
 	}
 
-	id, err := unlockApproved(sess, v, shown.Approve, dialog != nil, phoneUnlocks)
+	id, via, err := unlockApproved(sess, v, shown.Approve, dialog != nil, phoneUnlocks)
 	if err != nil {
 		sess.Finish(finishText(err), true)
 		return res, requestErr(err)
@@ -491,17 +491,18 @@ func approve(req *requestFile, e *audit.Entry, stderr io.Writer) (requestResult,
 		res.Granted = append(res.Granted, grantedSecret{Name: s.Name, For: shortDuration(ttl), Expires: expires.UTC()})
 	}
 	sess.Finish("Granted for "+shortDuration(ttl), false)
+	e.Via = via
 	return res, nil
 }
 
 // unlockApproved waits for what approving takes and returns the private
-// tier identity. In the window, with hardware the touch is the approval
+// tier identity, and where it was approved as audit.Entry.Via has it. In the window, with hardware the touch is the approval
 // and unlocking starts at once, as it does with a passphrase, whose prompt
 // appears in the window; a plain vault unlocks with no human at all, so
 // it waits for Approve first. A failed unlock can be retried from the
 // window. All along, a phone's key (fromPhone, already checked against
 // its recipient) may answer instead; without a window it is the only way.
-func unlockApproved(sess *approval.Session, v *vault.Vault, by string, window bool, fromPhone <-chan phone.Unlock) (age.Identity, error) {
+func unlockApproved(sess *approval.Session, v *vault.Vault, by string, window bool, fromPhone <-chan phone.Unlock) (age.Identity, string, error) {
 	type unlocked struct {
 		id  age.Identity
 		err error
@@ -529,10 +530,10 @@ func unlockApproved(sess *approval.Session, v *vault.Vault, by string, window bo
 		case u := <-local:
 			local = nil
 			if u.err == nil {
-				return u.id, nil
+				return u.id, "desktop", nil
 			}
 			if attempt++; attempt == unlockAttempts {
-				return nil, u.err
+				return nil, "", u.err
 			}
 			// A mistyped passphrase is simply asked for again, with the
 			// error under the field; anything else (an unplugged key)
@@ -553,13 +554,13 @@ func unlockApproved(sess *approval.Session, v *vault.Vault, by string, window bo
 			sess.Pick(pu.For)
 			id, err := v.UnlockWith(pu.Identity)
 			if err == nil {
-				return id, nil
+				return id, "phone " + pu.Phone, nil
 			}
 			sess.Status("The key on phone "+pu.Phone+" did not unlock the vault: "+err.Error(), true, false)
 		case <-sess.Done():
 			// A plugin may still be waiting on a touch; the approver exits
 			// right after, which ends it.
-			return nil, sess.Err()
+			return nil, "", sess.Err()
 		}
 	}
 }

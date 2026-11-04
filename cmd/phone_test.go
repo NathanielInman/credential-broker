@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NathanielInman/credential-broker/internal/audit"
 	"github.com/NathanielInman/credential-broker/internal/config"
 	"github.com/NathanielInman/credential-broker/internal/paths"
 	"github.com/NathanielInman/credential-broker/internal/phone"
@@ -315,6 +316,10 @@ func TestPhoneBesideWindow(t *testing.T) {
 	}
 	if _, ok := granted(t)["API_TOKEN"]; !ok {
 		t.Fatal("API_TOKEN not granted")
+	}
+	entries := auditLog(t, "--name", "API_TOKEN")
+	if e := entries[len(entries)-1]; e.Action != audit.Request || !e.OK || e.Via != "phone pixel" {
+		t.Errorf("audit entry %+v", e)
 	}
 }
 
