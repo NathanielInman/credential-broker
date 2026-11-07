@@ -171,7 +171,7 @@ broker phone rm pixel    # rewraps the vault without that phone's key (one touch
 
 #### The Android app
 
-Android's WebAuthn insists on the key's FIDO2 PIN even when the page says it doesn't need one, so approving from Chrome means typing a PIN every time. broker's Android app skips that. It talks to the key itself over USB or NFC (CTAP2 `hmac-secret`, no user verification), so a touch approves, same as on the PC. Its notifications are native: the unlocked phone shows the secret names and the agent's reason, the lock screen only shows a count, Approve and Deny sit right on the notification, and it goes away once you answer on the desktop.
+Android's WebAuthn insists on the key's FIDO2 PIN even when the page says it doesn't need one, so approving from Chrome means typing a PIN every time. broker's Android app skips that. It talks to the key itself over USB or NFC (CTAP2 `hmac-secret`, no user verification), so a touch approves, same as on the PC: the request screen waits on the key as soon as it opens, with no button to press first. Its notifications are native: the unlocked phone shows the secret names and the agent's reason, the lock screen only shows a count, Approve and Deny sit right on the notification, and it goes away once you answer on the desktop.
 
 <p align="center">
   <img src="./artwork/phone-notification.png" alt="broker's notification on an unlocked Pixel: an agent wants GITHUB_TOKEN and DB_PASS for an hour, with its reason, the process chain that asked, a countdown, and Approve and Deny buttons" width="420">

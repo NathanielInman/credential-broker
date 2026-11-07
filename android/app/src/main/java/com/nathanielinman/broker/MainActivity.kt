@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         reader = KeyReader(this)
         model.reader = reader
-        if (savedInstanceState == null) model.refresh(approve = intent.getBooleanExtra(Notifications.EXTRA_APPROVE, false))
+        if (savedInstanceState == null) model.refresh()
 
         val actions = Actions(
             scan = ::scan,
@@ -61,12 +61,17 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        model.refresh(approve = intent.getBooleanExtra(Notifications.EXTRA_APPROVE, false))
+        model.refresh()
     }
 
     override fun onResume() {
         super.onResume()
         model.resumed()
+    }
+
+    override fun onStop() {
+        model.stopped()
+        super.onStop()
     }
 
     override fun onDestroy() {

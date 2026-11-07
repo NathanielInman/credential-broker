@@ -201,7 +201,7 @@ private fun Waiting(text: String) {
 
 /** "Touch your YubiKey", with a pulsing dot. */
 @Composable
-private fun Touch(title: String, hint: String, onCancel: (() -> Unit)? = null) {
+private fun Touch(title: String, hint: String) {
     val p = LocalPalette.current
     val pulse by rememberInfiniteTransition(label = "touch").animateFloat(
         initialValue = 0.35f,
@@ -226,7 +226,6 @@ private fun Touch(title: String, hint: String, onCancel: (() -> Unit)? = null) {
                 Text(title, color = p.fg, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 Text(hint, color = p.muted, fontSize = 14.sp)
             }
-            if (onCancel != null) TextButton(onClick = onCancel) { Text("Cancel") }
         }
     }
 }
@@ -502,7 +501,7 @@ private fun AskingScreen(s: Screen.Asking, autoClose: Boolean, model: BrokerMode
     val p = LocalPalette.current
     val r = s.request
     val n = r.secrets.size
-    val open = s.phase == Phase.Request
+    val open = s.phase == Phase.Request || s.phase == Phase.Key
     val left = countdown(r.deadline)
     Header(
         if (n == 1) "An agent wants to use a secret" else "An agent wants to use $n secrets",
@@ -565,17 +564,27 @@ private fun AskingScreen(s: Screen.Asking, autoClose: Boolean, model: BrokerMode
                 AutoClose(autoClose, model::setAutoClose)
             }
         }
-        Phase.Key -> Touch("Touch your YubiKey", "Plugged into this phone, or held to its back.", onCancel = model::cancelKey)
+        Phase.Key -> {
+            Touch("Touch your YubiKey to approve", "Plugged into this phone, or held to its back.")
+            Spacer(Modifier.height(22.dp))
+            SecondaryButton("Deny", model::deny)
+            AutoClose(autoClose, model::setAutoClose)
+        }
         Phase.Denying -> Waiting("Denying…")
         Phase.Unlocking -> {
             val st = s.status
             if (st != null && st.bad) ErrorBox(st.text) else Waiting(st?.text ?: "Unlocking on the PC…")
         }
         Phase.Request -> {
-            if (s.error != null) ErrorBox(s.error)
-            Spacer(Modifier.height(22.dp))
-            PrimaryButton("Approve with security key", model::approve)
-            Spacer(Modifier.height(10.dp))
+            // Without an error this is only the moment before the wait on the key starts.
+            if (s.error != null) {
+                ErrorBox(s.error)
+                Spacer(Modifier.height(22.dp))
+                PrimaryButton("Try again", model::approve)
+                Spacer(Modifier.height(10.dp))
+            } else {
+                Spacer(Modifier.height(22.dp))
+            }
             SecondaryButton("Deny", model::deny)
             AutoClose(autoClose, model::setAutoClose)
         }

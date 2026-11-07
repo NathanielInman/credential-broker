@@ -25,7 +25,6 @@ object Notifications {
     private const val INFO = "info"
     private const val REQUEST_ID = 1
     private const val INFO_ID = 2
-    const val EXTRA_APPROVE = "approve"
 
     fun createChannels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
@@ -50,11 +49,11 @@ object Notifications {
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
             NotificationManagerCompat.from(ctx).areNotificationsEnabled()
 
-    private fun open(ctx: Context, approve: Boolean): PendingIntent {
+    /** Opens the app, which waits on the key for an open request. */
+    private fun open(ctx: Context): PendingIntent {
         val intent = Intent(ctx, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            .putExtra(EXTRA_APPROVE, approve)
-        return PendingIntent.getActivity(ctx, if (approve) 1 else 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        return PendingIntent.getActivity(ctx, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
     /**
@@ -83,14 +82,14 @@ object Notifications {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(public)
-            .setContentIntent(open(ctx, approve = false))
+            .setContentIntent(open(ctx))
             .setAutoCancel(true)
             .setOnlyAlertOnce(false)
             .setWhen(deadline.toEpochMilli())
             .setUsesChronometer(true)
             .setChronometerCountDown(true)
             .setTimeoutAfter(left)
-            .addAction(R.drawable.ic_key, "Approve", open(ctx, approve = true))
+            .addAction(R.drawable.ic_key, "Approve", open(ctx))
             .addAction(R.drawable.ic_close, "Deny", DenyReceiver.intent(ctx, id))
         if (details == null) {
             b.setContentTitle("broker").setContentText(generic)
@@ -128,7 +127,7 @@ object Notifications {
             .setColor(ctx.getColor(R.color.brand))
             .setContentTitle(title)
             .setContentText(text)
-            .setContentIntent(open(ctx, approve = false))
+            .setContentIntent(open(ctx))
             .setAutoCancel(true)
         NotificationManagerCompat.from(ctx).notify(INFO_ID, b.build())
     }

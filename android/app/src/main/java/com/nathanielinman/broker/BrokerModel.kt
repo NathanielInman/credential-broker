@@ -92,7 +92,7 @@ class BrokerModel(app: Application) : AndroidViewModel(app) {
     private var key: KeyInfo? = null
     private var watching: Job? = null
     private var working: Job? = null
-    private var approveWhenShown = false
+    private var foreground = false
 
     init {
         viewModelScope.launch {
@@ -101,31 +101,55 @@ class BrokerModel(app: Application) : AndroidViewModel(app) {
                 if (s is Screen.Idle || s is Screen.Asking && s.phase == Phase.Done) refresh()
             }
         }
+        // An open request waits on the key straight away: touching it is
+        // the approval, so there is no button to press first.
+        viewModelScope.launch { _screen.collect { listen() } }
     }
 
     // ------------------------------------------------------------ requests
 
-    /** Asks the PC what is pending; with [approve], starts approving as soon as it shows. */
-    fun refresh(approve: Boolean = false) {
+    /** Asks the PC what is pending. */
+    fun refresh() {
         if (working?.isActive == true && _screen.value is Screen.Enrolling) return
         val e = Store.enrollment(ctx)
         if (e == null) {
             if (_screen.value !is Screen.Setup) _screen.value = Screen.Setup()
             return
         }
-        approveWhenShown = approve
         val a = Api(e.origin, e.token)
         api = a
         watch(a)
     }
 
-    /** Refreshes when coming back to an app that has nothing open. */
+    /** Refreshes when coming back to an app that has nothing open, and waits on the key again. */
     fun resumed() {
+        foreground = true
+        listen()
         when (val s = _screen.value) {
             is Screen.Idle, Screen.Loading -> refresh()
             is Screen.Asking -> if (s.phase == Phase.Done) refresh()
             else -> {}
         }
+    }
+
+    /**
+     * Stops waiting on the key while the app is in the background, where
+     * Android won't hand it NFC tags anyway; [resumed] starts again. Not on
+     * pause: Android's USB permission dialog pauses the app mid-wait.
+     */
+    fun stopped() {
+        foreground = false
+        if ((_screen.value as? Screen.Asking)?.phase == Phase.Key) working?.cancel()
+    }
+
+    /**
+     * Waits on the key for an open request, unless a try just failed:
+     * that waits for Try again, so a key that keeps failing (plugged in,
+     * say) doesn't fail over and over.
+     */
+    private fun listen() {
+        val s = _screen.value
+        if (foreground && s is Screen.Asking && s.phase == Phase.Request && s.error == null && working?.isActive != true) approve()
     }
 
     private fun watch(a: Api) {
@@ -170,10 +194,6 @@ class BrokerModel(app: Application) : AndroidViewModel(app) {
                     Notifications.clearRequest(ctx)
                     return@launch
                 }
-                if (approveWhenShown && now is Screen.Asking && now.phase == Phase.Request) {
-                    approveWhenShown = false
-                    approve()
-                }
             }
         }
     }
@@ -211,7 +231,9 @@ class BrokerModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deny() {
+        // Denying stops the wait on the key; its cancellation sees Denying and leaves it.
         _screen.update { s -> if (s is Screen.Asking) s.copy(phase = Phase.Denying, error = null) else s }
+        working?.cancel()
         reply(JSONObject().put("type", "deny"))
     }
 
@@ -220,7 +242,7 @@ class BrokerModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) { runCatching { a.post("/api/reply", body) } }
     }
 
-    /** Asks the key for its PRF output (a touch) and sends it to the PC. */
+    /** Waits for the key, asks it for its PRF output (a touch) and sends that to the PC. */
     fun approve() {
         val s = _screen.value as? Screen.Asking ?: return
         val k = key ?: return
@@ -252,11 +274,6 @@ class BrokerModel(app: Application) : AndroidViewModel(app) {
     fun setAutoClose(on: Boolean) {
         Store.setAutoClose(ctx, on)
         _autoClose.value = on
-    }
-
-    /** Stops waiting for the key. */
-    fun cancelKey() {
-        working?.cancel()
     }
 
     // ---------------------------------------------------------- enrollment
