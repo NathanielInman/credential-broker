@@ -37,12 +37,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: broker-board/go.mod
-      - run: go build -buildvcs=false -trimpath -ldflags "-s -w" -o ../broker-board .
+      - run: go build -buildvcs=false -trimpath -ldflags "-s -w" -o /tmp/board/broker-board .
         working-directory: broker-board
       - uses: actions/upload-artifact@v4
         with:
           name: board-${{ matrix.arch }}
-          path: broker-board
+          path: /tmp/board/broker-board
 
   linux:
     needs: [board]
@@ -179,9 +179,12 @@ jobs:
       - uses: actions/checkout@v4
       # checkout leaves the tag lightweight; the notes need its message.
       - run: git fetch --force --depth=1 origin "+refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+      # Everything but the board-* artifacts, which are already in the
+      # linux archives.
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: "[!b]*"
           merge-multiple: true
       - name: Publish
         env:
