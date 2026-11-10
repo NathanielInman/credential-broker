@@ -12,7 +12,8 @@ optdepends=('age: recover secrets without broker'
             'pcsclite: talk to a YubiKey (enable pcscd.socket)'
             'ccid: smart card driver for a YubiKey'
             'yubikey-manager: set up a YubiKey'
-            'gtk-layer-shell: the Signal Box panel (broker board)')
+            'gtk4-layer-shell: the Signal Box panel (broker board)'
+            'webkitgtk-6.0: the Signal Box panel (broker board)')
 provides=('credential-broker')
 conflicts=('credential-broker')
 options=('!debug' '!strip')
