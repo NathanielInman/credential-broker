@@ -42,8 +42,9 @@ active grant.
   `broker-board/`, cgo with GTK 4, WebKitGTK 6 and gtk4-layer-shell, linux
   only), for the same reason. Not GTK 3 like broker-dialog: on Wayland GTK
   3 drops parts of a transparent surface's content between frames, so the
-  panel flickered to what was behind it. It builds on Ubuntu 24.04 in the
-  release; broker and broker-dialog stay on 22.04. `broker` itself gains one library for it,
+  panel flickered to what was behind it. The release builds it in Debian 13,
+  since Ubuntu 22.04 and 24.04 have no gtk4-layer-shell; broker and
+  broker-dialog stay on Ubuntu 22.04. `broker` itself gains one library for it,
   `github.com/BurntSushi/toml`, to read `board.toml`.
 
 ## Tiers (replace v1 scopes)

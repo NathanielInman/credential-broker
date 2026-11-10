@@ -204,7 +204,7 @@ Every failure an agent can hit has a stable `error` code. The full table is in t
 
 Linux, macOS, or Windows (see [Platforms](#platforms)). The stock `age` CLI is optional but worth having for [recovery](#recovering-without-broker).
 
-Download the archive for your platform from [Releases](https://github.com/NathanielInman/credential-broker/releases/latest) and put `broker` and `broker-dialog` together on your `PATH` (`~/.local/bin` works). The Linux archive also has `broker-board`, the [Signal Box](#signal-box) panel; it goes beside them too, and needs GTK 4, WebKitGTK 6 and gtk4-layer-shell (Ubuntu 24.04 or newer). The Android app is there too, as an APK (see [The Android app](#the-android-app)). The Linux builds need GTK 3 and WebKitGTK 4.1 installed; the macOS build is universal and already signed with the hardened runtime. A browser download on macOS is quarantined and Gatekeeper refuses it, so clear that once:
+Download the archive for your platform from [Releases](https://github.com/NathanielInman/credential-broker/releases/latest) and put `broker` and `broker-dialog` together on your `PATH` (`~/.local/bin` works). The Linux archive also has `broker-board`, the [Signal Box](#signal-box) panel; it goes beside them too, and needs GTK 4, WebKitGTK 6 and gtk4-layer-shell (Debian 13, Ubuntu 25.04, or newer). The Android app is there too, as an APK (see [The Android app](#the-android-app)). The Linux builds need GTK 3 and WebKitGTK 4.1 installed; the macOS build is universal and already signed with the hardened runtime. A browser download on macOS is quarantined and Gatekeeper refuses it, so clear that once:
 
 ```sh
 xattr -d com.apple.quarantine broker broker-dialog
@@ -231,7 +231,7 @@ sudo pacman -S age gtk3 webkit2gtk-4.1 pcsclite ccid age-plugin-yubikey yubikey-
 sudo systemctl enable --now pcscd.socket
 sudo pacman -S gtk4-layer-shell webkitgtk-6.0   # only for Signal Box
 # Debian/Ubuntu: libgtk-3-dev libwebkit2gtk-4.1-dev pcscd yubikey-manager, then cargo install age-plugin-yubikey
-# (and libgtk4-layer-shell-dev libwebkitgtk-6.0-dev for Signal Box, Ubuntu 24.04 or newer)
+# (and libgtk4-layer-shell-dev libwebkitgtk-6.0-dev for Signal Box, Debian 13 or Ubuntu 25.04 and newer)
 ```
 
 On Arch, `packaging/aur/credential-broker-bin` packages the release build (all three binaries, GTK and WebKitGTK as dependencies, the YubiKey tools, and `gtk4-layer-shell` and `webkitgtk-6.0` for Signal Box, as optional ones). Until it's on the AUR, install it from a clone:
