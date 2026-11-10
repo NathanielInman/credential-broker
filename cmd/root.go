@@ -81,6 +81,8 @@ func newRoot(version string) *cobra.Command {
 		newRestoreCmd(),
 		newPhoneCmd(),
 		newLogCmd(),
+		newBarCmd(),
+		newBoardCmd(),
 		newLsCmd(),
 		newExecCmd(),
 		newRequestCmd(),
