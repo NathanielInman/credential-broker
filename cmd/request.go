@@ -20,6 +20,7 @@ import (
 	"github.com/NathanielInman/credential-broker/internal/agenterr"
 	"github.com/NathanielInman/credential-broker/internal/approval"
 	"github.com/NathanielInman/credential-broker/internal/audit"
+	"github.com/NathanielInman/credential-broker/internal/board"
 	"github.com/NathanielInman/credential-broker/internal/config"
 	"github.com/NathanielInman/credential-broker/internal/paths"
 	"github.com/NathanielInman/credential-broker/internal/phone"
@@ -428,6 +429,13 @@ func approve(req *requestFile, e *audit.Entry, stderr io.Writer) (requestResult,
 	if err != nil {
 		return res, err
 	}
+	// Signal Box shows the request while it is open, and as waiting
+	// while another window holds the lock.
+	ask := board.Ask{Names: req.Names, For: e.For, Reason: req.Reason, Cwd: cwd, Ancestry: ancestry,
+		Cmd: strings.Join(req.Command, " "), Opened: time.Now().UTC(), Deadline: req.Deadline, Queued: true, Extend: req.Extend, PID: req.PID}
+	_ = board.WriteAsk(p.AsksDir(), ask)
+	defer board.RemoveAsk(p.AsksDir(), req.PID)
+
 	// One window at a time. A request that waited behind another often
 	// finds its names granted by then and needs no window at all.
 	unlock, err := lockRequests(p, req.Deadline)
@@ -447,6 +455,8 @@ func approve(req *requestFile, e *audit.Entry, stderr io.Writer) (requestResult,
 	for _, s := range secrets {
 		e.Names = append(e.Names, s.Name)
 	}
+	ask.Names, ask.Queued = e.Names, false
+	_ = board.WriteAsk(p.AsksDir(), ask)
 
 	// The window needs the desktop; the phone page needs an enrolled
 	// phone. Either will do, and with both, whichever approves first wins.

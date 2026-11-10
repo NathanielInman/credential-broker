@@ -36,6 +36,9 @@ const (
 	envWindowLog = "BROKER_TEST_WINDOW_LOG"
 	// envBeWindow marks the process that is the window.
 	envBeWindow = "BROKER_TEST_BE_WINDOW"
+	// envAsksSeen is where the fake window copies the open request files
+	// it finds when its request arrives.
+	envAsksSeen = "BROKER_TEST_ASKS_SEEN"
 )
 
 func init() {
@@ -86,6 +89,17 @@ func fakeWindow() int {
 		}
 		switch m.Type {
 		case "request":
+			// What Signal Box would read while the window is up.
+			if seen := os.Getenv(envAsksSeen); seen != "" {
+				dir := filepath.Join(os.Getenv("BROKER_HOME"), "run", "asks")
+				files, _ := os.ReadDir(dir)
+				var all []byte
+				for _, f := range files {
+					b, _ := os.ReadFile(filepath.Join(dir, f.Name()))
+					all = append(append(all, b...), '\n')
+				}
+				os.WriteFile(seen, all, 0o600)
+			}
 			for _, s := range script {
 				k, v, _ := strings.Cut(s, "=")
 				switch k {
