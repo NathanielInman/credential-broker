@@ -32,6 +32,12 @@
   #panel.closing { visibility: visible; transition: transform .24s cubic-bezier(.5,0,.75,0), opacity .2s ease .04s; }
   #panel.play .stag { animation: rise .4s cubic-bezier(.2,.9,.3,1) both; animation-delay: calc(var(--i, 0) * 38ms + 110ms); }
   @keyframes rise { from { opacity: 0; transform: translateY(9px) scale(.985); } to { opacity: 1; transform: none; } }
+  /* Switching tabs keeps everything on screen: the new tab's body slides in
+     a few pixels from the side it came from, without fading out first. */
+  main.from-right { animation: tab-right .16s cubic-bezier(.2,.8,.3,1); }
+  main.from-left { animation: tab-left .16s cubic-bezier(.2,.8,.3,1); }
+  @keyframes tab-right { from { opacity: .6; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+  @keyframes tab-left { from { opacity: .6; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
 
   header { display: flex; gap: 12px; align-items: flex-start; padding: 15px 17px 10px; }
   header .ttl { flex: 1; min-width: 0; }
@@ -355,7 +361,7 @@
     };
     TABS.forEach((id, i) => {
       const b = h("button", { role: "tab", "aria-selected": String(id === tab), class: id === "asks" && counts.asks ? "n-amber" : "",
-        onclick: () => { tab = id; sel = 0; filterText = ""; render(true); } },
+        onclick: () => switchTab(id) },
         TITLES[id], counts[id] !== "" ? h("span", { class: "n" }, counts[id]) : null);
       nav.append(b);
     });
@@ -588,6 +594,19 @@
     else p.classList.remove("play");
     if (focusedFilter) { const f = $("filter"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }
   }
+  // switchTab shows another tab in place. Only opening the panel replays
+  // the staggered entrance; a tab switch slides the new body in.
+  function switchTab(id) {
+    if (id === tab) return;
+    const dir = TABS.indexOf(id) > TABS.indexOf(tab) ? "from-right" : "from-left";
+    tab = id; sel = 0; filterText = "";
+    render(false);
+    const main = $("body");
+    main.scrollTop = 0;
+    main.classList.remove("from-right", "from-left");
+    void main.offsetWidth;
+    main.classList.add(dir);
+  }
   function renderBodyOnly() {
     const main = $("body");
     main.querySelectorAll("[data-list]").forEach((el) => el.remove());
@@ -624,9 +643,9 @@
     if (e.key === "Tab") {
       e.preventDefault();
       const i = TABS.indexOf(tab);
-      tab = TABS[(i + (e.shiftKey ? TABS.length - 1 : 1)) % TABS.length]; sel = 0; filterText = ""; render(true); return;
+      switchTab(TABS[(i + (e.shiftKey ? TABS.length - 1 : 1)) % TABS.length]); return;
     }
-    if (/^[1-4]$/.test(e.key)) { tab = TABS[+e.key - 1]; sel = 0; filterText = ""; render(true); return; }
+    if (/^[1-4]$/.test(e.key)) { switchTab(TABS[+e.key - 1]); return; }
     if (e.key === "/" && (tab === "register" || tab === "vault")) { e.preventDefault(); const f = $("filter"); if (f) f.focus(); return; }
     const rows = tab === "live" ? snap.grants : tab === "asks" ? snap.missed : [];
     if ((e.key === "j" || e.key === "ArrowDown") && rows.length) { sel = Math.min(rows.length - 1, sel + 1); markSel(); e.preventDefault(); return; }
