@@ -15,6 +15,7 @@ pkgbase = credential-broker-bin
 	optdepends = pcsclite: talk to a YubiKey (enable pcscd.socket)
 	optdepends = ccid: smart card driver for a YubiKey
 	optdepends = yubikey-manager: set up a YubiKey
+	optdepends = gtk-layer-shell: the Signal Box panel (broker board)
 	provides = credential-broker
 	conflicts = credential-broker
 	options = !debug
