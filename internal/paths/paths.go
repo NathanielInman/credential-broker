@@ -86,6 +86,31 @@ func (p Paths) FCMKey() string { return filepath.Join(p.Config, "fcm-service-acc
 
 func (p Paths) GrantLock() string { return filepath.Join(p.Run, "grantd.lock") }
 
+// AsksDir holds a file for each request open right now, which Signal Box
+// shows (see internal/board).
+func (p Paths) AsksDir() string { return filepath.Join(p.Run, "asks") }
+
+// BoardConfig and BoardCSS are Signal Box's settings and the user's own
+// stylesheet for its panel.
+func (p Paths) BoardConfig() string { return filepath.Join(p.Config, "board.toml") }
+func (p Paths) BoardCSS() string    { return filepath.Join(p.Config, "board.css") }
+
+// BoardDismissed lists the missed requests waved away on the panel, and
+// BoardLocked what the screen lock revoked. Both end with the session.
+func (p Paths) BoardDismissed() string { return filepath.Join(p.Run, "board-dismissed.json") }
+func (p Paths) BoardLocked() string    { return filepath.Join(p.Run, "board-locked.json") }
+
+// BoardSocket is where the Signal Box panel listens for toggles, shortened
+// like GrantSocket when the runtime directory is too deep.
+func (p Paths) BoardSocket() string {
+	s := filepath.Join(p.Run, "board.sock")
+	if len(s) <= maxSocketPath {
+		return s
+	}
+	sum := sha256.Sum256([]byte(p.Run))
+	return filepath.Join(os.TempDir(), "broker-board-"+hex.EncodeToString(sum[:8])+".sock")
+}
+
 // maxSocketPath keeps a unix socket path within sun_path, which is 104
 // bytes on macOS (108 on linux), counting the NUL.
 const maxSocketPath = 100
