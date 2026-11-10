@@ -38,6 +38,10 @@ active grant.
   from the root needs no GTK. On Windows it is built `-H=windowsgui` and
   posts through a bound `brokerPost` function instead of a WebKit message
   handler; closing it by its X is told apart from quitting by a flag.
+- The Signal Box panel is a third program, `broker-board` (its own module in
+  `broker-board/`, cgo with GTK 3, WebKitGTK 4.1 and gtk-layer-shell, linux
+  only), for the same reason. `broker` itself gains one library for it,
+  `github.com/BurntSushi/toml`, to read `board.toml`.
 
 ## Tiers (replace v1 scopes)
 
@@ -65,6 +69,12 @@ $XDG_DATA_HOME/broker/private.key.age   # age X25519 identity for the private ti
 $XDG_DATA_HOME/broker/secrets/<tier>/<NAME>.age   # value, encrypted to that tier's recipient
 $XDG_DATA_HOME/broker/secrets/<tier>/<NAME>.json  # metadata: description, created, updated
 $XDG_STATE_HOME/broker/log.jsonl        # append-only audit log
+$XDG_CONFIG_HOME/broker/board.toml      # Signal Box settings (optional)
+$XDG_CONFIG_HOME/broker/board.css       # Signal Box panel stylesheet (optional)
+$XDG_STATE_HOME/broker/board.log        # the panel server's stderr, truncated each start
+$XDG_RUNTIME_DIR/broker/asks/<pid>.json # one per open request, while it is open
+$XDG_RUNTIME_DIR/broker/board.sock      # the panel server's socket
+$XDG_RUNTIME_DIR/broker/board-dismissed.json, board-locked.json
 ```
 
 Directories 0700, files 0600. Honor `BROKER_HOME` as a single override root
@@ -253,6 +263,90 @@ beside it (`internal/keyring/store_linux.go`):
   user can read regardless of expiry, lingering past it until something
   cleans up.
 
+## Signal Box
+
+An optional lamp for a status bar and a panel behind it, for the human. It
+shows what is granted, which requests are open or were missed, what agents
+ran, and the vault's loose ends, and it revokes. It adds no new power: it
+reads only what broker already exposes without a touch, and anything that
+grants goes through `broker request`.
+
+Pieces:
+
+- `internal/board` works everything out. `Build(Input) Snapshot` is pure:
+  the vault's secrets, the grants in place (live or changed, from the
+  keyring), the parsed audit log, the open requests, the dismissed and lock
+  notes, and `board.toml`. It never touches a value; nothing in it can
+  decrypt. The snapshot has the lamp (level, live count, fraction left of
+  the soonest grant, tooltip), grant rows, open and missed requests, the
+  register (24 hour strip and episodes), the vault view with flags, and the
+  bundles.
+- `broker bar` is waybar's custom module. Once a second it builds the
+  snapshot and prints `{"text","class","alt","tooltip","percentage"}` when it
+  changed (and at least once a minute). The parsed log is cached by size and
+  mtime. With `lock.on_screen_lock = "revoke"` it watches for a screen
+  locker process (`lock.lockers`, hyprlock by default) and on the edge into
+  locked runs `broker revoke --all` and writes `board-locked.json`, which
+  keeps the lamp at `locked` until the next grant.
+- `broker board` asks Hyprland where the click is (`j/cursorpos`,
+  `j/monitors`, `j/layers` over its socket, never hyprctl) and sends a
+  toggle with that `Anchor` to `board.sock`. If nothing answers, it starts
+  `broker board serve` in a session of its own, outside waybar's process
+  tree, and retries. `--json` prints the snapshot and exits.
+- `broker board serve` listens on `board.sock` (JSON lines, one reply each:
+  `ping`, `snapshot`, `toggle`, `show`, `hide`, `board_visible`, the same
+  shapes as Roundhouse's and Switchyard's). It runs `broker-board` on the
+  first open, keeps it loaded while hidden for `board.linger`, and while the
+  panel shows pushes a snapshot each second when it changed. The page's
+  actions come back as JSON and are carried out by running this broker's own
+  commands (`revoke NAME...`, `revoke --all`, `request NAME... --for D
+  --reason "From Signal Box: ..."`), so they are checked and logged exactly
+  as if typed. A `request` closes the panel first, so the request window is
+  not under the overlay.
+- `broker-board` speaks JSON lines like broker-dialog: messages in on stdin
+  (`init` with the theme, `snapshot`, `show` with the anchor and tab, `hide`,
+  `result`), replies on stdout (`ready`, `hidden`, `action`). It is a
+  transparent layer-shell surface on the overlay layer, anchored to all four
+  edges with exclusive zone 0, so it covers the monitor less the bar; it maps
+  on `show` on the GDK monitor whose layout position matches the anchor's,
+  with exclusive keyboard. The page places the panel against the bar's edge,
+  centered on the click and clamped to the screen (Roundhouse's `place`),
+  scales it out of the click point, and on close sends `hidden` after the
+  animation, which unmaps the surface. A click outside the panel closes it.
+  Every string from an agent (reasons, directories) goes in as text nodes.
+
+Open requests: the approver writes `asks/<requester pid>.json` (names,
+duration, reason, directory, process chain, command, deadline) before it
+waits for the request lock, as `queued`, rewrites it once its window is up,
+and removes it when it returns. A reader drops files past their deadline or
+whose requester is gone, which covers a killed approver.
+
+Missed requests are `request` entries with `request_timeout` in the last
+`asks.keep_missed`, the latest per set of names, unless every name was
+granted later or the human dismissed it (keys in `board-dismissed.json`).
+
+Episodes: exec entries with the same names, directory, and requester
+("who": the first known agent in the chain, "you" for human commands,
+"Signal Box" when the parent is broker) fold together while under 20 minutes
+apart; each exec's exit (same pid) supplies failures. Grants, timeouts,
+denials, revokes, changes and the lock are single episodes.
+
+Vault flags: unused for `vault.stale_after` (uses within an hour of storing
+a secret are the import checking it, not use), no description, a public
+secret whose name reads as a secret (`PASSWORD`, `TOKEN`, `_KEY` and the
+like), a value older than `vault.rotate_after`, and a private secret not in
+a bundle approved at least 15 times and 2.5 times per day it was approved.
+
+Siblings follow Roundhouse's rules: discovery is `$SWITCHYARD_RUNTIME_DIR`
+or `$XDG_RUNTIME_DIR/switchyard/yard.sock`, and the same for Roundhouse's
+`rh.sock`; a 300 ms deadline; loose JSON. Opening sends `hide` to both;
+the tab row's link sends `show` with the same anchor and hides this panel.
+The link's dot is Switchyard's `aggregate.phase` or Roundhouse's
+`lamp.level`.
+
+Not yet: macOS (a menu bar extra) and Windows (a tray flyout). `bar` and
+`board --json` work on every platform; `board` itself says it needs Linux.
+
 ## Commands
 
 Human-facing (rare):
@@ -276,6 +370,8 @@ Human-facing (rare):
 - `broker backup -o FILE [--generate-passphrase] [--include-log]` /
   `broker restore FILE [--identity FILE...] [--force]` (see below)
 - `broker log [--since DUR] [--name NAME] [--json]`
+- `broker bar [--once]` and `broker board [--tab TAB] [--center] [--json]`:
+  Signal Box (see below).
 
 Agent-facing (frequent, no prompts ever):
 
@@ -710,6 +806,11 @@ useful line in the file).
 - Request tests run a real `broker approve` subprocess (the test binary)
   against a fake window (the test binary again) that acts out a script
   and logs what it was shown. broker-dialog itself is checked by hand.
+- Signal Box: `internal/board` builds snapshots from made up logs and parses
+  configs, Hyprland replies and waybar stylesheets; the cmd tests run `bar
+  --once` and `board --json` against a test vault, and check through the fake
+  window that an open request writes its file and removes it. broker-board's
+  page is checked by hand and in headless Chrome fed a snapshot.
 - Run Go builds and tests under
   `systemd-run --user --scope -q -p MemoryMax=4G nice -n 19 go test ./...`.
 

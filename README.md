@@ -1,6 +1,8 @@
-![Logo And Splash Banner](./artwork/splash.png)
-
 # Credential Broker
+
+<p align="center">
+  <img src="./artwork/hero.svg" width="100%" alt="A Hyprland desktop. An agent runs broker exec --request for CLOUDFLARE_API_TOKEN, broker's request window asks for a YubiKey touch, and the deploy runs with the token redacted from its output while the Signal Box lamp in waybar lights up. A click on the lamp springs the Signal Box panel out of it: three live grants with their time left, a missed request with Grant now, then Revoke all, and the lamp goes back to gray.">
+</p>
 
 A local secret store for a machine where AI agents do most of the typing. Agents run commands **with** your secrets and never see them. When one needs a secret, this pops up on your desktop, and on your phone if you're on the couch:
 
@@ -20,6 +22,8 @@ broker exec --request --reason "Deploying the grant-zone fix to the dev environm
 Prefer a terminal? `broker grant GITHUB_TOKEN DB_PASS --for 1h` does the same thing without the window.
 
 There's no server, no daemon, and no account. Secrets are plain [age](https://age-encryption.org) files on disk, grants live in memory with a timeout (the kernel keyring on Linux, plus a small in-memory agent for sandboxes; that agent alone on macOS and Windows), and every read lands in an audit log with the process tree that asked for it.
+
+You don't need a terminal to see what's going on either. [Signal Box](#signal-box) is an optional lamp for waybar: one glance says whether anything is granted and how long it has left, it turns amber while an agent is waiting on you, and a click opens a panel with every live grant, the requests you missed, what agents ran with each secret, and a key that revokes all of it.
 
 v1 was a client/server broker for teams, with users, scopes, and PGP challenges. v2 is a from-scratch rewrite for one person and the agents working on their machine. The full spec is in [DESIGN.md](./DESIGN.md).
 
@@ -200,7 +204,7 @@ Every failure an agent can hit has a stable `error` code. The full table is in t
 
 Linux, macOS, or Windows (see [Platforms](#platforms)). The stock `age` CLI is optional but worth having for [recovery](#recovering-without-broker).
 
-Download the archive for your platform from [Releases](https://github.com/NathanielInman/credential-broker/releases/latest) and put `broker` and `broker-dialog` together on your `PATH` (`~/.local/bin` works). The Android app is there too, as an APK (see [The Android app](#the-android-app)). The Linux builds need GTK 3 and WebKitGTK 4.1 installed; the macOS build is universal and already signed with the hardened runtime. A browser download on macOS is quarantined and Gatekeeper refuses it, so clear that once:
+Download the archive for your platform from [Releases](https://github.com/NathanielInman/credential-broker/releases/latest) and put `broker` and `broker-dialog` together on your `PATH` (`~/.local/bin` works). The Linux archive also has `broker-board`, the [Signal Box](#signal-box) panel; it goes beside them too. The Android app is there too, as an APK (see [The Android app](#the-android-app)). The Linux builds need GTK 3 and WebKitGTK 4.1 installed; the macOS build is universal and already signed with the hardened runtime. A browser download on macOS is quarantined and Gatekeeper refuses it, so clear that once:
 
 ```sh
 xattr -d com.apple.quarantine broker broker-dialog
@@ -213,6 +217,7 @@ git clone https://github.com/NathanielInman/credential-broker
 cd credential-broker
 go build -o ~/.local/bin/broker .
 (cd broker-dialog && go build -o ~/.local/bin/broker-dialog .)
+(cd broker-board && go build -o ~/.local/bin/broker-board .)   # optional: Signal Box, Linux only
 ```
 
 `broker-dialog` is the request window. It's a separate program so broker itself stays pure Go with nothing to link, and it goes next to `broker`. On Windows the commands differ a little; see below.
@@ -224,10 +229,12 @@ The window needs GTK 3 and WebKitGTK 4.1, and a YubiKey needs [age-plugin-yubike
 ```sh
 sudo pacman -S age gtk3 webkit2gtk-4.1 pcsclite ccid age-plugin-yubikey yubikey-manager
 sudo systemctl enable --now pcscd.socket
+sudo pacman -S gtk-layer-shell   # only for Signal Box
 # Debian/Ubuntu: libgtk-3-dev libwebkit2gtk-4.1-dev pcscd yubikey-manager, then cargo install age-plugin-yubikey
+# (and libgtk-layer-shell-dev for Signal Box)
 ```
 
-On Arch, `packaging/aur/credential-broker-bin` packages the release build (both binaries, GTK and WebKitGTK as dependencies, the YubiKey tools as optional ones). Until it's on the AUR, install it from a clone:
+On Arch, `packaging/aur/credential-broker-bin` packages the release build (all three binaries, GTK and WebKitGTK as dependencies, the YubiKey tools and `gtk-layer-shell` for Signal Box as optional ones). Until it's on the AUR, install it from a clone:
 
 ```sh
 cd packaging/aur/credential-broker-bin && makepkg -si
@@ -458,6 +465,98 @@ Each `exec` that got its secrets is followed by an `exit` when the command finis
 
 `--json` prints the raw lines. Values are never logged.
 
+## Signal Box
+
+<p align="center">
+  <img src="./artwork/signal-box.png" width="760" alt="Two Signal Box panels. Live: seven secrets in three grants, each with a ring showing its time left (JIRA_API_TOKEN 12 minutes, CLOUDFLARE_API_TOKEN 41 minutes, a homelab bundle of five secrets 6 hours), who asked, where, their reason, a sparkline of runs, and Revoke and +1h buttons. Asks: claude waiting on SENTRY_AUTH_TOKEN with a countdown and its unverified reason, and a missed CLOUDFLARE_API_TOKEN request with Grant now and Dismiss.">
+</p>
+
+broker tells you everything, but only if you ask it in a terminal. After my first 18 days of real use the log said agents had asked 338 times and 97 of those asks timed out because nobody was looking, mostly at lunch and dinner. After a miss, the approval that finally came took a median of 2h 35m. Over the same stretch I revoked a grant three times, not because nothing needed revoking but because I never knew what was out. So I built **Signal Box**: a lamp in waybar and a panel that springs out of it.
+
+The lamp is one glyph. Gray means nothing is granted. A pie that drains means something is live, and the pie is the soonest grant's time left; the number beside it is how many secrets are live. A key means an agent is asking right now, or that an ask went unanswered and is waiting for you. The tooltip says the same thing in words. The module's CSS class is the lamp's state, so you can color it in waybar's own stylesheet:
+
+| Class | When |
+|---|---|
+| `quiet` | Nothing is granted. |
+| `live` | Something is granted. |
+| `ending` | A grant an agent used in the last ten minutes ends within five. |
+| `night` | Something is still granted after `lock.night_after`. |
+| `asking` | A request window is open. |
+| `missed` | A request timed out and you haven't granted or dismissed it. |
+| `locked` | The screen lock revoked everything (with `lock.on_screen_lock = "revoke"`). |
+
+Click it and the panel opens out of the icon, on whichever edge and monitor your bar is on. On Hyprland it asks the compositor where the click was, the same way Roundhouse and Switchyard do, so the three panels open from their own icons and hand over to each other from the same spot. Elsewhere it opens centered. It has four tabs:
+
+| Tab | What it answers |
+|---|---|
+| **Live** | What can agents use this minute? One row per grant, not per secret, with a ring for its time left, who asked, from where and why, and how often it has been used since. `r` revokes the selected grant, `R` revokes everything, `e` extends it by an hour. |
+| **Asks** | What am I missing? The open request, as the request window shows it, and every request that timed out in the last day. **Grant now** asks for the same secrets for the same time, so the agent's next `exec` finds the grant instead of asking again. |
+| **Register** | What did they do with it? The last 24 hours on a strip, and the log folded into episodes: one line for an agent's runs with the same secrets in the same directory, with the count, the failures and why. `/` filters. |
+| **Vault** | What's rotting? Every secret with its use over 30 days, and flags: unused for weeks, no description (agents pick secrets by description), a public secret named like a password, a value older than `vault.rotate_after`, and secrets you approve so often they want a bundle. |
+
+Taking access away is free: revoke needs no touch, and the panel does it on the spot. Anything that grants (Grant now, +1h, a bundle) goes through `broker request`, so the panel closes and the request window or your phone asks for the touch exactly as it would for an agent. The panel never holds a secret's value or the private tier key. It reads what broker already exposes without one: names, tiers and grant expiry, the audit log, and a small file each open request writes to `$XDG_RUNTIME_DIR/broker/asks/`.
+
+It needs `broker-board` beside `broker` and `gtk-layer-shell`. Add the module to waybar:
+
+```jsonc
+"custom/broker": {
+  "exec": "/usr/bin/broker bar",
+  "return-type": "json",
+  "on-click": "/usr/bin/broker board",
+  "on-click-right": "/usr/bin/broker board --tab asks",
+  "on-click-middle": "/usr/bin/broker revoke --all"
+}
+```
+
+Use full paths (`~/.local/bin/broker` for a build from source): a waybar started by systemd usually doesn't have `~/.local/bin` on its `PATH`. The default glyphs are Nerd Font icons; set `bar.glyphs = "unicode"` if your bar font doesn't have them. `broker board --json` prints everything the panel shows, for scripts.
+
+The panel takes its font and colors from waybar's `style.css` (the bar's font, background and text, the first border color, an `@define-color accent`), and `~/.config/broker/board.css` goes on top of that. Everything else lives in `~/.config/broker/board.toml`, and an empty or missing file is a working setup:
+
+```toml
+[bar]
+glyphs = "nerd"              # nerd | unicode
+count = true                 # the number of live secrets after the glyph
+
+[board]
+namespace = "waybar"         # the bar's layer-shell namespace, which tells the edge
+linger = "10m"               # how long the hidden panel stays loaded
+
+[theme]
+from = "waybar"              # waybar | none
+waybar_css = "~/.config/waybar/style.css"
+
+[asks]
+keep_missed = "24h"
+
+[lock]
+on_screen_lock = "keep"      # keep | revoke: drop every grant when hyprlock starts
+night_after = "01:00"        # the lamp goes amber if anything is live after this
+night_until = "06:00"
+
+[expiry]
+warn_before = "5m"
+only_if_in_use = true        # only for grants an agent used in the last ten minutes
+
+[vault]
+stale_after = "14d"
+rotate_after = "180d"
+
+[[bundle]]                   # secrets granted together with one touch
+name = "homelab"
+secrets = ["SONARR_API_KEY", "RADARR_API_KEY", "PROWLARR_API_KEY", "SABNZBD_API_KEY", "TRUENAS_API_KEY"]
+for = "9h"
+key = "h"                    # press h on the Live tab
+
+[[bundle]]
+name = "cloudflare"
+secrets = ["CLOUDFLARE_*"]
+for = "2h"
+```
+
+With Switchyard or Roundhouse running, the tab row ends with a link to each (`Yard ↗`, `Roundhouse ↗`), whose dot is that program's own lamp. A click closes this panel and opens that one from the same icon, and opening any of the three closes the others. None of them needs the others; a sibling that isn't running just isn't linked.
+
+Signal Box runs on Linux with Wayland for now. A macOS menu bar extra and a Windows tray flyout are planned; `broker board --json` works everywhere today.
+
 ## Threat model
 
 broker is built against **accidental leaks**: tokens ending up in transcripts, logs, committed files, CI output, or a shell environment every process inherits. Against that it does well. Secrets aren't ambient, agents only ever hold the output of a command, private values are redacted from that output, grants expire on their own, and the log shows who asked.
@@ -475,6 +574,7 @@ It does not protect against:
 - **Root, or anything that already owns your user.** It can read process memory, the keyring, and your terminal.
 - **An unsigned broker on macOS.** Without the hardened runtime, a debugger running as you can read the approver's or grant agent's memory. Run the `codesign` line from [Install](#install).
 - **A weak backup passphrase.** Use the generated one.
+- **A lying Signal Box.** The lamp and the panel show what broker writes down: grants, the log, and the open request files. Something running as you can write those too, or answer on the panel's socket, and make the lamp say whatever it likes. It can't grant anything that way, since every grant still takes your touch, but treat the lamp as a view, not as proof.
 
 ## Platforms
 
@@ -504,6 +604,9 @@ Grouped as in `broker --help`. Every command takes `--help` for the details.
 ```sh
 broker backup -o FILE                     # Write a passphrase-encrypted copy of the vault
               [--generate-passphrase] [--include-log]
+broker bar [--once]                       # Signal Box's lamp for waybar, one JSON line per change
+broker board [--tab TAB] [--center]       # Open or close the Signal Box panel at the bar icon
+             [--json]
 broker get NAME                           # Print a secret (private needs a fresh touch)
 broker grant NAME... | --all              # Let exec use private secrets for a while (one touch)
              [--for DUR] [--force]
@@ -538,7 +641,7 @@ broker request NAME... [--for DUR]        # Ask for grants in the request window
 
 If an agent runs something that needs a prompt or a touch (`set` without `--stdin`, `grant`, a private `get`, `backup`, `restore`), it fails at once with `needs_human` and the exact command to hand you, instead of waiting on a prompt nobody will answer.
 
-Files live under the XDG directories: `~/.config/broker`, `~/.local/share/broker`, and `~/.local/state/broker`. Set `BROKER_HOME` to put all three under one directory instead. How it all fits together (key wrapping, the keyring layout, the redactor, the backup format) is in [DESIGN.md](./DESIGN.md).
+Files live under the XDG directories: `~/.config/broker` (with `board.toml` and `board.css` for Signal Box), `~/.local/share/broker`, and `~/.local/state/broker`. Set `BROKER_HOME` to put all three under one directory instead. How it all fits together (key wrapping, the keyring layout, the redactor, the backup format) is in [DESIGN.md](./DESIGN.md).
 
 ## License
 
