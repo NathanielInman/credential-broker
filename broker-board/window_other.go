@@ -15,10 +15,10 @@ func platformInit() {
 	os.Exit(1)
 }
 
-func protocolOut() (*os.File, error)    { return os.Stdout, nil }
-func newWindow(string)                  {}
-func runWindow()                        {}
-func quitWindow()                       {}
-func hideWindow()                       {}
-func showWindow(float64, float64, bool) {}
-func evalPage(string)                   {}
+func protocolOut() (*os.File, error) { return os.Stdout, nil }
+func newWindow(string)               {}
+func runWindow()                     {}
+func quitWindow()                    {}
+func hideWindow()                    {}
+func showWindow(string)              {}
+func evalPage(string)                {}

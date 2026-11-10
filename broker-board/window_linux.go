@@ -1,6 +1,7 @@
 package main
 
-// #cgo pkg-config: gtk+-3.0 webkit2gtk-4.1 gtk-layer-shell-0
+// /* gtk4-layer-shell must come before libwayland-client when linking. */
+// #cgo pkg-config: gtk4-layer-shell-0 gtk4 webkitgtk-6.0
 // #include <stdlib.h>
 // #include "window.h"
 import "C"
@@ -47,12 +48,10 @@ func runWindow()  { C.window_run() }
 func quitWindow() { C.window_quit() }
 func hideWindow() { C.window_hide() }
 
-func showWindow(x, y float64, has bool) {
-	h := C.int(0)
-	if has {
-		h = 1
-	}
-	C.window_show(C.double(x), C.double(y), h)
+func showWindow(monitor string) {
+	s := C.CString(monitor)
+	C.window_show(s)
+	C.free(unsafe.Pointer(s))
 }
 
 func evalPage(js string) {

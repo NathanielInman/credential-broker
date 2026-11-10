@@ -23,10 +23,6 @@ type Anchor struct {
 	Height   float64    `json:"height"`
 	Reserved [4]float64 `json:"reserved"`
 	Center   bool       `json:"center"`
-	// MonitorX and MonitorY are the monitor's place in the layout, which
-	// the panel's window uses to pick the matching output.
-	MonitorX float64 `json:"monitor_x,omitempty"`
-	MonitorY float64 `json:"monitor_y,omitempty"`
 }
 
 // hyprSocket is Hyprland's request socket, or "" outside Hyprland.
@@ -204,6 +200,6 @@ func ComputeAnchor(cursorJSON, monitorsJSON, layersJSON []byte, ns string, cente
 	}
 	return Anchor{
 		Monitor: m.Name, Edge: edge, X: cx, Y: cy, Width: w, Height: h,
-		Reserved: reserved, Center: center, MonitorX: m.X, MonitorY: m.Y,
+		Reserved: reserved, Center: center,
 	}, nil
 }

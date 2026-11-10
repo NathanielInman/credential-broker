@@ -86,7 +86,7 @@ func TestComputeAnchor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.Monitor != "DP-2" || a.Edge != "bottom" || a.X != 2310 || a.Reserved[3] != 24 || a.MonitorX != 2560 {
+	if a.Monitor != "DP-2" || a.Edge != "bottom" || a.X != 2310 || a.Reserved[3] != 24 {
 		t.Fatalf("got %+v", a)
 	}
 	left := `{"DP-3":{"levels":{"2":[{"x":0,"y":0,"w":40,"h":1440,"namespace":"waybar"}]}}}`

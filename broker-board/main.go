@@ -8,7 +8,7 @@
 // sees a secret's value, and anything it asks for goes through broker.
 //
 // It is a separate program so broker itself stays pure Go. The window is a
-// GTK layer-shell surface with WebKitGTK on linux (window_linux.c).
+// GTK 4 layer-shell surface with WebKitGTK 6 on linux (window_linux.c).
 package main
 
 import (
@@ -67,20 +67,18 @@ func pump() {
 		var m struct {
 			Type   string `json:"type"`
 			Anchor *struct {
-				MonitorX float64 `json:"monitor_x"`
-				MonitorY float64 `json:"monitor_y"`
-				Monitor  string  `json:"monitor"`
+				Monitor string `json:"monitor"`
 			} `json:"anchor"`
 		}
 		if json.Unmarshal(line, &m) != nil {
 			continue
 		}
 		if m.Type == "show" {
-			if m.Anchor != nil && m.Anchor.Monitor != "" {
-				showWindow(m.Anchor.MonitorX, m.Anchor.MonitorY, true)
-			} else {
-				showWindow(0, 0, false)
+			monitor := ""
+			if m.Anchor != nil {
+				monitor = m.Anchor.Monitor
 			}
+			showWindow(monitor)
 		}
 		// The line goes in as a JS string literal for the page to parse,
 		// never as code. json.Marshal escapes everything that matters.

@@ -5,19 +5,23 @@
 // unmaps the surface on the right monitor. The page talks to Go through the
 // "board" script message handler; Go talks to the page by evaluating
 // board.receive().
+//
+// GTK 4 and WebKitGTK 6, not GTK 3: GTK 3 drops parts of a transparent
+// surface's content between frames on Wayland, so the panel flickered to
+// whatever was behind it. GTK 4 redraws the whole surface every frame.
 
 #include <gtk/gtk.h>
-#include <gtk-layer-shell.h>
-#include <webkit2/webkit2.h>
+#include <gtk4-layer-shell.h>
+#include <webkit/webkit.h>
 
 #include "window.h"
 #include "_cgo_export.h"
 
 static GtkWidget *win;
 static WebKitWebView *view;
+static GMainLoop *loop;
 
-static void on_message(WebKitUserContentManager *m, WebKitJavascriptResult *r, gpointer data) {
-	JSCValue *v = webkit_javascript_result_get_js_value(r);
+static void on_message(WebKitUserContentManager *m, JSCValue *v, gpointer data) {
 	if (!jsc_value_is_string(v)) {
 		return;
 	}
@@ -26,8 +30,8 @@ static void on_message(WebKitUserContentManager *m, WebKitJavascriptResult *r, g
 	g_free(s);
 }
 
-static gboolean on_delete(GtkWidget *w, GdkEvent *e, gpointer data) {
-	gtk_widget_hide(win);
+static gboolean on_close(GtkWindow *w, gpointer data) {
+	gtk_widget_set_visible(win, FALSE);
 	goHidden();
 	return TRUE;
 }
@@ -50,16 +54,24 @@ static gboolean on_policy(WebKitWebView *v, WebKitPolicyDecision *d, WebKitPolic
 	return TRUE;
 }
 
-static gboolean on_context_menu(WebKitWebView *v, WebKitContextMenu *m, GdkEvent *e, WebKitHitTestResult *h, gpointer data) {
+static gboolean on_context_menu(WebKitWebView *v, WebKitContextMenu *m, WebKitHitTestResult *h, gpointer data) {
 	return TRUE;
 }
 
 void window_create(const char *html) {
 	g_set_prgname("broker-board");
-	gtk_init(NULL, NULL);
+	gtk_init();
+	loop = g_main_loop_new(NULL, FALSE);
 
-	win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	// Every window of this program is see-through; the page paints the
+	// panel and nothing else.
+	GtkCssProvider *css = gtk_css_provider_new();
+	gtk_css_provider_load_from_string(css, "window, window.background { background: transparent; box-shadow: none; }");
+	gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+	win = gtk_window_new();
 	gtk_window_set_title(GTK_WINDOW(win), "Signal Box");
+	gtk_window_set_decorated(GTK_WINDOW(win), FALSE);
 	gtk_layer_init_for_window(GTK_WINDOW(win));
 	gtk_layer_set_namespace(GTK_WINDOW(win), "broker-board");
 	gtk_layer_set_layer(GTK_WINDOW(win), GTK_LAYER_SHELL_LAYER_OVERLAY);
@@ -72,19 +84,10 @@ void window_create(const char *html) {
 	gtk_layer_set_exclusive_zone(GTK_WINDOW(win), 0);
 	gtk_layer_set_keyboard_mode(GTK_WINDOW(win), GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE);
 
-	// A transparent surface: everything outside the panel shows through,
-	// and a click there closes it.
-	GdkScreen *screen = gtk_widget_get_screen(win);
-	GdkVisual *visual = gdk_screen_get_rgba_visual(screen);
-	if (visual != NULL) {
-		gtk_widget_set_visual(win, visual);
-	}
-	gtk_widget_set_app_paintable(win, TRUE);
-
 	WebKitUserContentManager *m = webkit_user_content_manager_new();
 	g_signal_connect(m, "script-message-received::board", G_CALLBACK(on_message), NULL);
-	webkit_user_content_manager_register_script_message_handler(m, "board");
-	view = WEBKIT_WEB_VIEW(webkit_web_view_new_with_user_content_manager(m));
+	webkit_user_content_manager_register_script_message_handler(m, "board", NULL);
+	view = WEBKIT_WEB_VIEW(g_object_new(WEBKIT_TYPE_WEB_VIEW, "user-content-manager", m, NULL));
 
 	WebKitSettings *s = webkit_web_view_get_settings(view);
 	webkit_settings_set_enable_developer_extras(s, g_getenv("BROKER_BOARD_DEVTOOLS") != NULL);
@@ -97,69 +100,58 @@ void window_create(const char *html) {
 
 	GdkRGBA clear = {0, 0, 0, 0};
 	webkit_web_view_set_background_color(view, &clear);
-	gtk_container_add(GTK_CONTAINER(win), GTK_WIDGET(view));
+	gtk_window_set_child(GTK_WINDOW(win), GTK_WIDGET(view));
 
 	g_signal_connect(view, "decide-policy", G_CALLBACK(on_policy), NULL);
 	g_signal_connect(view, "context-menu", G_CALLBACK(on_context_menu), NULL);
-	g_signal_connect(win, "delete-event", G_CALLBACK(on_delete), NULL);
+	g_signal_connect(win, "close-request", G_CALLBACK(on_close), NULL);
 
 	webkit_web_view_load_html(view, html, NULL);
 	// Realized but not shown: the page loads now, so the first open is
 	// as quick as every other.
 	gtk_widget_realize(win);
-	gtk_widget_show(GTK_WIDGET(view));
 }
 
 void window_run(void) {
-	gtk_main();
+	g_main_loop_run(loop);
 }
 
-struct show_args {
-	double x, y;
-	int has_monitor;
-};
-
-// pick_monitor finds the GDK monitor whose layout position matches the
-// one Hyprland named, so the panel opens on the monitor that was clicked.
-static GdkMonitor *pick_monitor(double x, double y) {
-	GdkDisplay *d = gdk_display_get_default();
-	int n = gdk_display_get_n_monitors(d);
-	for (int i = 0; i < n; i++) {
-		GdkMonitor *m = gdk_display_get_monitor(d, i);
-		GdkRectangle g;
-		gdk_monitor_get_geometry(m, &g);
-		if ((int)(x + 0.5) == g.x && (int)(y + 0.5) == g.y) {
-			return m;
+// pick_monitor finds the monitor Hyprland named by its connector (DP-2),
+// so the panel opens on the monitor whose bar was clicked.
+static GdkMonitor *pick_monitor(const char *name) {
+	if (name == NULL || name[0] == '\0') {
+		return NULL;
+	}
+	GListModel *list = gdk_display_get_monitors(gdk_display_get_default());
+	guint n = g_list_model_get_n_items(list);
+	for (guint i = 0; i < n; i++) {
+		GdkMonitor *m = g_list_model_get_item(list, i);
+		gboolean match = g_strcmp0(gdk_monitor_get_connector(m), name) == 0;
+		g_object_unref(m);
+		if (match) {
+			return m; // the display's list still holds it
 		}
 	}
 	return NULL;
 }
 
 static gboolean show_idle(gpointer data) {
-	struct show_args *a = data;
-	if (a->has_monitor) {
-		gtk_layer_set_monitor(GTK_WINDOW(win), pick_monitor(a->x, a->y));
-	} else {
-		gtk_layer_set_monitor(GTK_WINDOW(win), NULL);
-	}
-	gtk_widget_show(win);
+	char *name = data;
+	gtk_layer_set_monitor(GTK_WINDOW(win), pick_monitor(name));
+	gtk_widget_set_visible(win, TRUE);
 	gtk_window_present(GTK_WINDOW(win));
 	gtk_widget_grab_focus(GTK_WIDGET(view));
-	g_free(a);
+	g_free(name);
 	return G_SOURCE_REMOVE;
 }
 
 // Safe from any thread.
-void window_show(double monitor_x, double monitor_y, int has_monitor) {
-	struct show_args *a = g_new(struct show_args, 1);
-	a->x = monitor_x;
-	a->y = monitor_y;
-	a->has_monitor = has_monitor;
-	g_idle_add(show_idle, a);
+void window_show(const char *monitor) {
+	g_idle_add(show_idle, g_strdup(monitor));
 }
 
 static gboolean hide_idle(gpointer data) {
-	gtk_widget_hide(win);
+	gtk_widget_set_visible(win, FALSE);
 	return G_SOURCE_REMOVE;
 }
 
@@ -180,7 +172,7 @@ void window_eval(const char *js) {
 }
 
 static gboolean quit_idle(gpointer data) {
-	gtk_main_quit();
+	g_main_loop_quit(loop);
 	return G_SOURCE_REMOVE;
 }
 
