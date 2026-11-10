@@ -1,0 +1,692 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<style id="base">
+  /* Signal Box: Nord on the bar's own background unless the bar's
+     stylesheet says otherwise (the "init" message overrides these). */
+  :root {
+    --font: "JetBrains Mono", "PragmataPro Liga", "DejaVu Sans Mono", monospace;
+    --bar: #282a2e; --panel: #24272c; --tile: #2c3036; --tile-2: #353a41; --well: #1d2024;
+    --line: #3d424b; --line-2: #4c566a;
+    --ink: #e5e9f0; --fg: #c5c8c6; --dim: #8d949f; --mute: #666d78;
+    --accent: #88c0d0; --accent-ink: #1d2024; --hover: #3b4252;
+    --green: #a3be8c; --amber: #ebcb8b; --red: #bf616a; --blue: #81a1c1;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  body { font: 13px/1.45 var(--font); color: var(--fg); user-select: none; -webkit-user-select: none; }
+  button { font: inherit; color: inherit; }
+  :focus { outline: none; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 5px; }
+
+  #backdrop { position: fixed; inset: 0; }
+  #panel:focus, #panel:focus-visible { outline: none; }
+  #panel { position: fixed; width: 460px; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: 0 28px 70px -18px rgba(0,0,0,.75), 0 0 0 1px rgba(0,0,0,.25);
+    opacity: 0; transform: scale(.06); visibility: hidden;
+    transition: transform .52s cubic-bezier(.17,1.22,.32,1), opacity .18s ease; }
+  #panel.open { opacity: 1; transform: scale(1); visibility: visible; }
+  #panel.closing { visibility: visible; transition: transform .24s cubic-bezier(.5,0,.75,0), opacity .2s ease .04s; }
+  #panel.play .stag { animation: rise .4s cubic-bezier(.2,.9,.3,1) both; animation-delay: calc(var(--i, 0) * 38ms + 110ms); }
+  @keyframes rise { from { opacity: 0; transform: translateY(9px) scale(.985); } to { opacity: 1; transform: none; } }
+
+  header { display: flex; gap: 12px; align-items: flex-start; padding: 15px 17px 10px; }
+  header .ttl { flex: 1; min-width: 0; }
+  header .name { color: var(--ink); font-weight: 700; letter-spacing: .12em; font-size: 13.5px; display: flex; align-items: center; gap: 9px; }
+  header .name i { width: 9px; height: 9px; border-radius: 50%; background: var(--green); }
+  header .meta { color: var(--dim); font-size: 11.5px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; white-space: nowrap; }
+  .chip.quiet { background: rgba(163,190,140,.14); color: var(--green); }
+  .chip.live { background: rgba(136,192,208,.14); color: var(--accent); }
+  .chip.ending, .chip.night, .chip.asking, .chip.missed { background: rgba(235,203,139,.16); color: var(--amber); }
+  .chip.locked { background: rgba(129,161,193,.2); color: var(--blue); }
+
+  nav { display: flex; gap: 2px; margin: 0 13px; padding: 3px; background: var(--well); border-radius: 9px; }
+  nav button { flex: 1; background: none; border: 0; padding: 6px 4px; border-radius: 6px; color: var(--dim); cursor: pointer; font-size: 12px; white-space: nowrap; }
+  nav button:hover { color: var(--ink); }
+  nav button .n { color: var(--mute); margin-left: 4px; }
+  nav button.n-amber .n { color: var(--amber); }
+  nav button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  nav button[aria-selected="true"] .n { color: var(--accent-ink); opacity: .7; }
+  nav .sib { flex: none; padding-inline: 7px; }
+  nav .sib i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--mute); margin-right: 5px; vertical-align: 1px; }
+  .dot-calm, .dot-ok, .dot-quiet { background: var(--green) !important; }
+  .dot-heads-up, .dot-ending, .dot-asking, .dot-missed { background: var(--amber) !important; }
+  .dot-act, .dot-failed { background: var(--red) !important; }
+  .dot-building, .dot-running, .dot-queued, .dot-waiting, .dot-live { background: var(--accent) !important; }
+
+  main { flex: 1; overflow-y: auto; padding: 11px 13px 10px; display: flex; flex-direction: column; gap: 8px; min-height: 0;
+    scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+  footer { display: flex; gap: 14px; padding: 9px 17px 11px; border-top: 1px solid var(--line); color: var(--mute); font-size: 11px; flex-wrap: wrap; }
+  footer b { color: var(--fg); font-weight: 500; }
+
+  .tile { background: var(--tile); border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px; }
+  .strip { display: flex; align-items: center; gap: 10px; background: var(--well); border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; font-size: 12px; }
+  .strip .grow { flex: 1; min-width: 0; }
+  .strip b { color: var(--ink); font-weight: 500; }
+  .btn { background: var(--tile-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 3px 9px; font-size: 11.5px; color: var(--fg); cursor: pointer; white-space: nowrap; }
+  .btn:hover { border-color: var(--accent); color: var(--ink); }
+  .btn.warn:hover { border-color: var(--red); color: #f0b4ba; }
+  .btn.go { background: rgba(163,190,140,.14); border-color: rgba(163,190,140,.45); color: var(--green); }
+  .btn kbd { font: inherit; color: var(--mute); margin-left: 5px; }
+  .empty { text-align: center; padding: 26px 14px; color: var(--dim); }
+  .empty b { display: block; color: var(--ink); font-weight: 500; margin-bottom: 4px; }
+  .note { font-size: 11px; color: var(--mute); padding: 0 2px; }
+  .sect { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); padding: 6px 2px 0; display: flex; justify-content: space-between; }
+
+  .grant { display: grid; grid-template-columns: 44px 1fr auto; gap: 3px 11px; align-items: center; cursor: default;
+    transition: opacity .3s, transform .34s cubic-bezier(.5,0,.75,0); }
+  .grant.sel { border-color: var(--line-2); background: color-mix(in srgb, var(--tile) 85%, var(--accent) 6%); }
+  .grant.gone { opacity: 0; transform: translateX(36px); }
+  .grant.changed { border-style: dashed; }
+  .ring { width: 44px; height: 44px; grid-row: span 3; }
+  .ring text { font: 10px var(--font); fill: var(--ink); text-anchor: middle; dominant-baseline: central; }
+  .gnames { color: var(--ink); font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+  .gnames .bundle { display: inline-block; color: var(--accent); border: 1px solid rgba(136,192,208,.4); border-radius: 4px; padding: 0 5px; font-size: 10.5px; font-weight: 500; margin-right: 6px; }
+  .gnames .more { color: var(--dim); font-weight: 400; }
+  .gwho { grid-column: 2; color: var(--dim); font-size: 11.5px; min-width: 0; overflow-wrap: anywhere; }
+  .gwho q { color: #d8c79c; font-style: italic; quotes: none; }
+  .guse { grid-column: 2; display: flex; gap: 9px; align-items: center; font-size: 11px; color: var(--mute); }
+  .guse svg { width: 80px; height: 14px; flex: none; }
+  .gact { grid-row: 1 / span 3; grid-column: 3; display: flex; flex-direction: column; gap: 5px; align-self: start; }
+  .bad { color: #e39aa1; }
+
+  .ask { border-color: rgba(235,203,139,.45); background: linear-gradient(180deg, rgba(235,203,139,.07), transparent 70%), var(--tile); }
+  .ask .top { display: flex; gap: 10px; align-items: baseline; }
+  .ask .top b { color: var(--ink); flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .ask .cd { color: var(--amber); font-variant-numeric: tabular-nums; }
+  .kv { display: grid; grid-template-columns: 72px 1fr; gap: 3px 10px; margin: 8px 0 0; font-size: 11.5px; }
+  .kv dt { color: var(--mute); } .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .says { margin-top: 8px; border-left: 3px solid var(--amber); background: rgba(235,203,139,.08); padding: 6px 9px; border-radius: 0 6px 6px 0; font-size: 11.5px; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+  .says small { display: block; color: #c9a95f; font-size: 10.5px; }
+  .waiting { margin-top: 9px; display: flex; align-items: center; gap: 10px; background: rgba(163,190,140,.08); border: 1px solid rgba(163,190,140,.3); border-radius: 8px; padding: 7px 10px; font-size: 11.5px; }
+  .waiting i { width: 9px; height: 9px; border-radius: 50%; background: var(--green); flex: none; animation: breathe 1.4s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: .35; } }
+  .missed { display: grid; grid-template-columns: 44px 1fr auto; gap: 2px 10px; align-items: center; font-size: 11.5px; }
+  .missed.sel { border-color: var(--line-2); }
+  .missed .t { color: var(--amber); grid-row: span 2; font-variant-numeric: tabular-nums; }
+  .missed .n { color: var(--ink); font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+  .missed .w { grid-column: 2; color: var(--dim); min-width: 0; overflow-wrap: anywhere; }
+  .missed .acts { grid-row: span 2; grid-column: 3; display: flex; flex-direction: column; gap: 5px; }
+
+  .day svg { width: 100%; height: auto; display: block; }
+  .ep { display: grid; grid-template-columns: 46px 1fr; gap: 1px 10px; font-size: 11.5px; padding: 8px 10px; }
+  .ep .t { color: var(--mute); grid-row: span 2; font-variant-numeric: tabular-nums; }
+  .ep .h { color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+  .ep .h i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; background: var(--accent); }
+  .ep .h i.k-grant { background: var(--green); } .ep .h i.k-missed { background: var(--amber); } .ep .h i.k-denied { background: var(--red); }
+  .ep .h i.k-revoke, .ep .h i.k-lock { background: var(--blue); } .ep .h i.k-change { background: var(--mute); }
+  .ep .s { color: var(--dim); min-width: 0; overflow-wrap: anywhere; }
+  .ep .s .a { color: var(--amber); } .ep .s .l { color: var(--accent); } .ep .s .r { color: #e39aa1; }
+
+  .filter { display: flex; gap: 8px; align-items: center; background: var(--well); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; }
+  .filter span { color: var(--mute); }
+  .filter input { flex: 1; background: none; border: 0; color: var(--ink); font: inherit; outline: none; user-select: text; -webkit-user-select: text; }
+  .vstats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .vstats div { background: var(--well); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; }
+  .vstats b { display: block; color: var(--ink); font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .vstats span { font-size: 10px; color: var(--mute); letter-spacing: .06em; text-transform: uppercase; }
+  .vrow { display: grid; grid-template-columns: 1fr 70px 70px; gap: 2px 10px; align-items: center; padding: 7px 10px; font-size: 11.5px; }
+  .vrow .nm { color: var(--ink); font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+  .vrow .tr { font-size: 10px; color: var(--mute); margin-left: 6px; font-weight: 400; white-space: nowrap; }
+  .vrow .tr.pub { color: var(--green); } .vrow .tr.live { color: var(--accent); }
+  .vrow svg { width: 70px; height: 16px; }
+  .vrow .u { text-align: right; font-variant-numeric: tabular-nums; }
+  .vrow .d { grid-column: 1 / -1; color: var(--mute); font-size: 11px; min-width: 0; overflow-wrap: anywhere; }
+  .vrow .f { grid-column: 1 / -1; font-size: 11px; }
+  .f-warn { color: var(--amber); } .f-bad { color: #e39aa1; } .f-info { color: var(--accent); }
+
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 10px); background: var(--well); border: 1px solid var(--line-2);
+    border-radius: 8px; padding: 7px 12px; font-size: 12px; color: var(--ink); opacity: 0; transition: .22s; pointer-events: none; max-width: 420px; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.err { border-color: var(--red); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+<style id="theme"></style>
+<style id="user"></style>
+</head>
+<body>
+<div id="backdrop"></div>
+<section id="panel" role="dialog" aria-label="Signal Box">
+  <header class="stag" style="--i:0">
+    <div class="ttl"><div class="name"><i></i>SIGNAL BOX</div><div class="meta" id="meta"></div></div>
+    <span class="chip quiet" id="chip">nothing live</span>
+  </header>
+  <nav id="tabs" role="tablist"></nav>
+  <main id="body"></main>
+  <footer id="foot"></footer>
+</section>
+<div id="toast" role="status"></div>
+<script>
+"use strict";
+(function () {
+  const post = (m) => { try { window.webkit.messageHandlers.board.postMessage(JSON.stringify(m)); } catch (e) {} };
+  const $ = (id) => document.getElementById(id);
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const TABS = ["live", "asks", "register", "vault"];
+  const TITLES = { live: "Live", asks: "Asks", register: "Register", vault: "Vault" };
+
+  // h builds an element; strings become text nodes, never markup, since
+  // reasons and directories come from agents.
+  function h(tag, attrs, ...kids) {
+    const el = document.createElement(tag);
+    for (const k in attrs || {}) {
+      const v = attrs[k];
+      if (v == null || v === false) continue;
+      if (k === "class") el.className = v;
+      else if (k === "style") el.style.cssText = v;
+      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids.flat(Infinity)) {
+      if (kid == null || kid === false) continue;
+      el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+    }
+    return el;
+  }
+  function s(tag, attrs) {
+    const el = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  let snap = null, skew = 0, anchor = null, tab = "live", open = false, sel = 0, filterText = "";
+  let actionSeq = 0;
+  const pending = {};
+  const now = () => Date.now() - skew;
+  const t = (iso) => Date.parse(iso);
+
+  function left(ms) {
+    const sec = Math.max(0, Math.round(ms / 1000));
+    if (sec >= 86400) return Math.floor(sec / 86400) + "d";
+    if (sec >= 3600) { const hh = Math.floor(sec / 3600), mm = Math.floor(sec % 3600 / 60); return hh + "h" + (mm ? String(mm).padStart(2, "0") : ""); }
+    if (sec >= 60) return Math.floor(sec / 60) + "m";
+    return sec + "s";
+  }
+  function ago(iso) { return left(now() - t(iso)) + " ago"; }
+  function mmss(ms) { const sec = Math.max(0, Math.round(ms / 1000)); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); }
+  function hhmm(iso) { const d = new Date(t(iso)); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+  function names(list, maxShown) {
+    maxShown = maxShown || 2;
+    if (list.length <= maxShown) return list.join(", ");
+    return list.slice(0, maxShown).join(", ") + " +" + (list.length - maxShown);
+  }
+  function short(n) { return n.replace(/_API_KEY$|_API_TOKEN$|_TOKEN$|_KEY$/, "").toLowerCase(); }
+
+  function ring(frac, label, color) {
+    const r = 18, c = 2 * Math.PI * r;
+    const svg = s("svg", { class: "ring", viewBox: "0 0 44 44", "aria-hidden": "true" });
+    svg.append(s("circle", { cx: 22, cy: 22, r, fill: "none", stroke: "var(--well)", "stroke-width": 4 }));
+    svg.append(s("circle", { class: "arc", cx: 22, cy: 22, r, fill: "none", stroke: color, "stroke-width": 4, "stroke-linecap": "round",
+      "stroke-dasharray": c.toFixed(2), "stroke-dashoffset": (c * (1 - frac)).toFixed(2), transform: "rotate(-90 22 22)" }));
+    const tx = s("text", { x: 22, y: 22 }); tx.textContent = label; svg.append(tx);
+    return svg;
+  }
+  function spark(vals, w, hgt, color) {
+    const svg = s("svg", { viewBox: `0 0 ${w} ${hgt}`, "aria-hidden": "true" });
+    const mx = Math.max(1, ...vals), n = vals.length;
+    if (n < 2) return svg;
+    let d = "";
+    vals.forEach((v, i) => { const x = (i / (n - 1)) * (w - 2) + 1, y = hgt - 1 - (v / mx) * (hgt - 3); d += (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1); });
+    svg.append(s("path", { d: d + ` L${w - 1} ${hgt} L1 ${hgt} Z`, fill: color, "fill-opacity": ".14" }));
+    svg.append(s("path", { d, fill: "none", stroke: color, "stroke-width": "1.5", "stroke-linejoin": "round" }));
+    const ly = hgt - 1 - (vals[n - 1] / mx) * (hgt - 3);
+    svg.append(s("circle", { cx: w - 1, cy: ly.toFixed(1), r: 2, fill: color }));
+    return svg;
+  }
+
+  // ---------- placement: the panel sits against the bar's edge, centered
+  // on the click and clamped to the screen; it scales out of the click.
+  const GAP = 10, SIDE = 10;
+  function place() {
+    const p = $("panel");
+    const sw = window.innerWidth, sh = window.innerHeight;
+    const pw = Math.min(460, sw - 2 * SIDE), ph = Math.min(640, sh - 2 * GAP);
+    p.style.width = pw + "px"; p.style.height = ph + "px";
+    const cx = (x) => Math.min(Math.max(x, SIDE), Math.max(SIDE, sw - pw - SIDE));
+    const cy = (y) => Math.min(Math.max(y, GAP), Math.max(GAP, sh - ph - GAP));
+    let x, y, ox, oy;
+    const a = anchor;
+    if (!a || a.center) {
+      x = (sw - pw) / 2; y = Math.max(GAP, (sh - ph) / 2 * 0.85); ox = pw / 2; oy = ph / 2;
+    } else {
+      const res = a.reserved || [0, 0, 0, 0];
+      const lx = a.x - res[0], ly = a.y - res[1];
+      switch (a.edge) {
+        case "top": x = cx(lx - pw / 2); y = GAP; ox = Math.min(Math.max(lx - x, 0), pw); oy = -GAP; break;
+        case "left": y = cy(ly - ph / 2); x = GAP; ox = -GAP; oy = Math.min(Math.max(ly - y, 0), ph); break;
+        case "right": y = cy(ly - ph / 2); x = sw - GAP - pw; ox = pw + GAP; oy = Math.min(Math.max(ly - y, 0), ph); break;
+        default: x = cx(lx - pw / 2); y = sh - GAP - ph; ox = Math.min(Math.max(lx - x, 0), pw); oy = ph + GAP;
+      }
+    }
+    p.style.left = x + "px"; p.style.top = y + "px";
+    p.style.transformOrigin = ox + "px " + oy + "px";
+  }
+
+  function show(a, wantTab) {
+    anchor = a || anchor;
+    if (wantTab && TABS.includes(wantTab)) tab = wantTab;
+    else if (snap && (snap.asks.length || (snap.lamp.level === "missed"))) tab = "asks";
+    sel = 0; filterText = "";
+    const p = $("panel");
+    p.classList.remove("closing", "open", "play");
+    p.style.transition = "none";
+    // The surface was just mapped: wait until the compositor has given it
+    // its size before placing the panel against the bar.
+    let tries = 0, started = false;
+    const go = () => {
+      if (started) return;
+      if ((window.innerWidth < 320 || window.innerHeight < 240) && tries++ < 30) { setTimeout(go, 16); return; }
+      started = true;
+      place();
+      render();
+      void p.offsetWidth;
+      p.style.transition = "";
+      p.classList.add("open", "play");
+      open = true;
+      setTimeout(() => p.focus(), 30);
+    };
+    // A frame callback, with a timer in case the view gets no frame yet.
+    requestAnimationFrame(go);
+    setTimeout(go, 60);
+  }
+  window.addEventListener("resize", () => { if (open) place(); });
+  function hide(then) {
+    if (!open) { post({ type: "hidden" }); if (then) then(); return; }
+    open = false;
+    const p = $("panel");
+    p.classList.add("closing");
+    p.classList.remove("open", "play");
+    let done = false;
+    const fin = () => { if (done) return; done = true; p.classList.remove("closing"); post({ type: "hidden" }); if (then) then(); };
+    p.addEventListener("transitionend", fin, { once: true });
+    setTimeout(fin, 320);
+  }
+
+  function toast(text, err) {
+    const el = $("toast");
+    el.textContent = text;
+    el.classList.toggle("err", !!err);
+    el.classList.add("show");
+    clearTimeout(toast.t);
+    toast.t = setTimeout(() => el.classList.remove("show"), 2600);
+  }
+
+  function act(action, fields, closeFirst) {
+    const id = String(++actionSeq);
+    const msg = Object.assign({ type: "action", action, id }, fields);
+    pending[id] = action;
+    if (closeFirst) hide(() => post(msg));
+    else post(msg);
+  }
+  // Anything that grants goes through broker request: the panel closes so
+  // the request window (or the phone) can ask for the touch.
+  function request(names, seconds, reason) {
+    act("request", { names, for: Math.max(60, Math.round(seconds)), reason }, true);
+  }
+
+  // ---------- rendering
+  function lampChip() {
+    const l = snap.lamp, c = $("chip");
+    const text = {
+      quiet: "nothing live", live: l.count + " live", ending: l.count + " live · ending",
+      night: l.count + " live · late", asking: snap.asks.length + " asking", missed: snap.missed.length + " missed", locked: "locked",
+    }[l.level] || l.level;
+    c.className = "chip " + l.level;
+    c.textContent = text;
+    const dev = snap.device === "yubikey" ? "YubiKey" : snap.device === "se" ? "Touch ID" : snap.device;
+    $("meta").textContent = [snap.host, "vault: " + snap.zone, dev].filter(Boolean).join(" · ");
+  }
+
+  function renderTabs() {
+    const nav = $("tabs");
+    nav.replaceChildren();
+    const counts = {
+      live: snap.grants.filter((g) => !g.changed).length,
+      asks: snap.asks.length + snap.missed.length,
+      register: "",
+      vault: snap.vault.total,
+    };
+    TABS.forEach((id, i) => {
+      const b = h("button", { role: "tab", "aria-selected": String(id === tab), class: id === "asks" && counts.asks ? "n-amber" : "",
+        onclick: () => { tab = id; sel = 0; filterText = ""; render(true); } },
+        TITLES[id], counts[id] !== "" ? h("span", { class: "n" }, counts[id]) : null);
+      nav.append(b);
+    });
+    for (const [name, label] of [["switchyard", "Yard"], ["roundhouse", "Roundhouse"]]) {
+      if (!snap.siblings || !(name in snap.siblings)) continue;
+      nav.append(h("button", { class: "sib", tabindex: "-1", title: "Open " + name + " from the same icon",
+        onclick: () => act("sibling", { sibling: name }) },
+        h("i", { class: "dot-" + snap.siblings[name] }), label + " ↗"));
+    }
+  }
+
+  function liveBody(main) {
+    const rows = snap.grants;
+    const live = rows.filter((g) => !g.changed);
+    let i = 0;
+    if (!rows.length) {
+      main.append(h("div", { class: "tile empty stag", style: "--i:1" }, h("b", {}, "Nothing is granted."),
+        "Agents that need a private secret will ask, and the lamp will tell you."));
+    } else {
+      const total = live.reduce((a, g) => a + g.names.length, 0);
+      const soon = live.slice().sort((a, b) => t(a.expires) - t(b.expires))[0];
+      main.append(h("div", { class: "strip stag", style: "--i:" + (++i) },
+        h("span", { class: "grow" }, total + (total === 1 ? " secret" : " secrets") + " in " + live.length + (live.length === 1 ? " grant" : " grants"),
+          soon ? [" · next to end: ", h("b", {}, soon.names[0]), " in ", h("span", { "data-left": soon.expires }, left(t(soon.expires) - now()))] : null),
+        live.length ? h("button", { class: "btn warn", onclick: () => act("revoke_all", {}) }, "Revoke all", h("kbd", {}, "R")) : null));
+      rows.forEach((g, idx) => {
+        const ms = t(g.expires) - now();
+        const frac = Math.max(0.02, Math.min(1, ms / (g.total * 1000)));
+        const color = g.changed ? "var(--mute)" : ms < 15 * 60 * 1000 ? "var(--amber)" : "var(--accent)";
+        const who = g.who === "you" ? "you, from a terminal" : g.who === "Signal Box" ? "you, from Signal Box" : g.who;
+        main.append(h("div", { class: "tile grant stag" + (idx === sel ? " sel" : "") + (g.changed ? " changed" : ""), style: "--i:" + (++i), "data-id": g.id,
+          onmouseenter: () => { sel = idx; markSel(); } },
+          h("span", { "data-ring": g.id }, ring(frac, left(ms), color)),
+          h("div", { class: "gnames" }, g.bundle ? [h("span", { class: "bundle" }, g.bundle), g.names.length + " secrets"] : names(g.names, 2)),
+          h("div", { class: "gwho" }, g.changed ? h("span", { class: "bad" }, "changed since it was granted: exec refuses it · ") : null,
+            who, g.cwd ? " in " + g.cwd : "", g.reason ? [" · ", h("q", {}, g.reason)] : "", g.via ? " · via " + g.via : ""),
+          h("div", { class: "guse" }, spark(g.spark, 80, 14, color),
+            h("span", {}, g.runs + (g.runs === 1 ? " run" : " runs") + (g.last_used ? " · last " + ago(g.last_used) : " · not used yet"))),
+          h("div", { class: "gact" },
+            h("button", { class: "btn warn", onclick: () => act("revoke", { names: g.names }) }, "Revoke"),
+            g.changed ? null : h("button", { class: "btn", title: "Extend by an hour (one touch)", onclick: () => extend(g) }, "+1h"))));
+      });
+      main.append(h("p", { class: "note stag", style: "--i:" + (++i) }, "A live secret works for any agent on this machine, not only the one that asked."));
+    }
+    if (snap.bundles.length) {
+      main.append(h("div", { class: "sect stag", style: "--i:" + (++i) }, h("span", {}, "Bundles"), h("span", {}, "one touch each")));
+      for (const b of snap.bundles) {
+        main.append(h("div", { class: "strip stag", style: "--i:" + (++i) },
+          h("span", { class: "grow" }, h("b", {}, b.name), " · " + b.names.length + " secrets for " + left(b.for * 1000), b.live ? h("span", { style: "color:var(--accent)" }, " · live") : ""),
+          h("button", { class: "btn" + (b.live ? "" : " go"), onclick: () => grantBundle(b) }, b.live ? "Renew" : "Grant", b.key ? h("kbd", {}, b.key) : null)));
+      }
+    }
+  }
+  function extend(g) {
+    const remaining = Math.max(0, t(g.expires) - now()) / 1000;
+    request(g.names, Math.min(86400, Math.ceil((remaining + 3600) / 60) * 60), "From Signal Box: extend by an hour");
+  }
+  function grantBundle(b) { request(b.names, b.for, "From Signal Box: the " + b.name + " bundle"); }
+
+  function asksBody(main) {
+    let i = 0;
+    for (const a of snap.asks) {
+      main.append(h("div", { class: "tile ask stag", style: "--i:" + (++i) },
+        h("div", { class: "top" }, h("b", {}, (a.extend ? "Extend " : a.who + " wants ") + names(a.names, 3)),
+          h("span", { class: "cd", "data-deadline": a.deadline }, mmss(t(a.deadline) - now()))),
+        h("dl", { class: "kv" },
+          h("dt", {}, "For"), h("dd", {}, a.for),
+          h("dt", {}, "Asked by"), h("dd", {}, a.chain || a.who),
+          a.cwd ? [h("dt", {}, "Directory"), h("dd", {}, a.cwd)] : null,
+          a.cmd ? [h("dt", {}, "Will run"), h("dd", {}, a.cmd)] : null),
+        a.reason ? h("div", { class: "says" }, h("small", {}, "The agent says (unverified)"), a.reason) : null,
+        h("div", { class: "waiting" }, h("i", {}), h("span", {}, a.queued ? "Waiting behind another request window." :
+          "Approve or deny in the request window" + (snap.zone === "hardware" ? ", or on your phone" : "") + "."))));
+    }
+    if (snap.missed.length) {
+      main.append(h("div", { class: "sect stag", style: "--i:" + (++i) }, h("span", {}, "Missed while you were away"), h("span", {}, "nobody answered")));
+      snap.missed.forEach((m, idx) => {
+        const secs = parseDur(m.for) || 3600;
+        main.append(h("div", { class: "tile missed stag" + (idx === sel ? " sel" : ""), style: "--i:" + (++i), onmouseenter: () => { sel = idx; markSel(); } },
+          h("span", { class: "t" }, hhmm(m.ts)),
+          h("span", { class: "n" }, names(m.names, 3), " · " + m.for),
+          h("span", { class: "w" }, m.who, m.cwd ? " in " + m.cwd : "", m.reason ? [" · ", h("q", { style: "color:#d8c79c;font-style:italic;quotes:none" }, m.reason)] : "",
+            m.retries ? " · asked " + (m.retries + 1) + " times" : ""),
+          h("span", { class: "acts" },
+            h("button", { class: "btn go", onclick: () => request(m.names, secs, "From Signal Box: a request missed at " + hhmm(m.ts)) }, "Grant now"),
+            h("button", { class: "btn", onclick: () => act("dismiss", { keys: [m.key] }) }, "Dismiss"))));
+      });
+      main.append(h("p", { class: "note stag", style: "--i:" + (++i) }, "Grant now takes one touch, so the agent's next exec finds the grant instead of asking again."));
+    }
+    if (!snap.asks.length && !snap.missed.length) {
+      main.append(h("div", { class: "tile empty stag", style: "--i:1" }, h("b", {}, "No asks waiting."),
+        "Today: " + snap.today.answered + " answered, " + snap.today.missed + " missed."));
+    }
+  }
+
+  function filterBox(main, placeholder) {
+    const input = h("input", { id: "filter", placeholder, value: filterText, oninput: (e) => { filterText = e.target.value; renderBodyOnly(); } });
+    main.append(h("label", { class: "filter stag", style: "--i:1" }, h("span", {}, "/"), input));
+    return input;
+  }
+  function matches(...parts) {
+    if (!filterText) return true;
+    const q = filterText.toLowerCase();
+    return parts.flat().some((p) => p && String(p).toLowerCase().includes(q));
+  }
+
+  function registerBody(main, listOnly) {
+    let i = 1;
+    if (!listOnly) {
+      const W = 420, H = 58, end = now() / 1000, start = end - 86400;
+      const x = (sec) => 10 + ((sec - start) / 86400) * (W - 20);
+      const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "The last 24 hours" });
+      const color = { run: "var(--accent)", grant: "var(--green)", missed: "var(--amber)", revoke: "var(--blue)", denied: "var(--red)" };
+      for (const m of snap.register.strip) {
+        if (m.t < start) continue;
+        if (m.k === "run") svg.append(s("line", { x1: x(m.t).toFixed(1), x2: x(m.t).toFixed(1), y1: 18, y2: 33, stroke: color.run, "stroke-opacity": ".5", "stroke-width": 1 }));
+        else svg.append(s("circle", { cx: x(m.t).toFixed(1), cy: 43, r: 3.2, fill: color[m.k] || "var(--dim)" }));
+      }
+      const d0 = new Date(start * 1000);
+      for (let k = 0; k <= 24; k++) {
+        const ts = new Date(d0); ts.setMinutes(0, 0, 0); ts.setHours(ts.getHours() + k + 1);
+        const sec = ts.getTime() / 1000;
+        if (sec > end || ts.getHours() % 6 !== 0) continue;
+        const tx = s("text", { x: x(sec), y: 56, fill: "var(--mute)", "font-size": 9, "text-anchor": "middle", "font-family": "inherit" });
+        tx.textContent = String(ts.getHours()).padStart(2, "0"); svg.append(tx);
+      }
+      svg.append(s("line", { x1: x(end), x2: x(end), y1: 10, y2: 47, stroke: "var(--ink)", "stroke-opacity": ".45", "stroke-dasharray": "2 2" }));
+      const nowT = s("text", { x: x(end) - 2, y: 8, fill: "var(--fg)", "font-size": 9, "text-anchor": "end", "font-family": "inherit" });
+      nowT.textContent = "now"; svg.append(nowT);
+      main.append(h("div", { class: "tile day stag", style: "--i:0;padding:7px 9px" }, svg));
+      filterBox(main, "filter by secret, directory or agent");
+    }
+    const eps = snap.register.episodes.filter((e) => matches(e.names, e.cwd, e.who, e.why, e.kind));
+    if (!eps.length) {
+      main.append(h("div", { class: "tile empty", "data-list": "1" }, filterText ? "Nothing matches." : "Nothing in the last 24 hours."));
+      return;
+    }
+    for (const e of eps) {
+      const span = t(e.end) - t(e.start);
+      let head, sub;
+      switch (e.kind) {
+        case "run":
+          head = names(e.names, 3) + (e.cmd ? " · " + e.cmd : "");
+          sub = [e.runs + (e.runs === 1 ? " run" : " runs"), e.failed ? h("span", { class: "r" }, ", " + e.failed + " failed" + (e.why ? " (" + e.why + ")" : "")) : (e.runs ? ", all ok" : ""),
+            " · " + e.who + (e.cwd ? " in " + e.cwd : ""), span > 60000 ? " · " + left(span) : "", e.live ? h("span", { class: "l" }, " · running") : ""];
+          break;
+        case "grant":
+          head = "Granted " + names(e.names, 3);
+          sub = [e.detail || "", " · " + e.who + (e.cwd ? " in " + e.cwd : ""), e.why ? [" · ", h("q", { style: "quotes:none;font-style:italic" }, e.why)] : ""];
+          break;
+        case "missed":
+          head = "Missed: " + names(e.names, 3);
+          sub = [h("span", { class: "a" }, "request_timeout"), " · " + e.who + (e.cwd ? " in " + e.cwd : ""), e.why ? [" · ", h("q", { style: "quotes:none;font-style:italic" }, e.why)] : ""];
+          break;
+        case "denied":
+          head = "Denied: " + names(e.names, 3);
+          sub = [e.who + (e.cwd ? " in " + e.cwd : "")];
+          break;
+        case "revoke":
+          head = "Revoked " + names(e.names, 3);
+          sub = [e.who === "Signal Box" ? "from Signal Box" : e.who];
+          break;
+        case "lock":
+          head = "Screen locked: revoked " + e.names.length + (e.names.length === 1 ? " secret" : " secrets");
+          sub = [names(e.names, 4)];
+          break;
+        default:
+          head = (e.detail === "rm" ? "Removed " : "Stored ") + names(e.names, 3);
+          sub = [e.who];
+      }
+      main.append(h("div", { class: "tile ep", "data-list": "1" }, h("span", { class: "t" }, hhmm(e.start)),
+        h("span", { class: "h" }, h("i", { class: "k-" + e.kind }), head), h("span", { class: "s" }, sub)));
+    }
+  }
+
+  function vaultBody(main, listOnly) {
+    const v = snap.vault;
+    if (!listOnly) {
+      main.append(h("div", { class: "vstats stag", style: "--i:0" },
+        h("div", {}, h("b", {}, v.total), h("span", {}, "secrets")),
+        h("div", {}, h("b", {}, v.private), h("span", {}, "private")),
+        h("div", {}, h("b", {}, v.stale), h("span", {}, "stale")),
+        h("div", {}, h("b", { style: v.flagged ? "color:var(--amber)" : "" }, v.flagged), h("span", {}, "to look at"))));
+      filterBox(main, "filter by name, description or flag");
+    }
+    const rows = v.rows.filter((r) => matches(r.name, r.description, r.tier, (r.flags || []).map((f) => f.text)));
+    if (!rows.length) { main.append(h("div", { class: "tile empty", "data-list": "1" }, "Nothing matches.")); return; }
+    for (const r of rows) {
+      const color = r.runs === 0 ? "var(--mute)" : r.tier === "public" ? "var(--green)" : "var(--accent)";
+      main.append(h("div", { class: "tile vrow", "data-list": "1" },
+        h("span", { class: "nm" }, r.name, h("span", { class: "tr" + (r.tier === "public" ? " pub" : "") }, r.tier),
+          r.live ? h("span", { class: "tr live" }, "live " + left(t(r.live) - now())) : null),
+        spark(r.spark, 70, 16, color),
+        h("span", { class: "u" }, r.runs + " runs"),
+        r.description ? h("span", { class: "d" }, r.description) : null,
+        (r.flags || []).length ? h("span", { class: "f" }, r.flags.map((f, k) => [k ? " · " : "", h("span", { class: "f-" + f.level }, f.text)])) :
+          h("span", { class: "f", style: "color:var(--mute)" }, r.last_used ? "last used " + ago(r.last_used) : "never used")));
+    }
+  }
+
+  function parseDur(s) {
+    let total = 0, m;
+    const re = /(\d+(?:\.\d+)?)(h|m|s)/g;
+    while ((m = re.exec(s || ""))) total += parseFloat(m[1]) * ({ h: 3600, m: 60, s: 1 })[m[2]];
+    return total;
+  }
+
+  const FOOT = {
+    live: [["r", "revoke"], ["R", "revoke all"], ["e", "+1h"], ["j/k", "select"], ["esc", "close"]],
+    asks: [["g", "grant missed"], ["d", "dismiss"], ["j/k", "select"], ["esc", "close"]],
+    register: [["/", "filter"], ["tab", "next tab"], ["esc", "close"]],
+    vault: [["/", "filter"], ["tab", "next tab"], ["esc", "close"]],
+  };
+
+  function render(play) {
+    if (!snap) return;
+    lampChip();
+    renderTabs();
+    const main = $("body");
+    const keepScroll = play ? 0 : main.scrollTop;
+    const focusedFilter = document.activeElement && document.activeElement.id === "filter";
+    main.replaceChildren();
+    ({ live: liveBody, asks: asksBody, register: registerBody, vault: vaultBody })[tab](main);
+    main.scrollTop = keepScroll;
+    const foot = $("foot");
+    foot.replaceChildren(...FOOT[tab].map(([k, l]) => h("span", {}, h("b", {}, k), " " + l)));
+    if (tab === "live" && snap.bundles.some((b) => b.key)) foot.insertBefore(h("span", {}, h("b", {}, snap.bundles.filter((b) => b.key).map((b) => b.key).join("/")), " bundle"), foot.lastChild);
+    const p = $("panel");
+    if (play) { p.classList.remove("play"); void p.offsetWidth; p.classList.add("play"); }
+    else p.classList.remove("play");
+    if (focusedFilter) { const f = $("filter"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }
+  }
+  function renderBodyOnly() {
+    const main = $("body");
+    main.querySelectorAll("[data-list]").forEach((el) => el.remove());
+    ({ register: registerBody, vault: vaultBody })[tab](main, true);
+  }
+  function markSel() {
+    document.querySelectorAll(".grant, .missed").forEach((el, i) => el.classList.toggle("sel", i === sel));
+  }
+
+  // Countdowns move every second between snapshots.
+  setInterval(() => {
+    if (!open || !snap) return;
+    document.querySelectorAll("[data-ring]").forEach((host) => {
+      const g = snap.grants.find((x) => x.id === host.getAttribute("data-ring"));
+      if (!g) return;
+      const ms = t(g.expires) - now(), c = 2 * Math.PI * 18;
+      host.querySelector(".arc").setAttribute("stroke-dashoffset", (c * (1 - Math.max(0.02, Math.min(1, ms / (g.total * 1000))))).toFixed(2));
+      host.querySelector("text").textContent = left(ms);
+    });
+    document.querySelectorAll("[data-left]").forEach((el) => { el.textContent = left(t(el.getAttribute("data-left")) - now()); });
+    document.querySelectorAll("[data-deadline]").forEach((el) => { el.textContent = mmss(t(el.getAttribute("data-deadline")) - now()); });
+  }, 1000);
+
+  // ---------- keys
+  document.addEventListener("keydown", (e) => {
+    if (!open || !snap) return;
+    const inFilter = e.target && e.target.id === "filter";
+    if (e.key === "Escape") {
+      if (inFilter && filterText) { filterText = ""; e.target.value = ""; renderBodyOnly(); return; }
+      if (inFilter) { e.target.blur(); return; }
+      hide(); return;
+    }
+    if (inFilter) return;
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const i = TABS.indexOf(tab);
+      tab = TABS[(i + (e.shiftKey ? TABS.length - 1 : 1)) % TABS.length]; sel = 0; filterText = ""; render(true); return;
+    }
+    if (/^[1-4]$/.test(e.key)) { tab = TABS[+e.key - 1]; sel = 0; filterText = ""; render(true); return; }
+    if (e.key === "/" && (tab === "register" || tab === "vault")) { e.preventDefault(); const f = $("filter"); if (f) f.focus(); return; }
+    const rows = tab === "live" ? snap.grants : tab === "asks" ? snap.missed : [];
+    if ((e.key === "j" || e.key === "ArrowDown") && rows.length) { sel = Math.min(rows.length - 1, sel + 1); markSel(); e.preventDefault(); return; }
+    if ((e.key === "k" || e.key === "ArrowUp") && rows.length) { sel = Math.max(0, sel - 1); markSel(); e.preventDefault(); return; }
+    if (tab === "live") {
+      const g = snap.grants[sel];
+      if (e.key === "r" && g) { act("revoke", { names: g.names }); return; }
+      if (e.key === "R" && snap.grants.length) { act("revoke_all", {}); return; }
+      if (e.key === "e" && g && !g.changed) { extend(g); return; }
+      const b = snap.bundles.find((x) => x.key && x.key === e.key);
+      if (b) { grantBundle(b); return; }
+    }
+    if (tab === "asks") {
+      const m = snap.missed[sel];
+      if (e.key === "g" && m) { request(m.names, parseDur(m.for) || 3600, "From Signal Box: a request missed at " + hhmm(m.ts)); return; }
+      if (e.key === "d" && m) { act("dismiss", { keys: [m.key] }); return; }
+    }
+  });
+  $("backdrop").addEventListener("mousedown", () => hide());
+  $("panel").setAttribute("tabindex", "-1");
+
+  // ---------- messages from broker
+  function receive(line) {
+    let m;
+    try { m = JSON.parse(line); } catch (e) { return; }
+    switch (m.type) {
+      case "init": {
+        const th = m.theme || {};
+        const map = { font: "--font", bar: "--bar", panel: "--panel", tile: "--tile", fg: "--fg", dim: "--dim", line: "--line", accent: "--accent", hover: "--hover" };
+        let css = ":root{";
+        for (const k in map) if (th[k] && /^[#\w\s,"'().%-]+$/.test(th[k])) css += map[k] + ":" + th[k] + ";";
+        if (th.font) css += "--font:" + th.font + ", \"JetBrains Mono\", monospace;";
+        css += "}";
+        $("theme").textContent = css;
+        $("user").textContent = th.css || "";
+        break;
+      }
+      case "snapshot":
+        snap = m.snapshot;
+        skew = Date.now() - t(snap.now);
+        if (sel >= Math.max(1, (tab === "asks" ? snap.missed : snap.grants).length)) sel = 0;
+        if (open) render(false);
+        break;
+      case "show":
+        show(m.anchor, m.tab);
+        break;
+      case "hide":
+        hide();
+        break;
+      case "result":
+        delete pending[m.id];
+        toast(m.text, !m.ok);
+        break;
+      case "error":
+        toast(m.text, true);
+        break;
+    }
+  }
+  window.board = { receive };
+  post({ type: "ready" });
+})();
+</script>
+</body>
+</html>
