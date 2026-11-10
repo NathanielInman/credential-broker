@@ -53,11 +53,12 @@ jobs:
 
   board:
     runs-on: ubuntu-latest
+    container: debian:trixie
     steps:
+      - run: apt-get update && apt-get install -y --no-install-recommends ca-certificates git gcc libc6-dev pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libgtk4-layer-shell-dev
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: broker-board/go.mod
-      - run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev libgtk4-layer-shell-dev
-      - run: go vet . && go build .
+      - run: go vet . && go build -buildvcs=false .
         working-directory: broker-board

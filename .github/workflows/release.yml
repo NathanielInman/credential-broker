@@ -16,9 +16,10 @@ permissions:
   contents: write
 
 jobs:
-  # broker-board links GTK 4, WebKitGTK 6 and gtk4-layer-shell, which
-  # Ubuntu 22.04 does not have, so it builds on 24.04 and joins the linux
-  # archive below. broker and broker-dialog keep the older glibc floor.
+  # broker-board links GTK 4, WebKitGTK 6 and gtk4-layer-shell. Ubuntu
+  # 22.04 and 24.04 package no gtk4-layer-shell, so it builds in Debian 13
+  # and joins the linux archive below; broker and broker-dialog keep the
+  # older glibc floor.
   board:
     strategy:
       matrix:
@@ -28,14 +29,15 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    container: debian:trixie
     timeout-minutes: 20
     steps:
+      - run: apt-get update && apt-get install -y --no-install-recommends ca-certificates git gcc libc6-dev pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libgtk4-layer-shell-dev
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: broker-board/go.mod
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev libgtk4-layer-shell-dev
-      - run: go build -trimpath -ldflags "-s -w" -o ../broker-board .
+      - run: go build -buildvcs=false -trimpath -ldflags "-s -w" -o ../broker-board .
         working-directory: broker-board
       - uses: actions/upload-artifact@v4
         with:
