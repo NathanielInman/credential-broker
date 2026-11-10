@@ -39,8 +39,11 @@ active grant.
   posts through a bound `brokerPost` function instead of a WebKit message
   handler; closing it by its X is told apart from quitting by a flag.
 - The Signal Box panel is a third program, `broker-board` (its own module in
-  `broker-board/`, cgo with GTK 3, WebKitGTK 4.1 and gtk-layer-shell, linux
-  only), for the same reason. `broker` itself gains one library for it,
+  `broker-board/`, cgo with GTK 4, WebKitGTK 6 and gtk4-layer-shell, linux
+  only), for the same reason. Not GTK 3 like broker-dialog: on Wayland GTK
+  3 drops parts of a transparent surface's content between frames, so the
+  panel flickered to what was behind it. It builds on Ubuntu 24.04 in the
+  release; broker and broker-dialog stay on 22.04. `broker` itself gains one library for it,
   `github.com/BurntSushi/toml`, to read `board.toml`.
 
 ## Tiers (replace v1 scopes)
@@ -308,7 +311,7 @@ Pieces:
   `result`), replies on stdout (`ready`, `hidden`, `action`). It is a
   transparent layer-shell surface on the overlay layer, anchored to all four
   edges with exclusive zone 0, so it covers the monitor less the bar; it maps
-  on `show` on the GDK monitor whose layout position matches the anchor's,
+  on `show` on the monitor whose connector (DP-2) the anchor names,
   with exclusive keyboard. The page places the panel against the bar's edge,
   centered on the click and clamped to the screen (Roundhouse's `place`),
   scales it out of the click point, and on close sends `hidden` after the

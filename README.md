@@ -204,7 +204,7 @@ Every failure an agent can hit has a stable `error` code. The full table is in t
 
 Linux, macOS, or Windows (see [Platforms](#platforms)). The stock `age` CLI is optional but worth having for [recovery](#recovering-without-broker).
 
-Download the archive for your platform from [Releases](https://github.com/NathanielInman/credential-broker/releases/latest) and put `broker` and `broker-dialog` together on your `PATH` (`~/.local/bin` works). The Linux archive also has `broker-board`, the [Signal Box](#signal-box) panel; it goes beside them too. The Android app is there too, as an APK (see [The Android app](#the-android-app)). The Linux builds need GTK 3 and WebKitGTK 4.1 installed; the macOS build is universal and already signed with the hardened runtime. A browser download on macOS is quarantined and Gatekeeper refuses it, so clear that once:
+Download the archive for your platform from [Releases](https://github.com/NathanielInman/credential-broker/releases/latest) and put `broker` and `broker-dialog` together on your `PATH` (`~/.local/bin` works). The Linux archive also has `broker-board`, the [Signal Box](#signal-box) panel; it goes beside them too, and needs GTK 4, WebKitGTK 6 and gtk4-layer-shell (Ubuntu 24.04 or newer). The Android app is there too, as an APK (see [The Android app](#the-android-app)). The Linux builds need GTK 3 and WebKitGTK 4.1 installed; the macOS build is universal and already signed with the hardened runtime. A browser download on macOS is quarantined and Gatekeeper refuses it, so clear that once:
 
 ```sh
 xattr -d com.apple.quarantine broker broker-dialog
@@ -229,12 +229,12 @@ The window needs GTK 3 and WebKitGTK 4.1, and a YubiKey needs [age-plugin-yubike
 ```sh
 sudo pacman -S age gtk3 webkit2gtk-4.1 pcsclite ccid age-plugin-yubikey yubikey-manager
 sudo systemctl enable --now pcscd.socket
-sudo pacman -S gtk-layer-shell   # only for Signal Box
+sudo pacman -S gtk4-layer-shell webkitgtk-6.0   # only for Signal Box
 # Debian/Ubuntu: libgtk-3-dev libwebkit2gtk-4.1-dev pcscd yubikey-manager, then cargo install age-plugin-yubikey
-# (and libgtk-layer-shell-dev for Signal Box)
+# (and libgtk4-layer-shell-dev libwebkitgtk-6.0-dev for Signal Box, Ubuntu 24.04 or newer)
 ```
 
-On Arch, `packaging/aur/credential-broker-bin` packages the release build (all three binaries, GTK and WebKitGTK as dependencies, the YubiKey tools and `gtk-layer-shell` for Signal Box as optional ones). Until it's on the AUR, install it from a clone:
+On Arch, `packaging/aur/credential-broker-bin` packages the release build (all three binaries, GTK and WebKitGTK as dependencies, the YubiKey tools, and `gtk4-layer-shell` and `webkitgtk-6.0` for Signal Box, as optional ones). Until it's on the AUR, install it from a clone:
 
 ```sh
 cd packaging/aur/credential-broker-bin && makepkg -si
@@ -496,7 +496,7 @@ Click it and the panel opens out of the icon, on whichever edge and monitor your
 
 Taking access away is free: revoke needs no touch, and the panel does it on the spot. Anything that grants (Grant now, +1h, a bundle) goes through `broker request`, so the panel closes and the request window or your phone asks for the touch exactly as it would for an agent. The panel never holds a secret's value or the private tier key. It reads what broker already exposes without one: names, tiers and grant expiry, the audit log, and a small file each open request writes to `$XDG_RUNTIME_DIR/broker/asks/`.
 
-It needs `broker-board` beside `broker` and `gtk-layer-shell`. Add the module to waybar:
+It needs `broker-board` beside `broker`, with GTK 4, WebKitGTK 6 and `gtk4-layer-shell`. Add the module to waybar:
 
 ```jsonc
 "custom/broker": {
