@@ -265,6 +265,7 @@
       }
     }
     p.style.left = x + "px"; p.style.top = y + "px";
+    post({ type: "log", place: { sw, sh, x: Math.round(x), y: Math.round(y), edge: a && a.edge } });
     p.style.transformOrigin = ox + "px " + oy + "px";
   }
 
@@ -296,14 +297,14 @@
     setTimeout(go, 60);
   }
   window.addEventListener("resize", () => { if (open) place(); });
-  function hide(then) {
-    if (!open) { post({ type: "hidden" }); if (then) then(); return; }
+  function hide(then, why) {
+    if (!open) { post({ type: "hidden", why: why || "" }); if (then) then(); return; }
     open = false;
     const p = $("panel");
     p.classList.add("closing");
     p.classList.remove("open", "play");
     let done = false;
-    const fin = () => { if (done) return; done = true; p.classList.remove("closing"); post({ type: "hidden" }); if (then) then(); };
+    const fin = () => { if (done) return; done = true; p.classList.remove("closing"); post({ type: "hidden", why: why || "" }); if (then) then(); };
     p.addEventListener("transitionend", fin, { once: true });
     setTimeout(fin, 320);
   }
@@ -321,7 +322,7 @@
     const id = String(++actionSeq);
     const msg = Object.assign({ type: "action", action, id }, fields);
     pending[id] = action;
-    if (closeFirst) hide(() => post(msg));
+    if (closeFirst) hide(() => post(msg), "action " + action);
     else post(msg);
   }
   // Anything that grants goes through broker request: the panel closes so
@@ -617,7 +618,7 @@
     if (e.key === "Escape") {
       if (inFilter && filterText) { filterText = ""; e.target.value = ""; renderBodyOnly(); return; }
       if (inFilter) { e.target.blur(); return; }
-      hide(); return;
+      hide(null, "escape"); return;
     }
     if (inFilter) return;
     if (e.key === "Tab") {
@@ -644,7 +645,7 @@
       if (e.key === "d" && m) { act("dismiss", { keys: [m.key] }); return; }
     }
   });
-  $("backdrop").addEventListener("mousedown", () => hide());
+  $("backdrop").addEventListener("mousedown", () => hide(null, "click outside"));
   $("panel").setAttribute("tabindex", "-1");
 
   // ---------- messages from broker
@@ -673,7 +674,7 @@
         show(m.anchor, m.tab);
         break;
       case "hide":
-        hide();
+        hide(null, "asked");
         break;
       case "result":
         delete pending[m.id];

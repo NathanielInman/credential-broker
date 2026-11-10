@@ -120,6 +120,7 @@ func (s *boardServer) handle(conn net.Conn) {
 				reply = map[string]any{"ok": false, "error": err.Error()}
 			}
 		case "hide":
+			fmt.Fprintln(s.stderr, "board: hide asked on the socket")
 			s.hide()
 		case "board_visible":
 			s.mu.Lock()
@@ -214,11 +215,14 @@ func (s *boardServer) readWindow(cmd *exec.Cmd, out io.Reader, ready chan struct
 		case "ready":
 			readyOnce.Do(func() { close(ready) })
 		case "hidden":
+			fmt.Fprintf(s.stderr, "board: %s\n", sc.Bytes())
 			s.mu.Lock()
 			s.visible, s.hiddenAt = false, time.Now()
 			s.mu.Unlock()
 		case "action":
 			go s.act(m)
+		case "log":
+			fmt.Fprintf(s.stderr, "board: %s\n", sc.Bytes())
 		}
 	}
 	_ = cmd.Wait()
@@ -244,6 +248,9 @@ func (s *boardServer) show(a *board.Anchor, tab string) error {
 	s.sibAt = time.Time{}
 	s.mu.Unlock()
 	s.push()
+	if b, err := json.Marshal(anchor); err == nil {
+		fmt.Fprintf(s.stderr, "board: show anchor %s\n", b)
+	}
 	s.send(map[string]any{"type": "show", "anchor": anchor, "tab": tab})
 	// One panel at a time: the siblings close theirs.
 	go func() {
@@ -282,9 +289,13 @@ func (s *boardServer) push() {
 	}
 	snap.Siblings = s.sibs
 	s.mu.Unlock()
-	// Now changes every time; compare without it.
-	snap.Now = time.Time{}
+	// Now and the lamp's fraction change every second, and the page counts
+	// down on its own; compare without them, so the page only redraws when
+	// something it shows changed.
+	frac := snap.Lamp.Frac
+	snap.Now, snap.Lamp.Frac = time.Time{}, 0
 	b, _ := json.Marshal(snap)
+	snap.Lamp.Frac = frac
 	s.mu.Lock()
 	same := bytes.Equal(b, s.lastSent)
 	s.lastSent = b
