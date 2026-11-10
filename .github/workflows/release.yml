@@ -16,7 +16,34 @@ permissions:
   contents: write
 
 jobs:
+  # broker-board links GTK 4, WebKitGTK 6 and gtk4-layer-shell, which
+  # Ubuntu 22.04 does not have, so it builds on 24.04 and joins the linux
+  # archive below. broker and broker-dialog keep the older glibc floor.
+  board:
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: broker-board/go.mod
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev libgtk4-layer-shell-dev
+      - run: go build -trimpath -ldflags "-s -w" -o ../broker-board .
+        working-directory: broker-board
+      - uses: actions/upload-artifact@v4
+        with:
+          name: board-${{ matrix.arch }}
+          path: broker-board
+
   linux:
+    needs: [board]
     strategy:
       matrix:
         include:
@@ -33,7 +60,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev libgtk-layer-shell-dev
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev
+      - uses: actions/download-artifact@v4
+        with:
+          name: board-${{ matrix.arch }}
+          path: board
       - name: Build
         run: |
           v=${GITHUB_REF_NAME#v}
@@ -41,7 +72,7 @@ jobs:
           mkdir $d
           CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$v" -o $d/broker .
           (cd broker-dialog && go build -trimpath -ldflags "-s -w" -o ../$d/broker-dialog .)
-          (cd broker-board && go build -trimpath -ldflags "-s -w" -o ../$d/broker-board .)
+          install -m755 board/broker-board $d/broker-board
           cp LICENSE README.md $d/
           tar czf $d.tar.gz $d
       - uses: actions/upload-artifact@v4
