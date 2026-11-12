@@ -1,7 +1,7 @@
 # Credential Broker
 
 <p align="center">
-  <img src="./artwork/hero.svg" width="100%" alt="A Hyprland desktop. An agent runs broker exec --request for CLOUDFLARE_API_TOKEN, broker's request window asks for a YubiKey touch, and the deploy runs with the token redacted from its output while the Signal Box lamp in waybar lights up. A click on the lamp springs the Signal Box panel out of it: three live grants with their time left, a missed request with Grant now, then Revoke all, and the lamp goes back to gray.">
+  <img src="./artwork/hero.svg" width="100%" alt="A Hyprland desktop under a floating waybar. An agent in T3 Code runs broker exec --request for CLOUDFLARE_API_TOKEN, broker's request window asks for a YubiKey touch while the Signal Box lamp in the bar turns to an amber key, and the deploy runs with the token redacted from its output. The lamp fills, and its count climbs to 7 as other grants arrive. A click on it springs the Signal Box panel out: three live grants with their time left, a look at the Register tab with the day's grants and runs, then Revoke all, and the lamp goes dim.">
 </p>
 
 A local secret store for a machine where AI agents do most of the typing. Agents run commands **with** your secrets and never see them. When one needs a secret, this pops up on your desktop, and on your phone if you're on the couch:
