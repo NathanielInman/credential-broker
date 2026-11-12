@@ -602,6 +602,11 @@ def request_window(done=False):
     return "".join(g) + "</g>"
 
 
+# ---- end of the panel ----
+# dot-files' bar hero (docs/bar/apps.py) runs everything above this line
+# to draw the panel in its own tour, so keep the panel's code above it and
+# the story below it.
+
 # ---------------------------------------------------------------- the timeline
 
 # tracks[id] is a list of (seconds, {css property: value}, timing function).
