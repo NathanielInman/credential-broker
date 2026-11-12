@@ -182,7 +182,11 @@ func (s *boardServer) ensureWindow() error {
 		return err
 	}
 	ready := make(chan struct{})
-	s.child, s.childIn, s.ready, s.lastSent = cmd, in, ready, nil
+	// A new window has not been hidden yet: without this, a hiddenAt left
+	// from the last window (which lingered out long ago) let tick retire
+	// this one while its page loaded, and the click that opened it showed
+	// nothing.
+	s.child, s.childIn, s.ready, s.lastSent, s.hiddenAt = cmd, in, ready, nil, time.Time{}
 	s.mu.Unlock()
 	go s.readWindow(cmd, out, ready)
 
@@ -195,6 +199,9 @@ func (s *boardServer) ensureWindow() error {
 	select {
 	case <-ready:
 	case <-time.After(8 * time.Second):
+		s.mu.Lock()
+		s.hiddenAt = time.Now()
+		s.mu.Unlock()
 		return errors.New("the Signal Box window did not load")
 	}
 	s.send(map[string]any{"type": "init", "theme": board.LoadTheme(cfg, home, s.p.BoardCSS())})
@@ -225,18 +232,37 @@ func (s *boardServer) readWindow(cmd *exec.Cmd, out io.Reader, ready chan struct
 			fmt.Fprintf(s.stderr, "board: %s\n", sc.Bytes())
 		}
 	}
-	_ = cmd.Wait()
-	readyOnce.Do(func() { close(ready) })
+	err := cmd.Wait()
 	s.mu.Lock()
 	if s.child == cmd {
 		s.child, s.childIn, s.visible = nil, nil, false
+		if err != nil {
+			fmt.Fprintf(s.stderr, "board: window exited: %v\n", err)
+		}
 	}
 	s.mu.Unlock()
+	// After the state is cleared, so a show waiting on ready sees the
+	// window is gone.
+	readyOnce.Do(func() { close(ready) })
 }
 
 func (s *boardServer) show(a *board.Anchor, tab string) error {
-	if err := s.ensureWindow(); err != nil {
-		return err
+	// A window that quits while it loads gets one more try; never mark
+	// the panel visible with no window behind it, or the next click is
+	// taken as a close.
+	for try := 0; ; try++ {
+		if err := s.ensureWindow(); err != nil {
+			return err
+		}
+		s.mu.Lock()
+		alive := s.childIn != nil
+		s.mu.Unlock()
+		if alive {
+			break
+		}
+		if try == 1 {
+			return errors.New("the Signal Box window quit as it opened; see board.log")
+		}
 	}
 	s.mu.Lock()
 	if a != nil {
@@ -326,15 +352,25 @@ func (s *boardServer) tick() {
 			linger = cfg.Board.Linger.D()
 		}
 		if !hiddenAt.IsZero() && time.Since(hiddenAt) > linger {
-			s.mu.Lock()
-			if s.childIn != nil {
-				_ = s.childIn.Close()
-				s.childIn = nil
-			}
-			s.child = nil
-			s.mu.Unlock()
+			s.retire(linger)
 		}
 	}
+}
+
+// retire lets the hidden window go once it has lingered: closing its
+// stdin makes it quit. It checks again under the lock, since a click may
+// have opened the panel or started a new window since tick looked.
+func (s *boardServer) retire(linger time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.visible || s.child == nil || s.hiddenAt.IsZero() || time.Since(s.hiddenAt) <= linger {
+		return
+	}
+	if s.childIn != nil {
+		_ = s.childIn.Close()
+		s.childIn = nil
+	}
+	s.child = nil
 }
 
 // boardAction is a message from the panel's page.

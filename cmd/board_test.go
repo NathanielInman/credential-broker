@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/NathanielInman/credential-broker/internal/board"
 	"github.com/NathanielInman/credential-broker/internal/paths"
@@ -153,5 +154,63 @@ func TestBoardActionsRunBroker(t *testing.T) {
 	}
 	if d := board.LoadDismissed(filepath.Join(home, "run", "board-dismissed.json")); !d["2026-11-10T12:04:00Z"] {
 		t.Errorf("dismissed: %v", d)
+	}
+}
+
+// fakeBoardWindow puts a stand-in broker-board on PATH that takes a moment
+// to load, like WebKit does, and records every line it is sent.
+func fakeBoardWindow(t *testing.T) (got string) {
+	t.Helper()
+	dir := t.TempDir()
+	got = filepath.Join(dir, "got")
+	script := "#!/bin/sh\nsleep 0.3\necho '{\"type\":\"ready\"}'\ncat >> " + got + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "broker-board"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return got
+}
+
+// The first click after the panel lingered out used to show nothing: the
+// old window's hiddenAt let tick retire the new one while it loaded, and
+// the server still called the panel open, so the next click closed it.
+func TestShowSurvivesLingerWhileLoading(t *testing.T) {
+	initVault(t)
+	got := fakeBoardWindow(t)
+	p, _ := paths.Resolve()
+	s := &boardServer{p: p, stderr: io.Discard, hiddenAt: time.Now().Add(-time.Hour)}
+	t.Cleanup(func() {
+		s.mu.Lock()
+		if s.childIn != nil {
+			_ = s.childIn.Close()
+		}
+		s.mu.Unlock()
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- s.show(nil, "") }()
+	for {
+		s.retire(time.Minute)
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("show: %v", err)
+			}
+			s.mu.Lock()
+			alive, vis := s.childIn != nil, s.visible
+			s.mu.Unlock()
+			if !alive || !vis {
+				t.Fatalf("after show: window alive %v, visible %v", alive, vis)
+			}
+			for i := 0; i < 100; i++ {
+				if b, _ := os.ReadFile(got); strings.Contains(string(b), `"type":"show"`) {
+					return
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			b, _ := os.ReadFile(got)
+			t.Fatalf("the window never got show; it got %q", b)
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 }
