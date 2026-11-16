@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -161,6 +162,9 @@ func TestBoardActionsRunBroker(t *testing.T) {
 // to load, like WebKit does, and records every line it is sent.
 func fakeBoardWindow(t *testing.T) (got string) {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the stand-in broker-board is a shell script")
+	}
 	dir := t.TempDir()
 	got = filepath.Join(dir, "got")
 	script := "#!/bin/sh\nsleep 0.3\necho '{\"type\":\"ready\"}'\ncat >> " + got + "\n"
