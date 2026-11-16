@@ -1,6 +1,6 @@
 # Maintainer: Nathaniel Inman <nate@theoestudio.com>
 pkgname=credential-broker-bin
-pkgver=2.6.2
+pkgver=2.6.3
 pkgrel=1
 pkgdesc='Local secret store for AI agents: agents run commands with secrets without seeing them'
 arch=('x86_64' 'aarch64')
@@ -19,8 +19,8 @@ conflicts=('credential-broker')
 options=('!debug' '!strip')
 source_x86_64=("$url/releases/download/v$pkgver/broker_${pkgver}_linux_amd64.tar.gz")
 source_aarch64=("$url/releases/download/v$pkgver/broker_${pkgver}_linux_arm64.tar.gz")
-sha256sums_x86_64=('a5352c56f8b2cfecea8bcfd4aac600ab8552b0adf857e8a35728778ddc50c22a')
-sha256sums_aarch64=('747ccc44414213e565a9b3e87fd79676d4244d65d2d04c749348fec710fa0219')
+sha256sums_x86_64=('5aa68b804fb4343e1413422e49d0e839445bbb1e30473691d00c38be7ab412e7')
+sha256sums_aarch64=('6c9c1fcd6ad014071b9b13ba25c398ebb19fb7be4e711b00ad3c61dd30b67b4f')
 
 package() {
   local dir=broker_${pkgver}_linux_amd64
