@@ -4,11 +4,15 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
 
 func TestDrawerOpenedHidesTheOthers(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the drawers are Linux layer-shell panels; Windows reports a refused socket differently")
+	}
 	// Unix socket paths have a short limit; t.TempDir() can be too long.
 	dir, err := os.MkdirTemp("", "drawers")
 	if err != nil {
