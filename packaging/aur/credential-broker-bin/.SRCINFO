@@ -1,6 +1,6 @@
 pkgbase = credential-broker-bin
 	pkgdesc = Local secret store for AI agents: agents run commands with secrets without seeing them
-	pkgver = 2.6.3
+	pkgver = 2.6.4
 	pkgrel = 1
 	url = https://github.com/NathanielInman/credential-broker
 	arch = x86_64
@@ -21,9 +21,9 @@ pkgbase = credential-broker-bin
 	conflicts = credential-broker
 	options = !debug
 	options = !strip
-	source_x86_64 = https://github.com/NathanielInman/credential-broker/releases/download/v2.6.3/broker_2.6.3_linux_amd64.tar.gz
-	sha256sums_x86_64 = 5aa68b804fb4343e1413422e49d0e839445bbb1e30473691d00c38be7ab412e7
-	source_aarch64 = https://github.com/NathanielInman/credential-broker/releases/download/v2.6.3/broker_2.6.3_linux_arm64.tar.gz
-	sha256sums_aarch64 = 6c9c1fcd6ad014071b9b13ba25c398ebb19fb7be4e711b00ad3c61dd30b67b4f
+	source_x86_64 = https://github.com/NathanielInman/credential-broker/releases/download/v2.6.4/broker_2.6.4_linux_amd64.tar.gz
+	sha256sums_x86_64 = 0619097b7e8d6b5d003062c0586c14d90ac10adcb7464c3597585008c998c934
+	source_aarch64 = https://github.com/NathanielInman/credential-broker/releases/download/v2.6.4/broker_2.6.4_linux_arm64.tar.gz
+	sha256sums_aarch64 = 31da7f17c92fd88f392ee68f37865924da3013329cffe2e4937d275e62997e06
 
 pkgname = credential-broker-bin
