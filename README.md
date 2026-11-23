@@ -553,7 +553,7 @@ secrets = ["CLOUDFLARE_*"]
 for = "2h"
 ```
 
-With Switchyard or Roundhouse running, the tab row ends with a link to each (`Yard ↗`, `Roundhouse ↗`), whose dot is that program's own lamp. A click closes this panel and opens that one from the same icon, and opening any of the three closes the others. None of them needs the others; a sibling that isn't running just isn't linked.
+With Switchyard or Roundhouse running, the tab row ends with a link to each (`Yard ↗`, `Roundhouse ↗`), whose dot is that program's own lamp. A click closes this panel and opens that one from the same icon. Opening any drawer in the bar closes whichever one was open, Signal Box included: every app keeps to [bar-anchor](https://github.com/NathanielInman/bar-anchor)'s one-drawer rule, which Signal Box speaks from Go. None of them needs the others; a sibling that isn't running just isn't linked.
 
 Signal Box runs on Linux with Wayland for now. A macOS menu bar extra and a Windows tray flyout are planned; `broker board --json` works everywhere today.
 

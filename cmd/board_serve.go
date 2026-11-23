@@ -72,6 +72,12 @@ func (s *boardServer) serve() error {
 	}
 	defer ln.Close()
 	_ = os.Chmod(sock, paths.FileMode)
+	// Another app's drawer opening closes this panel.
+	if stop, err := listenDrawers(drawersDir(), drawerName, s.hide); err != nil {
+		fmt.Fprintf(s.stderr, "board: %v\n", err)
+	} else {
+		defer stop()
+	}
 	go s.tick()
 	for {
 		conn, err := ln.Accept()
@@ -278,14 +284,8 @@ func (s *boardServer) show(a *board.Anchor, tab string) error {
 		fmt.Fprintf(s.stderr, "board: show anchor %s\n", b)
 	}
 	s.send(map[string]any{"type": "show", "anchor": anchor, "tab": tab})
-	// One panel at a time: the siblings close theirs.
-	go func() {
-		for _, sib := range siblings {
-			if sock := siblingSocket(sib.name, sib.env, sib.file); sock != "" {
-				_, _ = siblingSend(sock, map[string]string{"cmd": "hide"})
-			}
-		}
-	}()
+	// One drawer open at a time across the waybar apps: the others close.
+	go drawerOpened(drawersDir(), drawerName)
 	return nil
 }
 
