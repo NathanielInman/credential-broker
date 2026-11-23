@@ -175,6 +175,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [linux, macos, windows, android]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       # checkout leaves the tag lightweight; the notes need its message.
