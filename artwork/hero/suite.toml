@@ -14,6 +14,10 @@ lamp = "A pie that drains with the soonest grant, a key while an agent asks"
 # Scripts and programs it replaced. dot-files' build fails if a doc still
 # mentions one outside a sentence that says it was replaced.
 retired = []
+# Where it builds and is checked today: the pre-push hook and CI hold it to
+# this list. The suite targets Linux, Windows and macOS; a port moves a
+# platform here from `planned`.
+platforms = ["linux", "windows", "macos"]
 # Its stow package in dot-files, or "" when it needs none.
 stow = ""
 # Install from a clean Arch machine, run in order.

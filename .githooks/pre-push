@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Before a push: go vet for every platform this repo claims (`platforms` in
+# artwork/hero/suite.toml), so a Windows or macOS break shows up here
+# instead of in CI. Linux is built by the normal checks. Turned on per clone
+# with `git config core.hooksPath .githooks`. broker-dialog's macOS window
+# needs cgo, which does not cross-compile from Linux; CI's macOS job checks
+# that one.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+platforms="$(python3 -c 'import sys, tomllib; print(" ".join(tomllib.load(open(sys.argv[1], "rb")).get("platforms", [])))' artwork/hero/suite.toml)"
+run=()
+command -v lowprio >/dev/null && run=(lowprio)
+for p in $platforms; do
+  case $p in
+    windows) goos=windows; modules=". broker-board broker-dialog" ;;
+    macos) goos=darwin; modules=". broker-board" ;;
+    *) continue ;;
+  esac
+  for m in $modules; do
+    echo "pre-push: go vet for $p ($m)" >&2
+    if ! (cd "$m" && GOOS=$goos "${run[@]}" go vet ./...); then
+      echo "error: the $p build of $m is broken; fix it before pushing" >&2
+      exit 1
+    fi
+  done
+done
