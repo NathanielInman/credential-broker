@@ -1,0 +1,28 @@
+# What dot-files needs to know about Signal Box. Its README is built from this
+# file (docs/bar/build.py in NathanielInman/dotfiles reads it beside the
+# hero), so a change here reaches that README on its next build.
+
+name = "Signal Box"
+repo = "https://github.com/NathanielInman/credential-broker#signal-box"
+language = "Go"
+# Its module in packages/waybar/.config/waybar/config.jsonc.
+module = "custom/broker"
+# "Signal Box for <purpose>" in the README's list of the suite.
+purpose = "the secrets agents hold"
+# The "In the bar" cell of the suite table.
+lamp = "A pie that drains with the soonest grant, a key while an agent asks"
+# Scripts and programs it replaced. dot-files' build fails if a doc still
+# mentions one outside a sentence that says it was replaced.
+retired = []
+# Its stow package in dot-files, or "" when it needs none.
+stow = ""
+# Install from a clean Arch machine, run in order.
+install = [
+  "sudo pacman -S --needed age gtk3 webkit2gtk-4.1 pcsclite ccid age-plugin-yubikey yubikey-manager",
+  "sudo pacman -S --needed gtk4-layer-shell webkitgtk-6.0   # for Signal Box",
+  "sudo systemctl enable --now pcscd.socket",
+  "git clone https://github.com/NathanielInman/credential-broker.git ~/Sites/credential-broker",
+  "cd ~/Sites/credential-broker/packaging/aur/credential-broker-bin && makepkg -si",
+]
+# Run after installing (and stowing) to check the setup.
+check = []
